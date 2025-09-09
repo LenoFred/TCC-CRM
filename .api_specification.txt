@@ -1,0 +1,199 @@
+Document 5 of 7: API Specification Document
+Project Name: TCC Church CRM
+Version: 1.0
+Date: January 25, 2025
+
+5.1. Introduction
+This document defines the RESTful API for the Unity Church CRM. The API is the single, authoritative interface for the frontend PWA to interact with the server. It is designed to be secure, predictable, and stateless.
+Base URL: /api/v1 Authentication: All requests to protected endpoints must include an Authorization header with a Bearer Token: Authorization: Bearer <JWT_TOKEN>. The token is obtained via the /auth/login endpoint.
+
+5.2. Authentication
+POST /auth/login
+1.	Description: Authenticates a staff member using their email and password.
+2.	Permissions: Public.
+3.	Request Body:
+json
+{
+  "email": "staff.member@email.com",
+  "password": "their_secure_password"
+}
+4.	Response (200 OK): On success, returns the user's basic info, their permissions, and the JWT for authenticating subsequent requests.
+json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "memberId": "MEM-00005",
+    "name": "John Doe",
+    "permissions": ["can_view_members", "can_take_attendance"]
+  }
+}
+5.	Response (401 Unauthorized): If credentials are invalid.
+
+5.3. Members & Families
+GET /members
+1.	Description: Retrieves a paginated list of all members. Supports searching and filtering.
+2.	Permissions: can_view_members
+3.	Query Parameters:
+•	?search=John: Text search on first name, last name, email.
+•	?status=Active: Filter by member status.
+•	?page=1: For pagination.
+4.	Response (200 OK):
+json
+{
+  "page": 1,
+  "totalPages": 10,
+  "members": [
+    { "memberId": "MEM-00001", "firstName": "Jane", "lastName": "Doe", "phone": "555-1234", "status": "Active" }
+  ]
+}
+POST /members
+1.	Description: Creates a new member profile.
+2.	Permissions: can_edit_members
+3.	Request Body:
+json
+{
+  "firstName": "John",
+  "lastName": "Smith",
+  "email": "john.s@email.com",
+  "phone": "555-5555",
+  "status": "Active"
+}
+4.	Response (201 Created): Returns the full profile of the newly created member.
+json
+{ "memberId": "MEM-00152", "firstName": "John", "lastName": "Smith", ... }
+GET /members/{id}
+1.	Description: Retrieves a single member's full, detailed profile, including linked data.
+2.	Permissions: can_view_members
+3.	Response (200 OK):
+json
+{
+  "memberId": "MEM-00001",
+  "firstName": "Jane",
+  "lastName": "Doe",
+  "family": { "familyId": "FAM-001", "familyName": "The Doe Family" },
+  "groups": [{ "groupId": "GRP-002", "groupName": "Sanctuary Choir" }],
+  "recentAttendance": [{ "gatheringName": "Sunday Service", "gatheringDate": "2025-08-24" }]
+}
+PUT /members/{id}
+1.	Description: Updates an existing member's profile.
+2.	Permissions: can_edit_members
+3.	Request Body: A JSON object containing the fields to be updated.
+json
+{
+  "phone": "555-9876",
+  "address": "123 New Street"
+}
+4.	Response (200 OK): Returns the complete, updated member profile.
+
+5.4. Gatherings & Attendance
+GET /gatherings
+1.	Description: Retrieves a list of gatherings available for attendance tracking.
+2.	Permissions: can_take_attendance
+3.	Query Parameters:
+•	?type=EVENT: Filter by gathering type (EVENT or GROUP).
+•	?date=today: Filter for gatherings happening on a specific day.
+4.	Response (200 OK):
+json
+[
+  { "gatheringId": "GATH-00001", "gatheringName": "Sunday Morning Service", "gatheringDate": "2025-08-31T10:00:00Z" }
+]
+GET /gatherings/{id}/eligible-members
+1.	Description: Retrieves the list of members eligible to be checked into a specific gathering. For an EVENT, this is all active members. For a GROUP, this is only the members of that group.
+2.	Permissions: can_take_attendance
+3.	Response (200 OK):
+json
+[
+  { "memberId": "MEM-00001", "firstName": "Jane", "lastName": "Doe" },
+  { "memberId": "MEM-00002", "firstName": "John", "lastName": "Smith" }
+]
+POST /attendance/check-in
+1.	Description: Records attendance for one or more members at a specific gathering.
+2.	Permissions: can_take_attendance
+3.	Request Body:
+json
+{
+  "gatheringId": "GATH-00001",
+  "memberIds": ["MEM-00001", "MEM-00002"]
+}
+4.	Response (201 Created):
+json
+{
+  "status": "success",
+  "checkedInCount": 2
+}
+________________________________________
+5.5. Donations & Financials
+GET /donations/pending
+1.	Description: Retrieves the list of unverified donation submissions from the Google Form.
+2.	Permissions: can_verify_donations
+3.	Response (200 OK):
+json
+[
+  { "submissionId": "...", "requestorName": "Jane Doe", "amount": 100.00, "fund": "Tithe", "isKnownMember": true, "memberId": "MEM-00001" }
+]
+POST /donations/verify
+1.	Description: Verifies a pending donation and creates an official record in the Donations sheet.
+2.	Permissions: can_verify_donations
+3.	Request Body:
+json
+{
+  "submissionId": "...",
+  "memberId": "MEM-00001", // Can be null for a guest donation
+  "createMemberIfGuest": false // Set to true to create a new member profile
+}
+4.	Response (200 OK):
+json
+{ "status": "success", "donationId": "DON-00152" }
+________________________________________
+5.6. Reporting
+POST /reports/custom
+1.	Description: Generates a custom report based on a flexible query object.
+2.	Permissions: can_view_reports
+3.	Request Body: A JSON object describing the report filters.
+json
+{
+  "dataSource": "Members",
+  "filters": [
+    { "field": "groups.groupId", "operator": "equals", "value": "GRP-002" },
+    { "field": "attendance.gatheringDate", "operator": "not_in_last_days", "value": 14 },
+    { "field": "attendance.gatheringName", "operator": "equals", "value": "Sunday Morning Service" }
+  ],
+  "outputFields": ["firstName", "lastName", "phone"]
+}
+4.	Response (200 OK):
+json
+{
+  "reportName": "Custom Report",
+  "generatedAt": "2025-08-31T14:00:00Z",
+  "results": [
+    { "firstName": "John", "lastName": "Smith", "phone": "555-5555" }
+  ]
+}
+________________________________________
+5.7. Administration
+GET /staff/{id}/permissions
+1.	Description: Retrieves the specific permissions for a single staff member.
+2.	Permissions: can_manage_staff
+3.	Response (200 OK):
+json
+{
+  "staffMemberId": "MEM-00005",
+  "permissions": {
+    "can_view_donations": true,
+    "can_edit_members": false
+  }
+}
+PUT /staff/{id}/permissions
+1.	Description: Updates the permissions for a staff member.
+2.	Permissions: can_manage_staff
+3.	Request Body:
+json
+{
+  "can_view_donations": false,
+  "can_edit_members": true
+}
+4.	Response (200 OK): Returns the updated permissions object. Excellent. The API Specification is confirmed. We have now defined the complete technical contract for how the application's components will communicate.
+
+
+
+

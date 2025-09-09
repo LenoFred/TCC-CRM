@@ -1,0 +1,1028 @@
+📌 Master Prompt for Backend AI
+
+You are to act as a senior backend engineer building the backend for the TCC Portal frontend.
+
+The frontend is React (TypeScript + Vite + Tailwind + shadcn/ui).
+This backend must be a Node.js 18+ Express + TypeScript project.
+
+The backend uses Google Sheets as the primary datastore (each sheet = table, as defined in the Data Schema & Model Development doc). The backend must expose a REST API exactly as described in the API Specifications doc, enforce JWT authentication/authorization, and integrate Twilio for notifications.
+
+👉 Very Important: You must always reference and align with the contents of the technical-docx folder, which contains:
+
+API Specifications
+
+Data Schema & Model Development
+
+Development & Deployment Guide
+
+System Architecture Document
+
+Whenever you are unsure of a column name, flow, or rule, pause and re-read these docs. If something is ambiguous, ask me before implementing. Always align your code and design decisions with the scope and rules set in those documents.
+
+🔑 Core Requirements
+Environment & Setup
+
+Use Node.js 18+ with TypeScript.
+
+Framework: Express.js.
+
+Linting/formatting: ESLint + Prettier.
+
+Testing: Jest + Supertest.
+
+Logging: pino or winston.
+
+Security: helmet, cors (restricted to frontend origin), express-rate-limit.
+
+Auth: JWT (jsonwebtoken). Token payload includes { memberId, permissions }.
+
+Config from .env:
+
+PORT
+
+GOOGLE_SERVICE_ACCOUNT_CREDENTIALS (base64 stringified JSON, provided by me)
+
+GOOGLE_SHEET_ID (the ID of the master sheet, provided by me)
+
+JWT_SECRET
+
+TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER (I will provide if/when SMS/WhatsApp is needed).
+
+👉 Ask me for these values before running live. For development, mock Twilio and use a local .env.
+
+Project Structure
+/backend
+  /src
+    index.ts              # express bootstrap
+    /routes
+      auth.ts
+      members.ts
+      families.ts
+      groups.ts
+      gatherings.ts
+      attendance.ts
+      donations.ts
+      reports.ts
+      staff.ts
+    /services
+      sheetsService.ts    # Google Sheets read/write
+      authService.ts
+      twilioService.ts
+    /middleware
+      auth.ts
+      errorHandler.ts
+      validation.ts
+    /models
+      types.ts
+    /tests
+  package.json
+  tsconfig.json
+  .env.example
+  README.md
+
+SheetsService (Google Sheets API Layer)
+
+Authenticate with Google via googleapis and service account.
+
+Expose functions:
+
+getRows(sheetName, filters?)
+
+getRowByPK(sheetName, pkField, pkValue)
+
+appendRow(sheetName, rowObj)
+
+updateRow(sheetName, pkField, pkValue, patchObj)
+
+batchAppend(sheetName, rows[])
+
+All sheet/table mappings come from the Data Schema & Model Development doc.
+👉 If you need a schema or column name clarification, pause and ask me before coding.
+
+Routes (per API Specifications doc)
+
+Phase A — Auth & Members
+
+POST /auth/login — verify staff login, return JWT.
+
+GET /members — paginated, searchable.
+
+POST /members — create new member (generate MEM-xxxxx ID).
+
+GET /members/:id — full profile (with family, groups, recent attendance).
+
+PUT /members/:id — update member.
+
+Phase B — Families, Groups
+
+Families CRUD with member role linking (Head, Spouse, Child, Ward).
+
+Groups CRUD and member associations.
+
+Phase C — Gatherings & Attendance
+
+GET /gatherings — filter by type/date.
+
+GET /gatherings/:id/eligible-members — return members for event/group.
+
+POST /attendance/check-in — batch append attendance records.
+
+Phase D — Donations
+
+GET /donations/pending — from Google Form staging sheet.
+
+POST /donations/verify — verify donation, append to Donations sheet, optionally create member, optionally send Twilio message.
+
+Phase E — Reports & Staff
+
+POST /reports/custom — interpret simple filter language, return aggregated results.
+
+GET /staff/:id/permissions and PUT /staff/:id/permissions.
+
+Testing
+
+For each route, create Jest + Supertest integration tests.
+
+Mock Google Sheets API (in-memory array) for fast test runs.
+
+Example: POST /members should append a row and return 201 with memberId.
+
+Deployment
+
+Local: npm run dev with ts-node.
+
+Production: npm run build → node dist/index.js.
+
+Use pm2 to run in production.
+
+HTTPS required in production (certs provisioned by me).
+
+Dockerfile optional.
+
+📋 Build Phases
+
+Phase 0 — Bootstrap
+
+Scaffold project structure with Express + TypeScript.
+
+Add .env.example with all variables listed above.
+
+Implement index.ts with health check route.
+
+Phase 1 — Auth
+
+Implement SheetsService with Google API.
+
+Implement authService and POST /auth/login.
+
+JWT middleware (auth.ts).
+
+Phase 2 — Members CRUD
+
+Implement /members endpoints (GET, POST, GET by ID, PUT).
+
+Full test coverage.
+
+Phase 3 — Families & Groups
+
+Families CRUD with member role linking.
+
+Groups CRUD and member associations.
+
+Phase 4 — Gatherings & Attendance
+
+Gatherings list & eligible-members.
+
+Attendance check-in (batch append).
+
+Phase 5 — Donations
+
+Pending donations retrieval.
+
+Donation verification & Twilio hook.
+
+Phase 6 — Reports & Staff Permissions
+
+Custom reports endpoint.
+
+Staff permission read/write.
+
+Phase 7 — Hardening
+
+Add input validation with zod/joi.
+
+Rate limiting & better error handling.
+
+Swagger/OpenAPI docs generation.
+
+👉 At the end of each phase, stop and ask me to review the output before proceeding.
+
+📌 Output Requirements
+
+Each code block must be full, copy-paste-ready.
+
+Each route file should be self-contained with validation, auth middleware, and exported router.
+
+Tests should be runnable via npm test.
+
+Do not skip any environment variable, dependency, or folder.
+
+Always consult the technical-docx folder (all 4 documents) before implementing.
+
+Always pause and ask me if:
+
+A Google Sheet column name is unclear.
+
+A schema change is required.
+
+An API Spec detail conflicts with reality.
+
+Twilio notifications should be triggered.
+
+🧑‍💻 My role (the human)
+
+I will provide:
+
+Google Sheet ID.
+
+Service Account JSON (as base64 string).
+
+Twilio credentials (when needed).
+
+Frontend origin URL for CORS.
+
+I will commit/push the code to GitHub.
+
+I will deploy to production (pm2 or Docker).
+
+I will confirm schema mappings whenever unclear.
+
+✅ Deliverable
+
+Produce a fully working backend project (Node.js + Express + TypeScript) that:
+
+Matches the API Specifications doc.
+
+Uses Google Sheets as the datastore.
+
+Enforces JWT authentication/authorization.
+
+Integrates with Twilio for messaging.
+
+Passes Jest tests.
+
+Aligns with the System Architecture Document.
+
+Is ready to integrate with the Churchflow Portal frontend.
+
+
+
+
+
+
+
+
+
+
+Master Prompt for Backend AI
+
+You are to act as a senior backend engineer building the backend for the Churchflow Portal frontend.
+
+The frontend is React (TypeScript + Vite + Tailwind + shadcn/ui).
+The backend must be a Node.js 18+ Express + TypeScript project.
+
+The backend uses Google Sheets as the primary datastore (each sheet = table). The backend must expose a REST API as defined in the API Specifications, enforce JWT authentication/authorization, and integrate Twilio for notifications.
+
+Always reference and align with the contents of the technical-docx folder, which contains:
+
+API Specifications
+
+Data Schema & Model Development
+
+Development & Deployment Guide
+
+System Architecture Document
+
+Whenever unsure of a column name, flow, or rule, re-read these docs. If something is ambiguous, pause and ask me before implementing. Always align with the scope and rules in these documents.
+
+Environment & Setup
+
+Node.js 18+, TypeScript.
+
+Express.js framework.
+
+ESLint + Prettier.
+
+Jest + Supertest for testing.
+
+Logging: pino or winston.
+
+Security: helmet, cors (restricted to frontend origin), express-rate-limit.
+
+Auth: JWT (jsonwebtoken). Payload includes { memberId, permissions }.
+
+.env variables:
+
+PORT
+
+GOOGLE_SERVICE_ACCOUNT_CREDENTIALS (base64 JSON, provided by me)
+
+GOOGLE_SHEET_ID (provided by me)
+
+JWT_SECRET
+
+TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER (provided by me if needed).
+
+Ask me for these values before running live.
+
+Project Structure
+/backend
+  /src
+    index.ts
+    /routes
+      auth.ts
+      members.ts
+      families.ts
+      groups.ts
+      gatherings.ts
+      attendance.ts
+      donations.ts
+      reports.ts
+      staff.ts
+    /services
+      sheetsService.ts
+      authService.ts
+      twilioService.ts
+    /middleware
+      auth.ts
+      errorHandler.ts
+      validation.ts
+    /models
+      types.ts
+    /tests
+  package.json
+  tsconfig.json
+  .env.example
+  README.md
+
+SheetsService
+
+Use googleapis with service account.
+
+Functions:
+
+getRows(sheetName, filters?)
+
+getRowByPK(sheetName, pkField, pkValue)
+
+appendRow(sheetName, rowObj)
+
+updateRow(sheetName, pkField, pkValue, patchObj)
+
+batchAppend(sheetName, rows[])
+
+Mappings come from the Data Schema & Model Development doc.
+Pause and ask me if schema/columns are unclear.
+
+Routes (per API Specifications)
+
+Phase A — Auth & Members
+
+POST /auth/login — staff login, return JWT.
+
+GET /members — paginated, searchable.
+
+POST /members — create new member.
+
+GET /members/:id — profile with family, groups, recent attendance.
+
+PUT /members/:id — update member.
+
+Phase B — Families & Groups
+
+Families CRUD with member role linking.
+
+Groups CRUD and member associations.
+
+Phase C — Gatherings & Attendance
+
+GET /gatherings — filter by type/date.
+
+GET /gatherings/:id/eligible-members — return members.
+
+POST /attendance/check-in — batch append attendance.
+
+Phase D — Donations
+
+GET /donations/pending
+
+POST /donations/verify — verify donation, append, optional Twilio.
+
+Phase E — Reports & Staff
+
+POST /reports/custom — execute filter queries.
+
+GET /staff/:id/permissions
+
+PUT /staff/:id/permissions
+
+Testing
+
+Jest + Supertest integration tests.
+
+Mock Google Sheets in-memory for tests.
+
+Example: POST /members appends row, returns 201 with memberId.
+
+Deployment
+
+Local: npm run dev (ts-node).
+
+Production: npm run build → node dist/index.js.
+
+Use pm2 in production.
+
+HTTPS required.
+
+Dockerfile optional.
+
+Build Phases
+
+Phase 0 — Bootstrap: scaffold structure, env, health check.
+
+Phase 1 — Auth: SheetsService, authService, login, JWT middleware.
+
+Phase 2 — Members CRUD: implement + tests.
+
+Phase 3 — Families & Groups: implement CRUD + associations.
+
+Phase 4 — Gatherings & Attendance: implement endpoints + batch append.
+
+Phase 5 — Donations: implement pending + verify + Twilio.
+
+Phase 6 — Reports & Staff: implement reports + permissions.
+
+Phase 7 — Hardening: validation (zod/joi), rate limiting, Swagger/OpenAPI.
+
+At the end of each phase, stop and ask me to review before proceeding.
+
+Output Requirements
+
+Code must be full, copy-paste-ready.
+
+Each route file is self-contained with validation, auth, exported router.
+
+Tests runnable with npm test.
+
+Always consult technical-docx folder (all 4 documents) before implementing.
+
+Pause and ask me if:
+
+A Google Sheet column name is unclear.
+
+A schema change is required.
+
+An API Spec detail conflicts with reality.
+
+Twilio notifications should be triggered.
+
+My Role (the human)
+
+I provide: Google Sheet ID, Service Account JSON, Twilio credentials (if needed), frontend origin URL.
+
+I commit/push to GitHub.
+
+I deploy to production.
+
+I confirm schema mappings whenever unclear.
+
+Deliverable
+
+Produce a fully working backend project (Node.js + Express + TypeScript) that:
+
+Matches the API Specifications.
+
+Uses Google Sheets as datastore.
+
+Enforces JWT auth.
+
+Integrates Twilio.
+
+Passes Jest tests.
+
+Aligns with the System Architecture Document.
+
+Is ready to integrate with the frontend.
+
+
+
+
+
+
+
+🔧 Implementation + Guidance Prompt (paste into the master prompt)
+
+You are an experienced backend engineer building and delivering a production-quality backend to support the Churchflow Portal frontend. Use Node.js 18+, TypeScript, Express, and the googleapis library for Google Sheets. Authenticate with JWT for protected endpoints and provide Twilio integration for optional messaging.
+
+Always consult these sources before writing any code
+
+The technical-docx folder (must be read and used as the authoritative contract) containing:
+
+API Specifications
+
+Data Schema & Model Development
+
+Development & Deployment Guide
+
+System Architecture Document
+
+The GitHub frontend: https://github.com/AllenFredTestGit/churchflow-portal — clone and analyze it thoroughly to match route names, payload shapes, response shapes, date formats, pagination style, and authentication flows used by the frontend.
+
+The live frontend URL (for visual verification): https://tcc-portal.lovable.app/.
+
+The master Google Sheet that will act as the datastore:
+
+https://docs.google.com/spreadsheets/d/1XCqJk2XBPcPjXFo1nN-h4tWMLLOrAJnajfT63rQ3iDs/edit?gid=0#gid=0
+
+Before coding: scan the frontend repo to find where API calls are made (search for fetch(, axios, ky, api/, or references to /api/v1) and extract exact endpoint strings, request/response formats, and any helper layers. If any front-end code uses a slightly different naming or shape than the API spec, produce a short mapping document and pause to request confirmation before proceeding with incompatible changes.
+
+High-level goals & required outcomes
+
+Implement a robust, secure, well-tested backend that:
+
+Implements the API in the API Specifications doc (priority).
+
+Uses the Google Sheet as the authoritative datastore (reads/writes via a SheetsService abstraction).
+
+Enforces JWT-based authentication + permission checks (per staff permissions sheet).
+
+Integrates Twilio for optional notifications.
+
+Uses UUID/random suffixes for generated IDs (e.g., MEM-${uuidv4()}) — do not implement incremental counters unless explicitly requested by the human.
+
+Produces Jest + Supertest tests for every route.
+
+Produces OpenAPI/Swagger documentation derived from implemented routes.
+
+For every major choice that affects data shape, security, or deployment (e.g., adding Branches sheet, Column renames, encryption of salary data), present the change with pros/cons and pause for human confirmation.
+
+Required code structure (must be followed)
+/backend
+  /src
+    index.ts
+    /routes
+      auth.ts
+      members.ts
+      families.ts
+      groups.ts
+      gatherings.ts
+      attendance.ts
+      donations.ts
+      reports.ts
+      staff.ts
+    /services
+      sheetsService.ts        # Google Sheets abstraction (required)
+      authService.ts
+      twilioService.ts
+    /middleware
+      auth.ts                # JWT + permission checks
+      validation.ts          # request validation using zod (or joi)
+      errorHandler.ts
+    /models
+      types.ts
+      validators.ts
+    /utils
+      id.ts                  # UUID helpers
+      date.ts
+    /tests
+  package.json
+  tsconfig.json
+  .env.example
+  README.md
+  openapi.yaml
+
+SheetsService: required API (implementation details)
+
+Create src/services/sheetsService.ts. It must:
+
+Authenticate using the Google Service Account credentials from env var GOOGLE_SERVICE_ACCOUNT_CREDENTIALS (the full JSON, base64-encoded is acceptable).
+
+Expose the following async functions:
+
+getRows(sheetName: string, options?: { filters?: Filter[], columns?: string[], ranges?: string[] }) — should support batchGet for multiple sheets + simple in-memory filtering (do not attempt SQL-like joins inside Sheets API).
+
+getRowByPK(sheetName: string, pkField: string, pkValue: string) — locate the row index and return an object mapping columns to values.
+
+appendRow(sheetName: string, rowObject: Record<string, any>) — append single row and return the generated ID + row position. Use spreadsheets.values.append.
+
+batchAppend(sheetName: string, rows: Record<string, any>[]) — append many rows in a single API call. Use spreadsheets.values.append with resource.values = [ [r1col1, r1col2…], [r2col1, ...] ] or spreadsheets.values.batchUpdate when updating multiple ranges; prefer append with multiple rows for same-sheet bulk writes.
+
+updateRow(sheetName: string, pkField: string, pkValue: string, patch: Record<string, any>) — find row index by PK and update the exact row range using spreadsheets.values.update.
+
+Implement efficient operations:
+
+Use spreadsheets.values.batchGet to read multiple sheets in one HTTP call.
+
+For append operations, use valueInputOption: 'RAW' and insertDataOption: 'INSERT_ROWS' and set includeValuesInResponse: false (or true if you need the appended values).
+
+For getRowByPK, implement a clean utility that:
+
+Fetches the header row and maps header -> column index.
+
+Fetches the sheet rows and find the row index where row[pkColIndex] === pkValue.
+
+To update, compute the A1 range for that row (e.g., Members!A${rowIndex + 1}:Z${rowIndex + 1}) and call values.update.
+
+Add retries and exponential backoff for Google API errors (quota/rate limit handling). Use a small number of retries (3) with incremental delays.
+
+Important: Keep the SheetsService thin and predictable so the service layer above it can implement business rules and transactions (no business logic in the SheetsService).
+
+ID generation rule
+
+Use the uuid package and generate IDs with a short prefix: e.g. MEM-${uuidv4()}, ATT-${uuidv4()}, FAM-${uuidv4()}. This assures uniqueness without sequence coordination.
+
+Authentication & Authorization
+
+Implement POST /api/v1/auth/login to authenticate staff accounts: verify password (if stored in Sheets, passwords must be hashed — use bcrypt). Prefer storing staff credentials in a dedicated secure store; if kept in Sheets, enforce that passwords are pre-hashed and never store plain text. If the docs do not specify, ask the human to provide a secure credentials plan.
+
+On login, issue JWT (HS256) with JWT_SECRET. Token payload: { sub: memberId, permissions: string[], iat, exp }. Use exp with reasonable lifetime (e.g., 8 hours).
+
+Implement middleware auth.ts to verify token and permit(permission) to gate routes based on staff permissions read from StaffPermissions sheet. Put permissions into the token at login time for efficiency. Validate that permission checks read from token and fall back to StaffPermissions read when needed.
+
+Cross-cutting implementation & security rules (must be enforced)
+
+Use helmet(), express-rate-limit() (configurable per route), and cors() (restrict to frontend origins).
+
+Data validation: use zod or joi schema validators for all incoming requests. Respond with 400 and a clear error body { error: string, details?: any }.
+
+Never log full service account keys, JWT secrets, or phone numbers in plaintext logs.
+
+Send minimal fields in responses; e.g., do NOT return salary or other sensitive fields unless the caller has explicit permission. If storing sensitive fields (salary), encrypt them at rest using an env-key SENSITIVE_DATA_KEY and document how to decrypt it. Ask human before implementing salary encryption approach.
+
+Expose X-Request-Id header for tracing requests; log it.
+
+Branches (migration & plan)
+
+The frontend expects a Branches navigation (you asked for it). If the Data Schema does not include Branches, create a Branches sheet and add BranchID columns to the following sheets: Members, Staff, Families, Events, Gatherings, Donations, Attendance. Create a migration script that adds BranchID to existing rows with a default branch (ask the human for the default branch ID). Pause and request human approval before running any changes that mutate the master sheet.
+
+
+
+Points where AI MUST PAUSE and request human input
+
+(Write these as interactive checkpoints in the deliverable README; do NOT proceed automatically.)
+
+If the Data Schema does not include Branches or BranchID columns — must pause and request whether to add a Branches sheet or to embed BranchID in existing sheets.
+
+If passwords for staff are stored in plaintext in Sheets — must pause and request the human to provide hashed passwords or a secure credential plan.
+
+If any sensitive field (salary, SSN, bank info) is present — must pause and ask how to secure/encrypt that field and whether to store it in Sheets.
+
+Before sending any real Twilio messages in production — must pause and request human opt-in plus confirmation of TWILIO_ENABLED=true.
+
+Before any script that mutates the master Google Sheet (migration scripts or mass update) — must pause and request explicit approval and a recommended backup/snapshot strategy.
+
+Additional improvement guidance (AI must proactively advise)
+
+If frequent writes become a performance bottleneck, recommend migrating critical tables (Attendance, Members) from Sheets to a proper DB (Postgres) and provide a migration plan with minimal downtime.
+
+Recommend adding an audit log sheet or dedicated datastore for change logs (who did what and when).
+
+Recommend adding basic metrics (Prometheus / Grafana or a hosted solution) for monitoring writes and API error rate.
+
+Recommend securing environment in production via a secrets manager (AWS Secrets Manager, GCP Secret Manager, or platform-specific secrets).
+
+When recommending improvements, the AI must provide:
+
+A one-paragraph justification (benefit vs migration cost).
+
+A minimal feasible implementation plan (files to change, scripts to add).
+
+Final instructions to the AI
+
+Implement using TypeScript and idiomatic Node best-practices. Keep code modular and well-documented.
+
+Provide full code blocks ready to paste. Include package.json, tsconfig.json, .env.example, and a README.md that contains human-steps spelled out (service account creation, base64 tips, Twilio setup, run & test commands).
+
+For everything that could break production data, create a safe migration plan and do not run destructive operations without human confirmation.
+
+Use UUID pattern for all generated IDs: PREFIX-${uuidv4()}.
+
+After implementing each phase, run tests and produce a summary report of passing/failing tests and any unresolved questions. Stop and ask the human to review before starting the next phase.
+
+
+Deliverables & acceptance criteria (per navigation)
+
+For each navigation (Branches, Staff, Families, Groups, Events/Gatherings, Attendance, Donations, Reports) the AI must deliver:
+
+Fully implemented route(s) in TypeScript (copy-paste-ready).
+
+Updated sheetsService usage demonstrated in route code.
+
+Zod/joi validators for request bodies.
+
+Unit + integration tests for each route.
+
+Example curl commands & sample responses.
+
+README section with exact steps for the human to: set env vars, create service account, base64 encode the JSON, share sheet, run the server, run tests.
+
+A frontend-api-mapping.json to validate frontend integration.
+
+A migration plan (if modifying sheet structure) that must be approved before running.
+
+Acceptance: All implemented routes pass tests and the AI provides steps for the human to run the server locally and verify with the existing frontend.
+
+
+
+
+
+
+
+SheetsService: required API (implementation details)
+
+Create src/services/sheetsService.ts. It must:
+
+Authenticate using the Google Service Account credentials from env var GOOGLE_SERVICE_ACCOUNT_CREDENTIALS (the full JSON, base64-encoded is acceptable).
+
+Expose the following async functions:
+
+getRows(sheetName: string, options?: { filters?: Filter[], columns?: string[], ranges?: string[] }) — should support batchGet for multiple sheets + simple in-memory filtering (do not attempt SQL-like joins inside Sheets API).
+
+getRowByPK(sheetName: string, pkField: string, pkValue: string) — locate the row index and return an object mapping columns to values.
+
+appendRow(sheetName: string, rowObject: Record<string, any>) — append single row and return the generated ID + row position. Use spreadsheets.values.append.
+
+batchAppend(sheetName: string, rows: Record<string, any>[]) — append many rows in a single API call. Use spreadsheets.values.append with resource.values = [ [r1col1, r1col2…], [r2col1, ...] ] or spreadsheets.values.batchUpdate when updating multiple ranges; prefer append with multiple rows for same-sheet bulk writes.
+
+updateRow(sheetName: string, pkField: string, pkValue: string, patch: Record<string, any>) — find row index by PK and update the exact row range using spreadsheets.values.update.
+
+Implement efficient operations:
+
+Use spreadsheets.values.batchGet to read multiple sheets in one HTTP call.
+
+For append operations, use valueInputOption: 'RAW' and insertDataOption: 'INSERT_ROWS' and set includeValuesInResponse: false (or true if you need the appended values).
+
+For getRowByPK, implement a clean utility that:
+
+Fetches the header row and maps header -> column index.
+
+Fetches the sheet rows and find the row index where row[pkColIndex] === pkValue.
+
+To update, compute the A1 range for that row (e.g., Members!A${rowIndex + 1}:Z${rowIndex + 1}) and call values.update.
+
+Add retries and exponential backoff for Google API errors (quota/rate limit handling). Use a small number of retries (3) with incremental delays.
+
+Important: Keep the SheetsService thin and predictable so the service layer above it can implement business rules and transactions (no business logic in the SheetsService).
+
+ID generation rule
+
+Use the uuid package and generate IDs with a short prefix: e.g. MEM-${uuidv4()}, ATT-${uuidv4()}, FAM-${uuidv4()}. This assures uniqueness without sequence coordination.
+
+Authentication & Authorization
+
+Implement POST /api/v1/auth/login to authenticate staff accounts: verify password (if stored in Sheets, passwords must be hashed — use bcrypt). Prefer storing staff credentials in a dedicated secure store; if kept in Sheets, enforce that passwords are pre-hashed and never store plain text. If the docs do not specify, ask the human to provide a secure credentials plan.
+
+On login, issue JWT (HS256) with JWT_SECRET. Token payload: { sub: memberId, permissions: string[], iat, exp }. Use exp with reasonable lifetime (e.g., 8 hours).
+
+Implement middleware auth.ts to verify token and permit(permission) to gate routes based on staff permissions read from StaffPermissions sheet. Put permissions into the token at login time for efficiency. Validate that permission checks read from token and fall back to StaffPermissions read when needed.
+
+Cross-cutting implementation & security rules (must be enforced)
+
+Use helmet(), express-rate-limit() (configurable per route), and cors() (restrict to frontend origins).
+
+Data validation: use zod or joi schema validators for all incoming requests. Respond with 400 and a clear error body { error: string, details?: any }.
+
+Never log full service account keys, JWT secrets, or phone numbers in plaintext logs.
+
+Send minimal fields in responses; e.g., do NOT return salary or other sensitive fields unless the caller has explicit permission. If storing sensitive fields (salary), encrypt them at rest using an env-key SENSITIVE_DATA_KEY and document how to decrypt it. Ask human before implementing salary encryption approach.
+
+Expose X-Request-Id header for tracing requests; log it.
+
+Branches (migration & plan)
+
+The frontend expects a Branches navigation (you asked for it). If the Data Schema does not include Branches, create a Branches sheet and add BranchID columns to the following sheets: Members, Staff, Families, Events, Gatherings, Donations, Attendance. Create a migration script that adds BranchID to existing rows with a default branch (ask the human for the default branch ID). Pause and request human approval before running any changes that mutate the master sheet.
+
+How to create & use the Google service account JSON (instructions for the human)
+
+Instruct the AI to present these exact steps to the human in the deliverable README. The AI must also show the exact commands to base64 the JSON and put into .env.
+
+In Google Cloud Console:
+
+Create/select a project.
+
+Enable Google Sheets API and Google Drive API for the project.
+
+Go to IAM & Admin → Service Accounts → Create Service Account (name = churchflow-backend-sa).
+
+Grant it the "Editor" role (or minimal roles required for Sheets access).
+
+Create a JSON key (select JSON). Download the file service-account.json.
+
+Share the Google Sheet with the service account email (the service account has an email like churchflow-backend-sa@project-id.iam.gserviceaccount.com) — give Editor permission.
+
+On your development machine:
+
+(macOS / Linux) cat service-account.json | base64 -w 0 — copy the output string.
+
+(Windows PowerShell) Get-Content service-account.json -Raw | Out-File -Encoding ascii -Width 2147483647 <temporaryfile> then certutil -encodehex service-account.json service-account.b64 0x40000000 (or instruct to use WSL). Simpler: instruct user to upload the file to their secret manager or use WSL.
+
+In .env (development) or your hosting secret manager set GOOGLE_SERVICE_ACCOUNT_CREDENTIALS to the raw JSON or the base64 string depending on implementation preference. If you pass base64, the backend must decode it at runtime:
+
+const saJson = JSON.parse(Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_CREDENTIALS, 'base64').toString('utf8'));
+const auth = new google.auth.JWT({
+  email: saJson.client_email,
+  key: saJson.private_key,
+  scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive'],
+});
+
+
+Set GOOGLE_SHEET_ID to 1XCqJk2XBPcPjXFo1nN-h4tWMLLOrAJnajfT63rQ3iDs (the provided sheet ID) in .env.
+
+The AI must include the exact code snippet above in the README and implementation.
+
+How to do batch writes and best practices (instructions AI must follow)
+
+For attendance and other high-volume writes, use single-call bulk append:
+
+Prepare rows as an array of arrays where each inner array maps to sheet column order (use header mapping).
+
+Use spreadsheets.values.append with:
+
+await sheets.spreadsheets.values.append({
+  spreadsheetId,
+  range: `${sheetName}!A:Z`,           // or the precise header range
+  valueInputOption: 'RAW',
+  insertDataOption: 'INSERT_ROWS',
+  resource: { values: rows },         // rows: [ [col1, col2, ...], [ ... ] ]
+});
+
+
+For multi-sheet reads, use spreadsheets.values.batchGet({ spreadsheetId, ranges: ['Members!A:Z','Families!A:Z'] }).
+
+For idempotency:
+
+On POST /attendance/check-in, first getRows('Attendance', { filters: [ { field: 'GatheringID', op: '=', value: gatheringId } ] }) and compute which memberIds are missing; only append new rows for missing memberIds. This minimizes duplicates.
+
+For concurrency & rate limiting:
+
+Implement request-level locks or semaphores for huge bursts (or use a queuing mechanism). For a simple solution, use optimistic append: read existing rows, compute new rows, append; if append fails due to quota, retry with backoff.
+
+The AI must add an example script scripts/batchCheckIn.js for local manual testing (using sheetsService.batchAppend) and document how to run it.
+
+How to set up Twilio credentials (instructions the AI must include)
+
+Sign up / log in to Twilio → Console.
+
+Grab Account SID and Auth Token from the console (Dashboard). Set them in .env as:
+
+TWILIO_ACCOUNT_SID
+
+TWILIO_AUTH_TOKEN
+
+TWILIO_PHONE_NUMBER (the Twilio phone number you will send from)
+
+For trial accounts: Twilio requires verifying the recipient phone number(s) before sending. For production, purchase/upgrade the number.
+
+Node.js sample (AI must include in deliverables):
+
+const Twilio = require('twilio');
+const client = Twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+await client.messages.create({
+  body: 'Hello from Churchflow Portal',
+  from: process.env.TWILIO_PHONE_NUMBER,
+  to: '+234XXXXXXXXXX',
+});
+
+
+The AI must implement src/services/twilioService.ts with sendSms(to, body) and safe error handling and rate limiting. It must not send messages by default—human must opt-in or set TWILIO_ENABLED=true.
+
+How to configure CORS (instructions AI must implement)
+
+In Express, use the cors package and allow exact origins from environment variable:
+
+import cors from 'cors';
+const allowedOrigins = (process.env.FRONTEND_ORIGINS || 'http://localhost:5173,https://tcc-portal.lovable.app').split(',');
+app.use(cors({ origin: allowedOrigins, credentials: true }));
+
+
+Set .env values:
+
+FRONTEND_ORIGINS=http://localhost:5173,https://tcc-portal.lovable.app
+
+Add instructions in README telling the human to update FRONTEND_ORIGINS for other environments (staging, production) and to restart the server when changing env.
+
+How to determine & confirm front-end API expectations
+
+The AI must:
+
+Clone the frontend repo https://github.com/AllenFredTestGit/churchflow-portal.
+
+Search for API usage patterns (strings like /api/, fetch(, axios.*(, ky(). Produce a mapping file frontend-api-mapping.json that maps frontend calls to desired backend endpoints, including expected request/response shapes, status codes, pagination parameters (e.g., page, limit, totalPages), and any header requirements.
+
+If any mismatch exists between the API Spec and what the frontend expects (names, field names, pagination shape), produce a change proposal describing:
+
+Minimal backend change to satisfy frontend.
+
+Minimal frontend change to satisfy API Spec.
+
+Which is recommended and why (performance, security, consistency).
+
+Pause for human confirmation if the mismatch affects data shape, security, or public API semantics.
+
+Checklist of items to extract from the frontend:
+
+Base API path (does frontend use /api/v1 or a proxy?).
+
+Authentication method and header names.
+
+Pagination style: page/totalPages or cursor or offset?
+
+Field names & data shapes for member/family/staff objects.
+
+Expected date formats/timezones (ISO vs local).
+
+Error response format (e.g., { error: string, details? }).
+
+Any optimistic UI behavior that requires specific response codes (e.g., 202 vs 200).
+
+Tests, OpenAPI & documentation
+
+The AI must produce openapi.yaml and ensure it matches implemented routes.
+
+Implement Jest + Supertest tests for each route (happy + unhappy paths).
+
+Include a CI GitHub Actions workflow to run lint, tests and build.
+
+Deliverables & acceptance criteria (per navigation)
+
+For each navigation (Branches, Staff, Families, Groups, Events/Gatherings, Attendance, Donations, Reports) the AI must deliver:
+
+Fully implemented route(s) in TypeScript (copy-paste-ready).
+
+Updated sheetsService usage demonstrated in route code.
+
+Zod/joi validators for request bodies.
+
+Unit + integration tests for each route.
+
+Example curl commands & sample responses.
+
+README section with exact steps for the human to: set env vars, create service account, base64 encode the JSON, share sheet, run the server, run tests.
+
+A frontend-api-mapping.json to validate frontend integration.
+
+A migration plan (if modifying sheet structure) that must be approved before running.
+
+Acceptance: All implemented routes pass tests and the AI provides steps for the human to run the server locally and verify with the existing frontend.
+
+Points where AI MUST PAUSE and request human input
+
+(Write these as interactive checkpoints in the deliverable README; do NOT proceed automatically.)
+
+If the Data Schema does not include Branches or BranchID columns — must pause and request whether to add a Branches sheet or to embed BranchID in existing sheets.
+
+If passwords for staff are stored in plaintext in Sheets — must pause and request the human to provide hashed passwords or a secure credential plan.
+
+If any sensitive field (salary, SSN, bank info) is present — must pause and ask how to secure/encrypt that field and whether to store it in Sheets.
+
+Before sending any real Twilio messages in production — must pause and request human opt-in plus confirmation of TWILIO_ENABLED=true.
+
+Before any script that mutates the master Google Sheet (migration scripts or mass update) — must pause and request explicit approval and a recommended backup/snapshot strategy.
+
+Additional improvement guidance (AI must proactively advise)
+
+If frequent writes become a performance bottleneck, recommend migrating critical tables (Attendance, Members) from Sheets to a proper DB (Postgres) and provide a migration plan with minimal downtime.
+
+Recommend adding an audit log sheet or dedicated datastore for change logs (who did what and when).
+
+Recommend adding basic metrics (Prometheus / Grafana or a hosted solution) for monitoring writes and API error rate.
+
+Recommend securing environment in production via a secrets manager (AWS Secrets Manager, GCP Secret Manager, or platform-specific secrets).
+
+When recommending improvements, the AI must provide:
+
+A one-paragraph justification (benefit vs migration cost).
+
+A minimal feasible implementation plan (files to change, scripts to add).
+
+Final instructions to the AI
+
+Implement using TypeScript and idiomatic Node best-practices. Keep code modular and well-documented.
+
+Provide full code blocks ready to paste. Include package.json, tsconfig.json, .env.example, and a README.md that contains human-steps spelled out (service account creation, base64 tips, Twilio setup, run & test commands).
+
+For everything that could break production data, create a safe migration plan and do not run destructive operations without human confirmation.
+
+Use UUID pattern for all generated IDs: PREFIX-${uuidv4()}.
+
+After implementing each phase, run tests and produce a summary report of passing/failing tests and any unresolved questions. Stop and ask the human to review before starting the next phase.
+
+
+
+
+
+
+
+
+
+LASTLY this project is to be built free, and ran almost free too so try so much to avoid paid service or tools or tech unless it is necesary and no other options. 

@@ -1,0 +1,126 @@
+Document 4 of 7: Data Schema & Model Document
+Project Name: TCC Church CRM
+Version: 1.0
+Date: January 25, 2025
+
+4.1. Introduction
+This document is the definitive source of truth for the database structure, which is implemented using Google Sheets. Each sheet within a master Google Sheets document functions as a database table. The Backend API is the sole controller of this data; no user or administrator should ever edit these sheets directly.
+Notation:
+1.	(PK): Primary Key - A unique identifier for a row within its sheet.
+2.	(FK): Foreign Key - A key used to link to a row in another sheet, establishing a relationship.
+4.2. Database Schema
+Members
+Stores the core profile for every individual in the system.
+Column Name	Data Type	Constraints	Description
+MemberID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., MEM-00001).
+FirstName	String	Required	Member's first name.
+LastName	String	Required	Member's last name.
+PhoneNumber	String	Unique (if provided)	Member's primary phone number.
+Email	String	Unique (if provided)	Member's email address.
+DOB	Date		Date of Birth (YYYY-MM-DD format).
+Gender	String		e.g., Male, Female, Other.
+Address	String		Full home address.
+FamilyID (FK)	String	-> Families.FamilyID	Links the member to a family unit.
+MemberStatus	String	Required	e.g., Active, Inactive, Child, Guest.
+(Custom Fields)	Varies		Dynamic columns added by Admin via the UI.
+
+Families
+Group individual members into family units.
+Column Name	Data Type	Constraints	Description
+FamilyID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., FAM-001).
+FamilyName	String	Required	e.g., "The Smith Family".
+
+Groups
+Defines all small groups, departments, fellowships, and cells.
+Column Name	Data Type	Constraints	Description
+GroupID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., GRP-001).
+GroupName	String	Required	e.g., "Sanctuary Choir", "Men's Fellowship".
+GroupType	String	Required	e.g., Department, Fellowship, Cell.
+LeaderMemberID (FK)	String	-> Members.MemberID	The MemberID of the group's leader.
+
+GroupMembers
+Creates a many-to-many relationship between Members and Groups.
+Column Name	Data Type	Constraints	Description
+GroupMemberID (PK)	String	Required, Unique	Auto-generated unique ID for the relationship.
+MemberID (FK)	String	-> Members.MemberID	The MemberID of the member in the group.
+GroupID (FK)	String	-> Groups.GroupID	The GroupID of the group they belong to.
+
+Events
+Defines the templates for major, recurring church-wide events.
+Column Name	Data Type	Constraints	Description
+EventID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., EVT-001).
+EventName	String	Required	e.g., "Sunday Morning Service", "NATAR".
+EventType	String	Required	e.g., Weekly Service, Annual Program.
+
+Gatherings
+A universal log of every specific meeting instance that requires attendance tracking.
+Column Name	Data Type	Constraints	Description
+GatheringID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., GATH-00001).
+GatheringName	String	Required	e.g., "Sunday Service", "Men's Meeting".
+GatheringType	String	Required	EVENT or GROUP.
+ParentID (FK)	String	Required	The ID from the Events or Groups sheet.
+GatheringDate	DateTime	Required	The precise date and time of the gathering.
+
+Attendance
+Links a member to a specific gathering, representing a single check-in.
+Column Name	Data Type	Constraints	Description
+AttendanceID (PK)	String	Required, Unique	Auto-generated unique ID for the check-in.
+MemberID (FK)	String	-> Members.MemberID	The MemberID of the member who attended.
+GatheringID (FK)	String	-> Gatherings.GatheringID	The GatheringID of the meeting they attended.
+
+Donations
+The official verified log of all financial contributions.
+Column Name	Data Type	Constraints	Description
+DonationID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., DON-001).
+MemberID (FK)	String	-> Members.MemberID	The donating member (can be blank for guests).
+Amount	Number	Required	The monetary value of the donation.
+DonationDate	Date	Required	The date the donation was made.
+Fund	String	Required	e.g., "Tithe", "Building Fund".
+Notes	String		For guest names or other relevant info.
+
+VolunteerRoles
+Defines the types of volunteer jobs available.
+Column Name	Data Type	Constraints	Description
+RoleID (PK)	String	Required, Unique	Auto-generated unique ID (e.g., VOL-ROLE-01).
+RoleName	String	Required, Unique	e.g., "Usher", "Greeter", "Media Tech".
+Description	String		A brief description of the role's duties.
+
+VolunteerAssignments
+Links a member to a volunteer role for a specific gathering.
+Column Name	Data Type	Constraints	Description
+AssignmentID (PK)	String	Required, Unique	Auto-generated unique ID.
+MemberID (FK)	String	-> Members.MemberID	The MemberID of the volunteer.
+GatheringID (FK)	String	-> Gatherings.GatheringID	The gathering where they will serve.
+RoleID (FK)	String	-> VolunteerRoles.RoleID	The role they are assigned to.
+AssignmentStatus	String	Required	e.g., Confirmed, Served, Cancelled.
+
+SupportRequests
+Tracks support and prayer requests from members.
+Column Name	Data Type	Constraints	Description
+RequestID (PK)	String	Required, Unique	Auto-generated unique ID.
+MemberID (FK)	String	-> Members.MemberID	The requesting member (if known).
+RequestorName	String	Required	Name of the person making the request.
+RequestorContact	String	Required	Phone or email of the requestor.
+RequestCategory	String	Required	e.g., Prayer, Assistance, General.
+RequestDetails	String	Required	The full text of the support request.
+RequestStatus	String	Required	e.g., New, In Progress, Resolved.
+AssignedTo (FK)	String	-> Members.MemberID	The MemberID of the staff handling it.
+
+Staff
+Stores confidential information about staff members.
+Column Name	Data Type	Constraints	Description
+StaffID (PK)	String	Required, Unique	Auto-generated unique ID.
+MemberID (FK)	String	-> Members.MemberID	Links to the staff's public member profile.
+JobTitle	String	Required	e.g., "Senior Pastor", "Youth Leader".
+AppointmentDate	Date	Required	The date they officially became staff.
+SalaryInfo	String	Encrypted	Encrypted salary or stipend information.
+
+StaffPermissions
+Controls granular access for each staff member.
+Column Name	Data Type	Constraints	Description
+PermissionID (PK)	String	Required, Unique	Auto-generated unique ID.
+StaffMemberID (FK)	String	-> Members.MemberID	The staff member being granted permission.
+PermissionKey	String	Required	A programmatic key, e.g., can_view_donations.
+HasAccess	Boolean	Required	TRUE or FALSE.
+
+Excellent. The Data Schema & Model Document is confirmed. With the data structure now finalized, we can define the precise contract that the frontend and backend will use to communicate.

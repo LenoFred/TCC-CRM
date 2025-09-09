@@ -1,0 +1,56 @@
+Document 3 of 7: System Architecture Document
+Project Name: TCC Church CRM
+Version: 1.0
+Date: December 18, 2024
+
+3.1. Overview
+This document outlines the technical architecture for the TCC Church CRM. The architecture is designed to be modern, maintainable, low-cost, and scalable, with a strong emphasis on offline capability and ease of development. It translates the functional requirements into a concrete technical plan.
+3.2. Architectural Approach: Offline-First Progressive Web App (PWA)
+The system will be built as an Offline-First Progressive Web App. This architectural choice is central to the project's success as it directly addresses several core requirements:
+1.	Platform Independence: A single codebase runs on any device with a modern web browser (desktops, tablets, phones), eliminating the need for separate development for different operating systems.
+2.	Offline-First Capability: The application is designed to be fully functional without an active internet connection. This is critical for scenarios like at-the-door check-ins, where Wi-Fi may be unreliable. We will use service workers to cache the application shell and IndexedDB to create a robust client-side database.
+3.	Native-like Experience: Users can "install" the app to their home screen or desktop. This provides an icon, removes the browser's address bar, and allows for a more immersive, app-like experience without the complexity of app store distribution.
+4.	Discoverability & Linkability: As a web application, specific pages or reports can be linked to and shared easily among authorized staff.
+3.3. Technology Stack
+The technology stack is centered around the TypeScript/JavaScript ecosystem, enabling a unified language and toolset across the entire application, which simplifies development and maintenance.
+Category	Technology	Rationale
+Language	TypeScript	Enforces type safety, which drastically reduces runtime bugs and improves code clarity and maintainability.
+Frontend	SvelteKit	Chosen for its simplicity, fast performance, and excellent built-in support for creating PWAs and service workers.
+Backend	Node.js with Express.js	A robust, widely supported environment with an excellent official Google API library for our core database integration.
+Database	Google Sheets	A core project requirement, selected for its zero cost, user familiarity, and collaborative features.
+Offline Cache	IndexedDB	The standard browser API for creating a powerful client-side database to enable offline functionality.
+Authentication	JSON Web Tokens (JWT) & Bcrypt	A secure, stateless, and industry-standard method for authenticating users and securing the API.
+Communications	Nodemailer, Twilio API	Proven, reliable libraries for integrating email (via Gmail) and SMS/WhatsApp services.
+
+3.4. System Components & Responsibilities
+The system is logically divided into three main components:
+3.4.1. Frontend (The SvelteKit PWA)
+This is the client-side application that users interact with directly in their browser.
+1.	Responsibilities:
+•	UI Rendering: Renders all user interfaces, including dashboards, forms, lists, and reports.
+•	User State Management: Manages the current user's session, including their authentication token and permissions.
+•	Offline Data Storage: Manages the local IndexedDB database, storing a full copy of the necessary CRM data.
+•	Synchronization Logic: Contains the logic to detect online/offline status, queue changes made offline, and synchronize them with the backend when a connection is available.
+•	API Communication: Exclusively communicates with the backend via the defined RESTful API to fetch and send data.
+3.4.2. Backend (The Node.js/Express API)
+This is the server-side application that acts as the central brain and guardian of the system.
+1.	Responsibilities:
+•	The Guardian of Data: It is the single point of entry for all data operations. No other component is ever allowed to write directly to the Google Sheets database. This centralization is critical for data integrity.
+•	Business Logic Implementation: Executes all core system logic, such as generating analytical reports, processing donation verifications, and creating attendance records.
+•	Authentication & Authorization: Manages user login by issuing JWTs. For every single API request it receives, it validates the token and checks if the user has the required permissions for that specific action.
+•	Google Sheets Integration: Uses the official Googleapis Node.js library to perform all read and write operations on the master Google Sheet.
+•	Third-Party Service Integration: Manages connections to external services like Twilio to send SMS/WhatsApp messages and Nodemailer to send emails.
+3.4.3. Data Store (Google Sheets & Google Forms)
+This layer represents the physical storage of the church's data.
+1.	Google Sheets: Serves as the master database of record. Its structure is strictly defined in the Data Schema document and is treated as a database, not a spreadsheet. It should only ever be modified by the Backend API's service account.
+2.	Google Forms: Used as simple, public-facing data collection points for non-technical users, e.g., for donation reporting, volunteer sign-ups. Form submissions are treated as raw, temporary data to be processed and validated by the backend before being entered into the official Google Sheets database.
+3.5. Data Flow & Offline Synchronization Model
+The offline-first model is achieved through a precise data flow:
+1.	Initial Load (Online): When a staff member logs in with an active internet connection, the PWA makes API calls to the backend to fetch the latest version of all necessary data (members, groups, events, etc.). This data is then stored in the browser's local IndexedDB.
+2.	Offline Operation: Once the data is cached, the application can be used fully offline. When a user performs a write operation e.g., adds a new member, checks someone in the PWA writes the change directly to the local IndexedDB and adds a record of the action to a special "sync queue" also in IndexedDB. The UI updates immediately, giving the user instant feedback.
+3.	Re-establishing Connection: The PWA constantly monitors the network status. When it detects that an internet connection has been restored, it automatically triggers the synchronization process.
+4.	Synchronization Process: The PWA sends the actions from the sync queue, one by one, to the backend API.
+5.	Backend Processing: The backend receives each action, validates the data, checks permissions, and performs the final write operation to the master Google Sheet.
+6.	Confirmation and Update: The backend sends a success confirmation back to the PWA, which then removes the action from the queue. The PWA also fetches any new data that may have been added by other users while it was offline to ensure its local cache is fully up to date. Excellent. The System Architecture Document is confirmed. We have defined the blueprint; now we will define the precise structure of the foundation.
+
+

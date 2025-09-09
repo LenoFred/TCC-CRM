@@ -1,0 +1,143 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Calm Modern Tech-Classic Color Palette */
+    --background: 210 11% 97%;
+    --foreground: 215 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 15%;
+
+    /* Primary: Muted Steel Blue */
+    --primary: 213 12% 40%;
+    --primary-foreground: 210 40% 98%;
+    --primary-light: 213 12% 50%;
+    --primary-dark: 213 12% 30%;
+
+    /* Secondary: Subtle Sage */
+    --secondary: 150 8% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-light: 150 8% 55%;
+
+    /* Muted: Cool Gray */
+    --muted: 210 9% 92%;
+    --muted-foreground: 215 12% 40%;
+
+    /* Accent: Warm Charcoal */
+    --accent: 25 5% 35%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 150 8% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 35 15% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 210 9% 87%;
+    --input: 210 9% 90%;
+    --ring: 213 12% 40%;
+
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 215 15% 12%;
+    --sidebar-foreground: 210 15% 85%;
+    --sidebar-primary: 213 12% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 15% 16%;
+    --sidebar-accent-foreground: 210 15% 85%;
+    --sidebar-border: 215 15% 20%;
+    --sidebar-ring: 213 12% 40%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 12% 40%), hsl(213 12% 50%));
+    --gradient-secondary: linear-gradient(135deg, hsl(150 8% 45%), hsl(150 8% 55%));
+    --gradient-accent: linear-gradient(135deg, hsl(25 5% 35%), hsl(30 8% 40%));
+    --gradient-hero: linear-gradient(135deg, hsl(213 12% 40%) 0%, hsl(150 8% 45%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(210 9% 96%) 100%);
+
+    /* Shadows */
+    --shadow-soft: 0 2px 8px -2px hsl(210 40% 8% / 0.08);
+    --shadow-medium: 0 4px 16px -4px hsl(210 40% 8% / 0.12);
+    --shadow-large: 0 8px 32px -8px hsl(210 40% 8% / 0.16);
+    --shadow-colored: 0 4px 16px -4px hsl(207 90% 54% / 0.2);
+
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 215 15% 6%;
+    --foreground: 210 15% 92%;
+
+    --card: 215 15% 8%;
+    --card-foreground: 210 15% 92%;
+
+    --popover: 215 15% 8%;
+    --popover-foreground: 210 15% 92%;
+
+    --primary: 213 15% 65%;
+    --primary-foreground: 215 15% 8%;
+
+    --secondary: 150 8% 55%;
+    --secondary-foreground: 215 15% 8%;
+
+    --muted: 215 15% 12%;
+    --muted-foreground: 210 12% 60%;
+
+    --accent: 25 8% 65%;
+    --accent-foreground: 215 15% 8%;
+
+    --destructive: 0 50% 45%;
+    --destructive-foreground: 210 15% 92%;
+
+    --success: 150 8% 55%;
+    --success-foreground: 215 15% 8%;
+
+    --warning: 35 20% 60%;
+    --warning-foreground: 215 15% 8%;
+
+    --border: 215 15% 15%;
+    --input: 215 15% 12%;
+    --ring: 213 15% 65%;
+    --sidebar-background: 215 20% 4%;
+    --sidebar-foreground: 210 15% 85%;
+    --sidebar-primary: 213 15% 65%;
+    --sidebar-primary-foreground: 215 20% 4%;
+    --sidebar-accent: 215 20% 8%;
+    --sidebar-accent-foreground: 210 15% 85%;
+    --sidebar-border: 215 20% 12%;
+    --sidebar-ring: 213 15% 65%;
+
+    /* Dark mode gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 15% 65%), hsl(213 15% 75%));
+    --gradient-secondary: linear-gradient(135deg, hsl(150 8% 55%), hsl(150 8% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(25 8% 65%), hsl(30 12% 70%));
+    --gradient-hero: linear-gradient(135deg, hsl(213 15% 65%) 0%, hsl(150 8% 55%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(215 15% 8%) 0%, hsl(215 15% 10%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

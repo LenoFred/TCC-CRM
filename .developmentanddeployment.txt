@@ -1,0 +1,94 @@
+Document 7 of 7: Development & Deployment Guide
+Project Name: TCC Church CRM
+Version: 1.0
+Audience: Developers
+Date: March 30, 2025
+
+7.1. Introduction
+This guide provides all necessary instructions for a developer to set up the project's development environment, run the application locally for testing and feature development, and deploy it to a live production server. Following these steps carefully is crucial for a successful setup.
+7.2. Prerequisites
+Before you begin, ensure you have the following software installed on your machine:
+•	Node.js: Version 18.x or later.
+•	npm (or yarn): The Node.js package manager (usually included with Node.js).
+•	Git: For version control and cloning the repository.
+You will also need accounts and credentials for the following external services:
+•	Google Cloud Platform (GCP) Project: To access the Google Sheets API.
+•	Twilio Account: To use the SMS and WhatsApp messaging services.
+7.3. Getting API Credentials
+This is the most critical setup phase. All credentials should be kept secret and never committed to version control.
+7.3.1. Google Sheets API Credentials
+1.	Navigate to the Google Cloud Console.
+2.	Create a new GCP Project or select an existing one.
+3.	In the navigation menu, go to APIs & Services > Library.
+4.	Search for and enable the following two APIs:
+•	Google Sheets API
+•	Google Drive API (This is required for the Sheets API to discover and access files).
+5.	Go to APIs & Services > Credentials.
+6.	Click Create Credentials and select Service Account.
+7.	Give the service account a name (e.g., crm-sheets-writer) and click Create and Continue, then Done.
+8.	Find the newly created service account in the list. Click on it to manage it.
+9.	Go to the Keys tab, click Add Key, and select Create new key.
+10.	Choose JSON as the key type and click Create. A JSON file containing your credentials will be downloaded automatically. Guard this file carefully.
+11.	Crucial Final Step: Open the master Church_CRM_Database Google Sheet. Click the Share button. Copy the client_email address from the downloaded JSON file (it looks like ...gserviceaccount.com) and share the sheet with it, giving it Editor permissions. The API will not work without this step.
+7.3.2. Twilio Credentials
+1.	Log in to your Twilio Console.
+2.	On the main dashboard, you will find your Account SID and Auth Token.
+3.	Navigate to the "Phone Numbers" section to get your active Twilio Phone Number.
+4.	If you plan to use WhatsApp, follow Twilio's specific instructions to enable your number for the WhatsApp Business API.
+7.4. Local Development Setup
+7.4.1. Clone the Repository
+git clone <repository_url>
+cd <project_directory>
+7.4.2. Configure Environment Variables
+The project contains two main folders: /frontend and /backend. The backend requires an environment file to store your secret credentials.
+1.	In the /backend directory, create a new file named .env.
+2.	Copy the structure below and paste it into your .env file, filling in the values you obtained in the previous steps.
+env
+# --- Google Credentials --- # 
+Paste the entire content of the downloaded JSON key file into this variable as a single line string. 
+GOOGLE_SERVICE_ACCOUNT_CREDENTIALS='{"type": "service_account", "project_id": "...", ...}' 
+# The ID of your master Google Sheet (from the URL). 
+GOOGLE_SHEET_ID=' put it here ' 
+# --- Twilio Credentials --- # TWILIO_ACCOUNT_SID='ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' TWILIO_AUTH_TOKEN='your_auth_token' TWILIO_PHONE_NUMBER='+15551234567' 
+# --- Application Security --- # 
+Generate a long, random, and secure string for signing JWTs. JWT_SECRET='a_very_long_and_random_secret_string_for_jwt'
+7.4.3. Install Dependencies
+You need to install dependencies for both the frontend and backend separately.
+•	Open a terminal in the /backend directory and run:
+npm install
+•	Open a second terminal in the /frontend directory and run:
+npm install
+4.4. Run the Application
+The frontend and backend servers run independently.
+•	To run the Backend API: In your first terminal (in the /backend directory), run:
+npm run dev
+The API server will start, typically on http://localhost:3001.
+•	To run the Frontend PWA: In your second terminal (in the /frontend directory), run:
+npm run dev
+The SvelteKit development server will start, typically on http://localhost:5173.
+You can now open http://localhost:5173 in your browser to use the application.
+
+7.5. Deployment to Production
+This guide provides a general checklist for deploying to a production environment like a VPS (e.g., DigitalOcean ) or a PaaS (e.g., Vercel, Heroku).
+1.	Build the Frontend:
+•	In the /frontend directory, run the build command:
+npm run build
+•	This creates a highly optimized, production-ready version of the PWA in the /frontend/build directory.
+2.	Deploy the Backend:
+•	Copy the entire /backend directory to your production server (excluding the node_modules folder).
+•	Do not use a .env file in production. Instead, set the environment variables directly in your hosting provider's control panel or your server's environment. This is more secure.
+•	On the server, run npm install --production to install only the necessary production dependencies.
+•	Use a process manager like pm2 to run the Node.js server reliably and restart it if it crashes.
+pm2 start index.js -name "crm-api"
+3.	Deploy the Frontend:
+•	The contents of the /frontend/build directory are static files (HTML, CSS, JS).
+•	You can deploy these files to any static hosting service like Vercel, Netlify, or AWS S3 for the best performance.
+•	Alternatively, you can configure your backend Node.js server (using express.static) to serve these files.
+4.	Final Configuration:
+•	Domain & DNS: Point your production domain, e.g., crm.tcc.ng, or so to the IP address of your server or hosting service.
+•	HTTPS: Ensure HTTPS is enabled and forced. A secure connection is required for PWAs, service workers, and secure authentication to function correctly. Use a service like Let's Encrypt to get a free SSL certificate.
+•	CORS: Ensure your backend server is configured to only accept requests from your production frontend domain to prevent unauthorized access. Excellent. The final document, the Development & Deployment Guide, has now been delivered.
+This completes the entire documentation suite for the TCC Church CRM project. We have successfully progressed from the initial vision to a comprehensive set of seven documents that form a complete blueprint for the system.
+
+
+
