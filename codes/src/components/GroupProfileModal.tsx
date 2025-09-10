@@ -2,6 +2,7 @@ import { useState } from "react";
 import { X, Plus, Users, Calendar, MapPin, Phone, Mail, UserCheck, Eye, Search } from "lucide-react";
 import { CreateActivityModal } from "./CreateActivityModal";
 import { MemberAttendanceModal } from "./MemberAttendanceModal";
+import { GroupActivityAttendanceModal } from "./GroupActivityAttendanceModal";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -54,6 +55,8 @@ export const GroupProfileModal = ({
   const [isCreateActivityOpen, setIsCreateActivityOpen] = useState(false);
   const [selectedMemberName, setSelectedMemberName] = useState<string>("");
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+  const [isActivityAttendanceModalOpen, setIsActivityAttendanceModalOpen] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   
   // Mock activities data
@@ -372,6 +375,10 @@ export const GroupProfileModal = ({
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => {
+                            setSelectedActivity(activity);
+                            setIsActivityAttendanceModalOpen(true);
+                          }}
                         >
                           <Eye className="w-4 h-4 mr-2" />
                           View Attendance
@@ -414,6 +421,16 @@ export const GroupProfileModal = ({
                 setIsAttendanceModalOpen(false);
                 setSelectedMemberName("");
               }}
+            />
+
+            <GroupActivityAttendanceModal
+              isOpen={isActivityAttendanceModalOpen}
+              onClose={() => {
+                setIsActivityAttendanceModalOpen(false);
+                setSelectedActivity(null);
+              }}
+              group={group}
+              activity={selectedActivity}
             />
           </>
         )}

@@ -237,13 +237,14 @@ const GroupsPage = () => {
           </div>
         </div>
 
-        {/* Groups Table */}
+        {/* Groups List */}
         <Card>
           <CardHeader>
             <CardTitle>Groups Directory</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
+            {/* Desktop View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -251,7 +252,7 @@ const GroupsPage = () => {
                     <TableHead>Type</TableHead>
                     <TableHead>Leader</TableHead>
                     <TableHead>Members</TableHead>
-                      <TableHead>Meeting</TableHead>
+                    <TableHead>Meeting</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -333,6 +334,79 @@ const GroupsPage = () => {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile View */}
+            <div className="grid grid-cols-1 gap-4 md:hidden">
+              {filteredGroups.map((group) => (
+                <div key={group.id} className="p-4 rounded-lg border bg-card">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold">{group.name}</h3>
+                      {group.description && (
+                        <p className="text-sm text-muted-foreground">{group.description}</p>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover border border-border">
+                        <DropdownMenuItem onClick={() => handleViewProfile(group)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View Profile
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEditGroup(group)}>
+                          <Edit2 className="mr-2 h-4 w-4" />
+                          Edit Group
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handleDeleteGroup(group)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete Group
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div>
+                      <Badge className={getTypeColor(group.type)}>
+                        {group.type}
+                      </Badge>
+                    </div>
+                    <div>
+                      <Badge className={getStatusColor(group.status)}>
+                        {group.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-muted-foreground" />
+                      <span>Members: {group.members.length}</span>
+                    </div>
+                    {group.leader && (
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Leader:</span>
+                        <span>{group.leader}</span>
+                        {group.leaderContact && (
+                          <span className="text-muted-foreground text-xs">{group.leaderContact}</span>
+                        )}
+                      </div>
+                    )}
+                    {group.location && (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-muted-foreground" />
+                        <span>{group.location}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

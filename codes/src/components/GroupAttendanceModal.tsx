@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { Users, Check } from "lucide-react";
+import { Users, Check, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { TableBody } from "./ui/table";
 
 interface GroupMember {
   id: number;
@@ -38,6 +41,12 @@ export const GroupAttendanceModal = ({ isOpen, onClose, group }: GroupAttendance
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [presentMembers, setPresentMembers] = useState<number[]>([]);
   const [meetingDate, setMeetingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [attendance, setAttendance] = useState<{
+    date: string;
+    presentCount: number;
+    absentCount: number;
+    members: { id: number; name: string; present: boolean; }[];
+  }[]>([]);
 
   // Mock data - would be fetched from API based on group
   const mockGroupMembers: GroupMember[] = [
@@ -86,107 +95,77 @@ export const GroupAttendanceModal = ({ isOpen, onClose, group }: GroupAttendance
     onClose();
   };
 
-  if (!group) return null;
+if (!group) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col mx-4">
+      <DialogContent className="w-full max-w-4xl max-h-[80vh] overflow-hidden flex flex-col mx-4">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            Take Attendance - {group.name}
+            {group.name} - Attendance Management
           </DialogTitle>
           <DialogDescription>
-            Mark attendance for group meeting on {new Date(meetingDate).toLocaleDateString()}
+            Track and manage attendance for group meetings and activities.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col flex-1 overflow-hidden space-y-4">
-          {/* Meeting Date */}
-          <div className="flex items-center gap-4">
-            <label htmlFor="meetingDate" className="text-sm font-medium">
-              Meeting Date:
-            </label>
-            <input
-              id="meetingDate"
-              type="date"
-              value={meetingDate}
-              onChange={(e) => setMeetingDate(e.target.value)}
-              className="border rounded px-3 py-1 text-sm"
-            />
-          </div>
+        <Tabs defaultValue="mark" className="flex-1 overflow-hidden flex flex-col">
+          <TabsList>
+            <TabsTrigger value="mark">Mark Attendance</TabsTrigger>
+            <TabsTrigger value="history">View History</TabsTrigger>
+          </TabsList>
 
-          {/* Attendance Summary */}
-          <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg">
-            <span className="text-sm">
-              <strong>{presentMembers.length}</strong> of <strong>{groupMembers.length}</strong> members present
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPresentMembers(groupMembers.map(m => m.id))}
-              >
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPresentMembers([])}
-              >
-                Clear All
-              </Button>
-            </div>
-          </div>
-
-          {/* Members List */}
-          <div className="flex-1 overflow-y-auto border rounded-lg">
-            <div className="p-4 space-y-3">
-              {groupMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                >
-                  <Checkbox
-                    id={`member-${member.id}`}
-                    checked={presentMembers.includes(member.id)}
-                    onCheckedChange={(checked) => 
-                      handleMemberToggle(member.id, checked as boolean)
-                    }
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <label
-                        htmlFor={`member-${member.id}`}
-                        className="font-medium cursor-pointer"
-                      >
-                        {member.name}
-                      </label>
-                      {member.role && (
-                        <Badge variant="secondary" className="text-xs">
-                          {member.role}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">{member.email}</p>
-                  </div>
-                  {presentMembers.includes(member.id) && (
-                    <Check className="h-4 w-4 text-green-600" />
-                  )}
+          <TabsContent value="mark" className="flex-1 overflow-hidden flex flex-col">
+            <div className="space-y-6 overflow-y-auto pr-2">
+              {/* Attendance Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="p-4 border rounded-lg space-y-1">
+                  <h4 className="text-sm font-medium text-muted-foreground">Present Today</h4>
+                  <p className="text-2xl font-bold">{presentMembers.length}</p>
+                  <p className="text-sm text-muted-foreground">of {groupMembers.length} members</p>
                 </div>
-              ))}
+                <div className="p-4 border rounded-lg space-y-1">
+                  <h4 className="text-sm font-medium text-muted-foreground">Attendance Rate</h4>
+                  <p className="text-2xl font-bold">
+                    {Math.round((presentMembers.length / (groupMembers.length || 1)) * 100)}%
+                  </p>
+                  <p className="text-sm text-muted-foreground">Today's meeting</p>
+                </div>
+                <div className="p-4 border rounded-lg space-y-1">
+                  <h4 className="text-sm font-medium text-muted-foreground">Last Meeting</h4>
+                  <p className="text-2xl font-bold">85%</p>
+                  <p className="text-sm text-muted-foreground">Attendance rate</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </TabsContent>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmitAttendance}>
-            Submit Attendance
-          </Button>
-        </DialogFooter>
+          <TabsContent value="history" className="flex-1 overflow-hidden flex flex-col">
+            <div className="space-y-6 overflow-y-auto pr-2">
+              {/* Attendance History */}
+              <h3 className="text-lg font-semibold">Attendance History</h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Present</TableHead>
+                    <TableHead>Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attendanceHistory.map((entry) => (
+                    <TableRow key={entry.date}>
+                      <TableCell>{entry.date}</TableCell>
+                      <TableCell>{entry.present ? "Yes" : "No"}</TableCell>
+                      <TableCell>{entry.notes}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
