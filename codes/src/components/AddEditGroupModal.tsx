@@ -1,11 +1,22 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Search, Check, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +51,16 @@ interface AddEditGroupModalProps {
   isEdit?: boolean;
 }
 
+// Mock data for members - In real app, this would come from API
+const mockMembers = [
+  { id: 1, name: "John Smith", email: "john@example.com" },
+  { id: 2, name: "Sarah Johnson", email: "sarah@example.com" },
+  { id: 3, name: "Michael Brown", email: "michael@example.com" },
+  { id: 4, name: "Emily Davis", email: "emily@example.com" },
+  { id: 5, name: "David Wilson", email: "david@example.com" },
+  { id: 6, name: "Lisa Anderson", email: "lisa@example.com" },
+];
+
 export const AddEditGroupModal = ({ 
   group, 
   isOpen, 
@@ -48,6 +69,10 @@ export const AddEditGroupModal = ({
   isEdit = false 
 }: AddEditGroupModalProps) => {
   const { toast } = useToast();
+  const [searchLeader, setSearchLeader] = useState("");
+  const [searchMembers, setSearchMembers] = useState("");
+  const [selectedLeader, setSelectedLeader] = useState<typeof mockMembers[0] | null>(null);
+  const [selectedMembers, setSelectedMembers] = useState<typeof mockMembers[0][]>([]);
   const [formData, setFormData] = useState<Omit<Group, 'id'>>({
     name: "",
     type: "Department",
@@ -171,24 +196,36 @@ export const AddEditGroupModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <DialogTitle className="text-xl font-bold">
-            {isEdit ? 'Edit Group' : 'Add New Group'}
-          </DialogTitle>
-          <Button
-            onClick={onClose}
-            variant="ghost"
-            size="sm"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+      <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto mx-4">
+        <DialogHeader className="pb-4 border-b">
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle className="text-xl font-bold">
+                {isEdit ? 'Edit Group' : 'Add New Group'}
+              </DialogTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure your group details, leadership, and members
+              </p>
+            </div>
+            <Button
+              onClick={onClose}
+              variant="ghost"
+              size="icon"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-8 py-4">
           {/* Basic Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Basic Information</h3>
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
+                1
+              </div>
+              <h3 className="text-lg font-semibold">Basic Information</h3>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -256,53 +293,137 @@ export const AddEditGroupModal = ({
           </div>
 
           {/* Leadership Information */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Leadership</h3>
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
+                2
+              </div>
+              <h3 className="text-lg font-semibold">Leadership</h3>
+            </div>
             
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="leader">Group Leader</Label>
-                <Select 
-                  value={availableMembers.find(m => m.name === formData.leader)?.id || ""} 
-                  onValueChange={handleLeaderChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a leader from members" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableMembers.map(member => (
-                      <SelectItem key={member.id} value={member.id}>
-                        <div className="flex flex-col">
-                          <span>{member.name}</span>
-                          <span className="text-sm text-muted-foreground">{member.phone}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="leader" className="text-sm font-medium">Group Leader</Label>
+                <Command className="border rounded-lg">
+                  <CommandInput 
+                    placeholder="Search for a leader..."
+                    value={searchLeader}
+                    onValueChange={setSearchLeader}
+                  />
+                  <CommandList className="max-h-40">
+                    <CommandEmpty>No members found.</CommandEmpty>
+                    <CommandGroup>
+                      {mockMembers
+                        .filter(member => 
+                          member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
+                          member.email.toLowerCase().includes(searchLeader.toLowerCase())
+                        )
+                        .map(member => (
+                          <CommandItem
+                            key={member.id}
+                            onSelect={() => {
+                              setSelectedLeader(member);
+                              handleInputChange('leader', member.name);
+                            }}
+                            className="flex items-center justify-between"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{member.name}</span>
+                              <span className="text-sm text-muted-foreground">{member.email}</span>
+                            </div>
+                            {selectedLeader?.id === member.id && <Check className="w-4 h-4" />}
+                          </CommandItem>
+                        ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
               </div>
             </div>
           </div>
 
           {/* Members Selection */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Members ({formData.members.length})</h3>
-            
-            <div className="grid grid-cols-1 gap-3 max-h-48 overflow-y-auto border rounded-lg p-3">
-              {availableMembers.map(member => (
-                <div key={member.id} className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded">
-                  <input
-                    type="checkbox"
-                    checked={formData.members.includes(member.name)}
-                    onChange={() => handleMemberToggle(member.name)}
-                    className="rounded"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium">{member.name}</div>
-                    <div className="text-sm text-muted-foreground">{member.phone}</div>
-                  </div>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
+                  3
                 </div>
-              ))}
+                <h3 className="text-lg font-semibold">Members</h3>
+              </div>
+              <Badge variant="secondary" className="text-sm">
+                {selectedMembers.length} selected
+              </Badge>
+            </div>
+            
+            <div className="space-y-4">
+              <Command className="border rounded-lg shadow-sm">
+                <CommandInput 
+                  placeholder="Search for members..."
+                  value={searchMembers}
+                  onValueChange={setSearchMembers}
+                  className="h-9"
+                />
+                <CommandList className="max-h-[200px]">
+                  <CommandEmpty>No members found.</CommandEmpty>
+                  <CommandGroup>
+                    {mockMembers
+                      .filter(member => 
+                        member.name.toLowerCase().includes(searchMembers.toLowerCase()) ||
+                        member.email.toLowerCase().includes(searchMembers.toLowerCase())
+                      )
+                      .map(member => (
+                        <CommandItem
+                          key={member.id}
+                          onSelect={() => {
+                            const isSelected = selectedMembers.some(m => m.id === member.id);
+                            if (isSelected) {
+                              setSelectedMembers(prev => prev.filter(m => m.id !== member.id));
+                              handleInputChange('members', selectedMembers.filter(m => m.id !== member.id).map(m => m.name));
+                            } else {
+                              setSelectedMembers(prev => [...prev, member]);
+                              handleInputChange('members', [...selectedMembers, member].map(m => m.name));
+                            }
+                          }}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <div className="flex flex-col flex-1">
+                            <span className="font-medium">{member.name}</span>
+                            <span className="text-sm text-muted-foreground">{member.email}</span>
+                          </div>
+                          {selectedMembers.some(m => m.id === member.id) ? (
+                            <Check className="w-4 h-4 text-primary shrink-0" />
+                          ) : (
+                            <Plus className="w-4 h-4 opacity-50 shrink-0" />
+                          )}
+                        </CommandItem>
+                      ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+
+              {selectedMembers.length > 0 && (
+                <div className="border rounded-lg divide-y">
+                  {selectedMembers.map(member => (
+                    <div key={member.id} className="flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{member.name}</span>
+                        <span className="text-sm text-muted-foreground">{member.email}</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedMembers(prev => prev.filter(m => m.id !== member.id));
+                          handleInputChange('members', selectedMembers.filter(m => m.id !== member.id).map(m => m.name));
+                        }}
+                        className="opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

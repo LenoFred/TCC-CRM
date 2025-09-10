@@ -106,6 +106,16 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
   const collapsed = state === "collapsed";
+
+  // Add logo section at the top
+  const Logo = () => (
+    <div className="flex items-center space-x-2 px-3 py-4">
+      <img src="/tcclogo.jpeg" alt="TCC Logo" className="w-8 h-8 rounded-lg" />
+      {!collapsed && (
+        <span className="font-bold text-lg text-sidebar-foreground">TCC</span>
+      )}
+    </div>
+  );
   
   const isActive = (path: string) => {
     if (path === "/") {
@@ -126,8 +136,8 @@ export function AppSidebar() {
         {/* Church Logo/Brand */}
         <div className="p-6 border-b border-sidebar-border">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-gradient-primary rounded-lg flex items-center justify-center">
-              <Heart className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
+              <img src="/tcclogo.jpeg" alt="TCC Logo" className="w-full h-full object-cover" />
             </div>
             {!collapsed && (
               <div>
