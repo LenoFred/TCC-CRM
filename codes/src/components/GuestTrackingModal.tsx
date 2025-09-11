@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, Phone, Mail, Calendar, Clock } from "lucide-react";
+import { Users, UserPlus, Phone, Mail, Calendar, Clock, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Guest, GuestTrackingService } from "@/utils/guestTracking";
+import { SendFollowUpModal } from "@/components/SendFollowUpModal";
+import { AddEditMemberModal } from "@/components/AddEditMemberModal";
 
 interface GuestTrackingModalProps {
   isOpen: boolean;
@@ -37,8 +39,12 @@ export const GuestTrackingModal = ({
 }: GuestTrackingModalProps) => {
   const { toast } = useToast();
   const [guests, setGuests] = useState<Guest[]>([]);
-  const [followUpTasks, setFollowUpTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [activeTab, setActiveTab] = useState("guests");
 
   // Mock data for demonstration
   const mockGuests: Guest[] = [
@@ -98,24 +104,38 @@ export const GuestTrackingModal = ({
   }, [isOpen]);
 
   const handleConvertToMember = (guest: Guest) => {
-    toast({
-      title: "Convert to Member",
-      description: `Opening member creation form for ${guest.name}`,
-    });
-    // This would open the AddEditMemberModal with pre-filled data
+    setSelectedGuest(guest);
+    setShowAddMemberModal(true);
   };
 
-  const handleUpdateFollowUp = (guestId: string, status: string) => {
+  const handleContact = (guest: Guest) => {
+    setSelectedGuest(guest);
+    setShowContactModal(true);
+  };
+
+  const handleMarkContacted = (guestId: string) => {
     setGuests(prev => prev.map(guest => 
       guest.id === guestId 
-        ? { ...guest, followUpStatus: status as any }
+        ? { ...guest, followUpStatus: 'Contacted' }
         : guest
     ));
     
     toast({
-      title: "Follow-up Updated",
-      description: "Guest follow-up status has been updated successfully.",
+      title: "Contact Status Updated",
+      description: "Guest has been marked as contacted.",
     });
+  };
+
+  const handleSaveMember = (member: any) => {
+    toast({
+      title: "Member Created",
+      description: `Successfully converted ${member.firstName} to a member`,
+    });
+    setShowAddMemberModal(false);
+    // Update guest status or remove from guests list
+    if (selectedGuest) {
+      setGuests(prev => prev.filter(g => g.id !== selectedGuest.id));
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -140,20 +160,28 @@ export const GuestTrackingModal = ({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="w-full max-w-6xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Guest Tracking & Follow-up
-          </DialogTitle>
-          <DialogDescription>
-            Track guests and manage follow-up activities for {eventName || 'all events'}
-          </DialogDescription>
+        <DialogHeader className="flex flex-row justify-between items-center">
+          <div>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Guest Tracking
+            </DialogTitle>
+            <DialogDescription>
+              Track guests and manage follow-up activities for {eventName || 'all events'}
+            </DialogDescription>
+          </div>
+          <Button 
+            variant="outline"
+            onClick={() => setShowFollowUpModal(true)}
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Follow-up
+          </Button>
         </DialogHeader>
 
-        <Tabs defaultValue="guests" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="guests" className="w-full" value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="guests">Guests ({guests.length})</TabsTrigger>
-            <TabsTrigger value="follow-up">Follow-up Tasks ({followUpTasks.length})</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
@@ -226,12 +254,21 @@ export const GuestTrackingModal = ({
                               Convert to Member
                             </Button>
                           )}
-                          {guest.followUpStatus === 'Pending' && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateFollowUp(guest.id, 'Contacted')}
+                          {guest.followUpStatus !== 'Contacted' ? (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleContact(guest)}
                             >
-                              Mark Contacted
+                              Contact
+                            </Button>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              disabled
+                            >
+                              Contacted
                             </Button>
                           )}
                         </div>
@@ -240,46 +277,6 @@ export const GuestTrackingModal = ({
                   ))}
                 </TableBody>
               </Table>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="follow-up" className="space-y-4">
-            <div className="grid gap-4">
-              {followUpTasks.map((task, index) => (
-                <Card key={index}>
-                  <CardHeader className="pb-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-base">{task.taskType}</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          Guest: {task.guestName}
-                        </p>
-                      </div>
-                      <Badge variant={task.priority === 'High' ? 'destructive' : 
-                                   task.priority === 'Medium' ? 'default' : 'secondary'}>
-                        {task.priority} Priority
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm mb-3">{task.description}</p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
-                          Assign to Staff
-                        </Button>
-                        <Button size="sm">
-                          Mark Complete
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
             </div>
           </TabsContent>
 
@@ -382,11 +379,51 @@ export const GuestTrackingModal = ({
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
-          <Button className="gap-2">
-            <UserPlus className="h-4 w-4" />
-            Add New Guest
-          </Button>
         </div>
+
+        {/* Add/Edit Member Modal */}
+        <AddEditMemberModal
+          isOpen={showAddMemberModal}
+          onClose={() => setShowAddMemberModal(false)}
+          onSave={handleSaveMember}
+          member={selectedGuest ? {
+            firstName: selectedGuest.name.split(' ')[0],
+            surname: selectedGuest.name.split(' ').slice(1).join(' '),
+            email: selectedGuest.email || '',
+            phone: selectedGuest.phone || '',
+            status: 'Active',
+            joinDate: new Date().toISOString().split('T')[0],
+          } : null}
+        />
+
+        {/* Follow Up Modal */}
+        <SendFollowUpModal
+          isOpen={showFollowUpModal}
+          onClose={() => setShowFollowUpModal(false)}
+          absentMembers={guests.filter(g => g.followUpStatus === 'Pending').map(g => ({
+            id: parseInt(g.id.replace('guest_', '')),
+            name: g.name,
+            lastAttended: g.lastVisit,
+          }))}
+          eventName={eventName || 'recent event'}
+        />
+
+        {/* Individual Contact Modal */}
+        <SendFollowUpModal
+          isOpen={showContactModal}
+          onClose={() => {
+            setShowContactModal(false);
+            if (selectedGuest) {
+              handleMarkContacted(selectedGuest.id);
+            }
+          }}
+          absentMembers={selectedGuest ? [{
+            id: parseInt(selectedGuest.id.replace('guest_', '')),
+            name: selectedGuest.name,
+            lastAttended: selectedGuest.lastVisit,
+          }] : []}
+          eventName={eventName || 'recent event'}
+        />
       </DialogContent>
     </Dialog>
   );

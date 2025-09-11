@@ -28,9 +28,10 @@ interface CustomField {
 interface CustomFieldsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onFieldAdded?: (field: any) => void;
 }
 
-export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) => {
+export const CustomFieldsModal = ({ isOpen, onClose, onFieldAdded }: CustomFieldsModalProps) => {
   const { toast } = useToast();
   const [selectedSheet, setSelectedSheet] = useState("");
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
@@ -43,12 +44,12 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
   const [dropdownOptions, setDropdownOptions] = useState("");
 
   const availableSheets = [
-    { value: "members", label: "Members" },
-    { value: "families", label: "Families" },
-    { value: "groups", label: "Groups" },
-    { value: "donations", label: "Donations" },
-    { value: "staff", label: "Staff" },
-    { value: "events", label: "Events" },
+    { value: "members", label: "Members", active: true },
+    { value: "staff", label: "Staff", active: true },
+    { value: "families", label: "Families", active: false },
+    { value: "groups", label: "Groups", active: false },
+    { value: "donations", label: "Donations", active: false },
+    { value: "events", label: "Events", active: false },
   ];
 
   const fieldTypes = [
@@ -99,6 +100,17 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
       return;
     }
 
+    // Check if selected sheet is active
+    const selectedSheetData = availableSheets.find(sheet => sheet.value === selectedSheet);
+    if (!selectedSheetData?.active) {
+      toast({
+        title: "Sheet Not Available",
+        description: "Custom fields can only be added to Members and Staff sheets.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newField: CustomField = {
       id: Date.now().toString(),
       name: newFieldName,
@@ -109,10 +121,15 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
     };
 
     setCustomFields(prev => [...prev, newField]);
-    
+
+    // Call the callback to add field to parent component (SettingsPage)
+    if (onFieldAdded) {
+      onFieldAdded(newField);
+    }
+
     toast({
-      title: "Field Added",
-      description: `Custom field "${newFieldName}" has been added to ${selectedSheet}.`,
+      title: "Field Added Permanently",
+      description: `Custom field "${newFieldName}" has been permanently added to the member sheet. It cannot be edited or deleted.`,
     });
 
     // Reset form
@@ -133,7 +150,7 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
+      <DialogContent className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -154,12 +171,25 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
               </SelectTrigger>
               <SelectContent>
                 {availableSheets.map((sheet) => (
-                  <SelectItem key={sheet.value} value={sheet.value}>
-                    {sheet.label}
+                  <SelectItem
+                    key={sheet.value}
+                    value={sheet.value}
+                    disabled={!sheet.active}
+                    className={!sheet.active ? "opacity-50" : ""}
+                  >
+                    <div className="flex items-center gap-2">
+                      {sheet.label}
+                      {!sheet.active && (
+                        <span className="text-xs text-muted-foreground">(Inactive)</span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              Custom fields can only be added to Members and Staff sheets. Other sheets are currently inactive for custom field management.
+            </p>
           </div>
 
           {selectedSheet && (
@@ -170,18 +200,23 @@ export const CustomFieldsModal = ({ isOpen, onClose }: CustomFieldsModalProps) =
                   <h3 className="text-lg font-medium">
                     Custom Fields for {availableSheets.find(s => s.value === selectedSheet)?.label}
                   </h3>
-                  <Button 
-                    onClick={() => setIsAddingField(true)}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Add Field
-                  </Button>
+                  {availableSheets.find(s => s.value === selectedSheet)?.active && (
+                    <Button
+                      onClick={() => setIsAddingField(true)}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Field
+                    </Button>
+                  )}
                 </div>
 
                 {customFields.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    No custom fields added yet. Click "Add Field" to create one.
+                    {availableSheets.find(s => s.value === selectedSheet)?.active
+                      ? "No custom fields added yet. Click \"Add Field\" to create one."
+                      : "Custom fields cannot be added to this sheet. Please select Members or Staff sheet."
+                    }
                   </div>
                 ) : (
                   <div className="space-y-3">

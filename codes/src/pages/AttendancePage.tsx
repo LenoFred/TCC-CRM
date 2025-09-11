@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Search, UserCheck, UserPlus, Calendar, Users, Plus, CheckCircle, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Search, UserCheck, UserPlus, Calendar, Users, Plus, CheckCircle, Eye, Send, CalendarCheck } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,30 +36,105 @@ import { DigitalCheckInModal } from "@/components/DigitalCheckInModal";
 import { GroupAttendanceModal } from "@/components/GroupAttendanceModal";
 import { EventManagementModal } from "@/components/EventManagementModal";
 import { GuestTrackingModal } from "@/components/GuestTrackingModal";
+import { SendFollowUpModal } from "@/components/SendFollowUpModal";
 
 const AttendancePage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [checkedInMembers, setCheckedInMembers] = useState<Set<number>>(new Set());
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
+  const [isSelectEventModalOpen, setIsSelectEventModalOpen] = useState(false);
   const [isGroupAttendanceModalOpen, setIsGroupAttendanceModalOpen] = useState(false);
   const [isEventManagementModalOpen, setIsEventManagementModalOpen] = useState(false);
   const [isGuestTrackingModalOpen, setIsGuestTrackingModalOpen] = useState(false);
+  const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedEventForCheckIn, setSelectedEventForCheckIn] = useState<any>(null);
   const [selectedEventForManagement, setSelectedEventForManagement] = useState<any>(null);
+  const [selectedEventForGuestTracking, setSelectedEventForGuestTracking] = useState<any>(null);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
 
-  // Mock data
+  // Handle URL parameter for opening check-in session modal
+  useEffect(() => {
+    const checkinParam = searchParams.get('checkin');
+    if (checkinParam === 'true') {
+      setIsSelectEventModalOpen(true);
+      // Remove the parameter from URL
+      setSearchParams({});
+    }
+  }, [searchParams]);
+
+  // Mock data - Using today's date (2025-09-10) for current events
   const events = [
-    { id: "1", name: "Sunday Service", date: "2024-08-31", type: "Service", category: "Regular Sunday Service", status: "Completed", expectedAttendance: 45 },
-    { id: "2", name: "Youth Fellowship", date: "2024-08-31", type: "Group", category: "Youth Ministry Activity", status: "Completed", expectedAttendance: 25, groupName: "Youth Ministry" },
-    { id: "3", name: "Prayer Meeting", date: "2024-08-28", type: "Meeting", category: "Prayer Meeting", status: "Completed", expectedAttendance: 30 },
-    { id: "4", name: "Choir Practice", date: "2024-08-30", type: "Group", category: "Choir Department Activity", status: "Completed", expectedAttendance: 15, groupName: "Choir Department" },
-    { id: "5", name: "Bible Study", date: "2024-08-29", type: "Group", category: "Youth Ministry Activity", status: "Completed", expectedAttendance: 20, groupName: "Youth Ministry" },
-    { id: "6", name: "Easter Service", date: "2024-03-31", type: "Service", category: "Annual Event", status: "Completed", expectedAttendance: 120 },
-    { id: "7", name: "Christmas Service", date: "2023-12-25", type: "Service", category: "Annual Event", status: "Completed", expectedAttendance: 150 },
-    { id: "8", name: "Board Meeting", date: "2024-08-25", type: "Meeting", category: "Meeting", status: "Completed", expectedAttendance: 12 }
+    // Today's events
+    { 
+      id: "1", 
+      name: "Mid-week Service", 
+      date: "2025-09-10", 
+      type: "Service", 
+      category: "Regular Service", 
+      status: "Active", 
+      expectedAttendance: 75 
+    },
+    { 
+      id: "2", 
+      name: "Youth Bible Study", 
+      date: "2025-09-10", 
+      type: "Group", 
+      category: "Youth Ministry Activity", 
+      status: "Active", 
+      expectedAttendance: 30, 
+      groupName: "Youth Ministry" 
+    },
+    { 
+      id: "3", 
+      name: "Evening Prayer Meeting", 
+      date: "2025-09-10", 
+      type: "Meeting", 
+      category: "Prayer Meeting", 
+      status: "Active", 
+      expectedAttendance: 25 
+    },
+    { 
+      id: "4", 
+      name: "Choir Rehearsal", 
+      date: "2025-09-10", 
+      type: "Group", 
+      category: "Choir Department Activity", 
+      status: "Active", 
+      expectedAttendance: 20, 
+      groupName: "Choir Department" 
+    },
+    // Past events for history
+    { 
+      id: "5", 
+      name: "Sunday Service", 
+      date: "2025-09-08", 
+      type: "Service", 
+      category: "Regular Sunday Service", 
+      status: "Completed", 
+      expectedAttendance: 150 
+    },
+    { 
+      id: "6", 
+      name: "Children's Sunday School", 
+      date: "2025-09-08", 
+      type: "Group", 
+      category: "Children's Ministry", 
+      status: "Completed", 
+      expectedAttendance: 40, 
+      groupName: "Children's Ministry" 
+    },
+    { 
+      id: "7", 
+      name: "Monday Prayer Meeting", 
+      date: "2025-09-09", 
+      type: "Meeting", 
+      category: "Prayer Meeting", 
+      status: "Completed", 
+      expectedAttendance: 30 
+    }
   ];
 
   const eventCategories = [
@@ -109,43 +185,24 @@ const AttendancePage = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Calendar className="h-5 w-5" />
-              Select Event
+              Check-in Session
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-4 items-end">
-              <div className="flex-1">
-                <Label htmlFor="event-select">Event/Gathering</Label>
-                <Select value={selectedEvent} onValueChange={setSelectedEvent}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an event or gathering" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {events.map((event) => (
-                      <SelectItem key={event.id} value={event.id}>
-                        <div className="flex flex-col">
-                          <span>{event.name} - {event.date}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {event.type} {event.groupName ? `(${event.groupName})` : ''}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button disabled={!selectedEvent} onClick={() => {
-                const event = events.find(e => e.id === selectedEvent);
-                setSelectedEventForCheckIn(event);
-                setIsCheckInModalOpen(true);
-              }}>
+            <div className="flex justify-center">
+              <Button 
+                size="lg" 
+                onClick={() => setIsSelectEventModalOpen(true)}
+                className="gap-2"
+              >
+                <CalendarCheck className="h-5 w-5" />
                 Start Check-in Session
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {selectedEvent && (
+        {selectedEventForCheckIn && (
           <>
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -345,7 +402,7 @@ const AttendancePage = () => {
                         size="sm" 
                         className="gap-2 flex-1"
                         onClick={() => {
-                          console.log("Send follow-up to absent members");
+                          setIsFollowUpModalOpen(true);
                         }}
                       >
                         <UserPlus className="h-4 w-4" />
@@ -358,6 +415,94 @@ const AttendancePage = () => {
             </div>
           </>
         )}
+
+        {/* Select Event Modal */}
+        <Dialog open={isSelectEventModalOpen} onOpenChange={setIsSelectEventModalOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Select Event for Check-in</DialogTitle>
+              <DialogDescription>
+                Choose a current activity or event to start the check-in process
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Current Events</Label>
+                <Select 
+                  value={selectedEvent} 
+                  onValueChange={(value) => {
+                    setSelectedEvent(value);
+                    const event = events.find(e => e.id === value);
+                    setSelectedEventForCheckIn(event);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an event" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {events
+                      .filter(event => {
+                        const eventDate = new Date(event.date);
+                        const today = new Date();
+                        return (
+                          eventDate.toDateString() === today.toDateString()
+                        );
+                      })
+                      .map((event) => (
+                        <SelectItem key={event.id} value={event.id}>
+                          <div className="flex flex-col">
+                            <span>{event.name}</span>
+                            <span className="text-sm text-muted-foreground">
+                              {event.type} {event.groupName ? `(${event.groupName})` : ''}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedEventForCheckIn && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{selectedEventForCheckIn.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Event Type:</span>
+                      <Badge variant="outline">{selectedEventForCheckIn.type}</Badge>
+                    </div>
+                    {selectedEventForCheckIn.groupName && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Group:</span>
+                        <span>{selectedEventForCheckIn.groupName}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Expected Attendance:</span>
+                      <span>{selectedEventForCheckIn.expectedAttendance}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    if (selectedEventForCheckIn) {
+                      setIsCheckInModalOpen(true);
+                      setIsSelectEventModalOpen(false);
+                    }
+                  }}
+                  disabled={!selectedEventForCheckIn}
+                >
+                  <CalendarCheck className="h-4 w-4 mr-2" />
+                  Begin Check-in
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Create Event Modal */}
         <CreateEventModal
@@ -402,9 +547,26 @@ const AttendancePage = () => {
         {/* Guest Tracking Modal */}
         <GuestTrackingModal
           isOpen={isGuestTrackingModalOpen}
-          onClose={() => setIsGuestTrackingModalOpen(false)}
-          eventId={selectedEvent}
-          eventName={events.find(e => e.id === selectedEvent)?.name}
+          onClose={() => {
+            setIsGuestTrackingModalOpen(false);
+            setSelectedEventForGuestTracking(null);
+          }}
+          eventId={selectedEventForGuestTracking?.id || selectedEvent}
+          eventName={selectedEventForGuestTracking?.name || events.find(e => e.id === selectedEvent)?.name}
+        />
+
+        {/* Follow Up Modal for Absent Members */}
+        <SendFollowUpModal
+          isOpen={isFollowUpModalOpen}
+          onClose={() => setIsFollowUpModalOpen(false)}
+          absentMembers={members
+            .filter(m => !checkedInMembers.has(m.id))
+            .map(m => ({
+              id: m.id,
+              name: m.name,
+              lastAttended: "2024-08-31" // You might want to track this in your actual implementation
+            }))}
+          eventName={events.find(e => e.id === selectedEvent)?.name || "the event"}
         />
       </div>
 
@@ -463,17 +625,30 @@ const AttendancePage = () => {
                       </TableCell>
                       <TableCell>{event.expectedAttendance}</TableCell>
                       <TableCell className="text-right">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedEventForManagement(event);
-                            setIsEventManagementModalOpen(true);
-                          }}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View Details
-                        </Button>
+                        <div className="flex gap-2 justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedEventForManagement(event);
+                              setIsEventManagementModalOpen(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View Details
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedEventForGuestTracking(event);
+                              setIsGuestTrackingModalOpen(true);
+                            }}
+                          >
+                            <Users className="h-4 w-4 mr-1" />
+                            Track Guests
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

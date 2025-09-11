@@ -60,23 +60,18 @@ const SettingsPage = () => {
     { value: "dropdown", label: "Dropdown" }
   ];
 
-  const addCustomField = () => {
-    if (newField.name && newField.type) {
-      const field = {
-        id: Date.now(),
-        name: newField.name,
-        type: newField.type,
-        required: newField.required,
-        createdAt: new Date().toISOString().split('T')[0]
-      };
-      setCustomFields([...customFields, field]);
-      setNewField({ name: "", type: "", required: false });
-    }
+  const handleFieldAdded = (newField: any) => {
+    // Convert the field format from CustomFieldsModal to SettingsPage format
+    const field = {
+      id: Date.now(),
+      name: newField.name,
+      type: newField.type,
+      required: newField.required,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    setCustomFields([...customFields, field]);
   };
 
-  const removeCustomField = (id: number) => {
-    setCustomFields(customFields.filter(f => f.id !== id));
-  };
 
   return (
     <DashboardLayout>
@@ -123,14 +118,16 @@ const SettingsPage = () => {
                         <TableHead>Data Type</TableHead>
                         <TableHead>Required</TableHead>
                         <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {customFields.map((field) => (
                         <TableRow key={field.id}>
                           <TableCell className="font-medium">{field.name}</TableCell>
-                          <TableCell>{field.type}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{field.type}</Badge>
+                          </TableCell>
                           <TableCell>
                             {field.required ? (
                               <Badge variant="destructive">Required</Badge>
@@ -139,19 +136,10 @@ const SettingsPage = () => {
                             )}
                           </TableCell>
                           <TableCell>{field.createdAt}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-2 justify-end">
-                              <Button variant="ghost" size="sm">
-                                Edit
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm"
-                                onClick={() => removeCustomField(field.id)}
-                              >
-                                Delete
-                              </Button>
-                            </div>
+                          <TableCell>
+                            <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                              Active
+                            </Badge>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -159,7 +147,7 @@ const SettingsPage = () => {
                   </Table>
                 </div>
                 <div className="mt-4 text-sm text-muted-foreground">
-                  <p>Custom fields will automatically appear on member profiles and forms. Changes may take a few minutes to propagate.</p>
+                  <p>Custom fields are permanently added to the member sheet and cannot be edited or deleted once created. They will automatically appear on member profiles and forms.</p>
                 </div>
               </CardContent>
             </Card>
@@ -196,7 +184,7 @@ const SettingsPage = () => {
                       <Label htmlFor="church-phone">Phone Number</Label>
                       <Input
                         id="church-phone"
-                        defaultValue="+1 (555) 123-4567"
+                        defaultValue="+234 806 123 4567"
                         className="mt-2"
                       />
                     </div>
@@ -204,7 +192,7 @@ const SettingsPage = () => {
                       <Label htmlFor="church-email">Email Address</Label>
                       <Input
                         id="church-email"
-                        defaultValue="info@unitychurch.com"
+                        defaultValue="info@tccchurch.com"
                         className="mt-2"
                       />
                     </div>
@@ -304,6 +292,13 @@ const SettingsPage = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Custom Fields Modal */}
+      <CustomFieldsModal
+        isOpen={isCustomFieldsModalOpen}
+        onClose={() => setIsCustomFieldsModalOpen(false)}
+        onFieldAdded={handleFieldAdded}
+      />
     </DashboardLayout>
   );
 };

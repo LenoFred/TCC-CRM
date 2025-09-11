@@ -1,10 +1,11 @@
 import { MetricCard } from "./MetricCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  Users, 
-  Heart, 
-  Calendar, 
+import { useNavigate } from "react-router-dom";
+import {
+  Users,
+  Heart,
+  Calendar,
   UserCheck,
   TrendingUp,
   Clock,
@@ -13,6 +14,24 @@ import {
 } from "lucide-react";
 
 export function Dashboard() {
+  const navigate = useNavigate();
+
+  const handleAddMember = () => {
+    navigate('/members?add=true');
+  };
+
+  const handleCheckIn = () => {
+    navigate('/attendance?checkin=true');
+  };
+
+  const handleRecordDonation = () => {
+    navigate('/donations');
+  };
+
+  const handleScheduleVolunteer = () => {
+    navigate('/volunteers');
+  };
+
   const metrics = [
     {
       title: "Total Members",
@@ -140,19 +159,35 @@ export function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Button variant="outline" className="h-20 flex-col space-y-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col space-y-2"
+              onClick={handleAddMember}
+            >
               <Users className="w-6 h-6" />
               <span className="text-sm">Add Member</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col space-y-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col space-y-2"
+              onClick={handleCheckIn}
+            >
               <Calendar className="w-6 h-6" />
               <span className="text-sm">Check-in</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col space-y-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col space-y-2"
+              onClick={handleRecordDonation}
+            >
               <Heart className="w-6 h-6" />
               <span className="text-sm">Record Donation</span>
             </Button>
-            <Button variant="outline" className="h-20 flex-col space-y-2">
+            <Button
+              variant="outline"
+              className="h-20 flex-col space-y-2"
+              onClick={handleScheduleVolunteer}
+            >
               <UserCheck className="w-6 h-6" />
               <span className="text-sm">Schedule Volunteer</span>
             </Button>
