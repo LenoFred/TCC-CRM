@@ -35,6 +35,7 @@ interface Member {
   emergencyContact?: string;
   dateOfBirth?: string;
   membershipType?: string;
+  customFields?: Record<string, any>;
 }
 
 interface AddEditMemberModalProps {
@@ -66,13 +67,22 @@ export const AddEditMemberModal = ({
     address: "",
     emergencyContact: "",
     dateOfBirth: "",
-    membershipType: "Regular Member"
+    membershipType: "Regular Member",
+    customFields: {}
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableLGAs, setAvailableLGAs] = useState<string[]>([]);
   const [states] = useState<string[]>(getAllStates());
+
+  // Mock custom fields - in real app, this would come from API/Settings context
+  // These should match the custom fields added in Settings
+  const [customFields] = useState([
+    { id: "1", name: "Spiritual Gifts", type: "text", required: false },
+    { id: "2", name: "Baptism Date", type: "date", required: false },
+    { id: "3", name: "Small Group Leader", type: "boolean", required: false }
+  ]);
 
   useEffect(() => {
     if (isEdit && member) {
@@ -83,7 +93,8 @@ export const AddEditMemberModal = ({
         emergencyContact: member.emergencyContact || "",
         membershipType: member.membershipType || "Regular Member",
         state: member.state || "",
-        lga: member.lga || ""
+        lga: member.lga || "",
+        customFields: member.customFields || {}
       });
       if (member.state) {
         setAvailableLGAs(getLGAsByState(member.state));
@@ -102,7 +113,8 @@ export const AddEditMemberModal = ({
         address: "",
         emergencyContact: "",
         dateOfBirth: "",
-        membershipType: "Regular Member"
+        membershipType: "Regular Member",
+        customFields: {}
       });
       setAvailableLGAs([]);
     }
@@ -379,6 +391,183 @@ export const AddEditMemberModal = ({
               />
             </div>
           </div>
+
+          {/* Custom Fields Section */}
+          {customFields.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Additional Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {customFields.map((field) => (
+                  <div key={field.id} className="space-y-2">
+                    <Label htmlFor={`custom-${field.id}`}>
+                      {field.name}
+                      {field.required && <span className="text-destructive ml-1">*</span>}
+                    </Label>
+
+                    {field.type === "text" && (
+                      <Input
+                        id={`custom-${field.id}`}
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        placeholder={`Enter ${field.name.toLowerCase()}`}
+                        required={field.required}
+                      />
+                    )}
+
+                    {field.type === "number" && (
+                      <Input
+                        id={`custom-${field.id}`}
+                        type="number"
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        placeholder={`Enter ${field.name.toLowerCase()}`}
+                        required={field.required}
+                      />
+                    )}
+
+                    {field.type === "date" && (
+                      <Input
+                        id={`custom-${field.id}`}
+                        type="date"
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        required={field.required}
+                      />
+                    )}
+
+                    {field.type === "email" && (
+                      <Input
+                        id={`custom-${field.id}`}
+                        type="email"
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        placeholder={`Enter ${field.name.toLowerCase()}`}
+                        required={field.required}
+                      />
+                    )}
+
+                    {field.type === "phone" && (
+                      <Input
+                        id={`custom-${field.id}`}
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        placeholder={`Enter ${field.name.toLowerCase()}`}
+                        required={field.required}
+                      />
+                    )}
+
+                    {field.type === "boolean" && (
+                      <Select
+                        value={formData.customFields?.[field.name] || ""}
+                        onValueChange={(value) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: value
+                            }
+                          }));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select option" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Yes</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {field.type === "dropdown" && field.options && (
+                      <Select
+                        value={formData.customFields?.[field.name] || ""}
+                        onValueChange={(value) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: value
+                            }
+                          }));
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select option" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {field.options.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {field.type === "textarea" && (
+                      <Textarea
+                        id={`custom-${field.id}`}
+                        value={formData.customFields?.[field.name] || ""}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customFields: {
+                              ...prev.customFields,
+                              [field.name]: e.target.value
+                            }
+                          }));
+                        }}
+                        placeholder={`Enter ${field.name.toLowerCase()}`}
+                        rows={3}
+                        required={field.required}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Form Actions */}
           <div className="flex justify-end gap-2 pt-4 border-t">

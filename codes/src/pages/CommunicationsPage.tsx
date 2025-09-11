@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MessageSquare, Mail, Phone, Send, Users, FileDown, Calendar, Clock } from "lucide-react";
+import { MessageSquare, Mail, Phone, Send, Users, FileDown, Calendar, Clock, MapPin, Building, UserCheck, Heart, ChevronDown, ChevronRight } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScheduledMessagesModal } from "@/components/ScheduledMessagesModal";
+import { nigeriaStatesAndLGAs, getLGAsByState } from "@/data/nigeria-states-lga";
 
 const CommunicationsPage = () => {
   const [selectedRecipients, setSelectedRecipients] = useState<number[]>([]);
@@ -29,12 +30,60 @@ const CommunicationsPage = () => {
   const [communicationChannel, setCommunicationChannel] = useState<string>("");
   const [isScheduledMessagesModalOpen, setIsScheduledMessagesModalOpen] = useState(false);
 
+  // New state for expanded recipient selection
+  const [recipientCategory, setRecipientCategory] = useState<string>("");
+  const [selectedState, setSelectedState] = useState<string>("");
+  const [selectedLGA, setSelectedLGA] = useState<string>("");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [selectedVolunteers, setSelectedVolunteers] = useState<string[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
   // Mock data - could come from analytics/reports
   const targetGroups = [
-    { id: 1, name: "Youth Fellowship Members", count: 25 },
-    { id: 2, name: "Sunday Service Regulars", count: 180 },
-    { id: 3, name: "New Members (Last 3 Months)", count: 12 },
-    { id: 4, name: "Volunteer Team", count: 45 }
+    { id: 1, name: "Youth Fellowship Members", count: 25, category: "groups" },
+    { id: 2, name: "Sunday Service Regulars", count: 180, category: "groups" },
+    { id: 3, name: "New Members (Last 3 Months)", count: 12, category: "members" },
+    { id: 4, name: "Volunteer Team", count: 45, category: "volunteers" }
+  ];
+
+  // Mock data for expanded categories
+  const groups = [
+    { id: "grp_1", name: "Youth Ministry", memberCount: 45, type: "Department" },
+    { id: "grp_2", name: "Children's Ministry", memberCount: 32, type: "Department" },
+    { id: "grp_3", name: "Worship Team", memberCount: 28, type: "Department" },
+    { id: "grp_4", name: "Men's Fellowship", memberCount: 67, type: "Fellowship" },
+    { id: "grp_5", name: "Women's Fellowship", memberCount: 89, type: "Fellowship" }
+  ];
+
+  const families = [
+    { id: "fam_1", name: "Smith Family", memberCount: 4 },
+    { id: "fam_2", name: "Johnson Family", memberCount: 3 },
+    { id: "fam_3", name: "Williams Family", memberCount: 5 },
+    { id: "fam_4", name: "Brown Family", memberCount: 2 }
+  ];
+
+  const staff = [
+    { id: "staff_1", name: "Pastor John", department: "Leadership", role: "Senior Pastor" },
+    { id: "staff_2", name: "Mary Johnson", department: "Youth", role: "Youth Leader" },
+    { id: "staff_3", name: "David Wilson", department: "Children", role: "Children's Director" },
+    { id: "staff_4", name: "Sarah Brown", department: "Administration", role: "Admin Assistant" }
+  ];
+
+  const volunteerTeams = [
+    { id: "vol_1", name: "Sunday Ushers", memberCount: 12, status: "Active" },
+    { id: "vol_2", name: "Sound Technicians", memberCount: 8, status: "Active" },
+    { id: "vol_3", name: "Children's Workers", memberCount: 15, status: "Active" },
+    { id: "vol_4", name: "Security Team", memberCount: 6, status: "Active" },
+    { id: "vol_5", name: "Greeters", memberCount: 10, status: "Inactive" }
+  ];
+
+  const recipientCategories = [
+    { value: "all_members", label: "All Active Members", icon: Users, count: 312 },
+    { value: "groups", label: "Groups/Departments", icon: Building, count: groups.length },
+    { value: "families", label: "Families", icon: Heart, count: families.length },
+    { value: "staff", label: "Staff Members", icon: UserCheck, count: staff.length },
+    { value: "volunteers", label: "Volunteer Teams", icon: UserCheck, count: volunteerTeams.filter(v => v.status === "Active").length },
+    { value: "location", label: "Location-based", icon: MapPin, count: nigeriaStatesAndLGAs.length }
   ];
 
   const recentCommunications = [
@@ -69,6 +118,59 @@ const CommunicationsPage = () => {
     { value: "email", label: "Email", icon: Mail },
     { value: "sms", label: "SMS (Fallback)", icon: Phone }
   ];
+
+  // Helper functions for recipient selection
+  const toggleCategoryExpansion = (category: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const handleGroupSelection = (groupId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedGroups([...selectedGroups, groupId]);
+    } else {
+      setSelectedGroups(selectedGroups.filter(id => id !== groupId));
+    }
+  };
+
+  const handleVolunteerSelection = (volunteerId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedVolunteers([...selectedVolunteers, volunteerId]);
+    } else {
+      setSelectedVolunteers(selectedVolunteers.filter(id => id !== volunteerId));
+    }
+  };
+
+  const getSelectedRecipientsCount = () => {
+    let count = 0;
+
+    if (recipientCategory === "all_members") {
+      count = 312; // Total active members
+    } else if (recipientCategory === "groups") {
+      count = selectedGroups.reduce((sum, groupId) => {
+        const group = groups.find(g => g.id === groupId);
+        return sum + (group?.memberCount || 0);
+      }, 0);
+    } else if (recipientCategory === "families") {
+      count = families.length * 3; // Average family size
+    } else if (recipientCategory === "staff") {
+      count = staff.length;
+    } else if (recipientCategory === "volunteers") {
+      count = selectedVolunteers.reduce((sum, volId) => {
+        const volunteer = volunteerTeams.find(v => v.id === volId);
+        return sum + (volunteer?.memberCount || 0);
+      }, 0);
+    } else if (recipientCategory === "location" && selectedLGA) {
+      count = Math.floor(Math.random() * 50) + 10; // Mock count for LGA
+    }
+
+    return count;
+  };
 
   return (
     <DashboardLayout>
@@ -138,41 +240,211 @@ const CommunicationsPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label>Target Groups</Label>
-                    <div className="space-y-3 mt-2">
-                      {targetGroups.map((group) => (
-                        <div key={group.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={`group-${group.id}`}
-                            checked={selectedRecipients.includes(group.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedRecipients([...selectedRecipients, group.id]);
-                              } else {
-                                setSelectedRecipients(selectedRecipients.filter(id => id !== group.id));
-                              }
-                            }}
-                          />
-                          <label
-                            htmlFor={`group-${group.id}`}
-                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                          >
-                            {group.name}
-                          </label>
-                          <Badge variant="outline" className="text-xs">
-                            {group.count}
-                          </Badge>
-                        </div>
-                      ))}
-                    </div>
+                    <Label>Recipient Category</Label>
+                    <Select value={recipientCategory} onValueChange={setRecipientCategory}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Choose recipient category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {recipientCategories.map((category) => (
+                          <SelectItem key={category.value} value={category.value}>
+                            <div className="flex items-center gap-2">
+                              <category.icon className="h-4 w-4" />
+                              {category.label}
+                              <Badge variant="outline" className="text-xs ml-auto">
+                                {category.count}
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  {/* Expanded recipient selection based on category */}
+                  {recipientCategory === "groups" && (
+                    <div className="space-y-3">
+                      <Label>Groups/Departments</Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {groups.map((group) => (
+                          <div key={group.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`group-${group.id}`}
+                              checked={selectedGroups.includes(group.id)}
+                              onCheckedChange={(checked) => handleGroupSelection(group.id, checked as boolean)}
+                            />
+                            <label
+                              htmlFor={`group-${group.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                            >
+                              {group.name}
+                            </label>
+                            <Badge variant="outline" className="text-xs">
+                              {group.memberCount}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {recipientCategory === "families" && (
+                    <div className="space-y-3">
+                      <Label>Families</Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {families.map((family) => (
+                          <div key={family.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`family-${family.id}`}
+                              checked={selectedRecipients.includes(parseInt(family.id.split('_')[1]))}
+                              onCheckedChange={(checked) => {
+                                const familyId = parseInt(family.id.split('_')[1]);
+                                if (checked) {
+                                  setSelectedRecipients([...selectedRecipients, familyId]);
+                                } else {
+                                  setSelectedRecipients(selectedRecipients.filter(id => id !== familyId));
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`family-${family.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                            >
+                              {family.name}
+                            </label>
+                            <Badge variant="outline" className="text-xs">
+                              {family.memberCount} members
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {recipientCategory === "staff" && (
+                    <div className="space-y-3">
+                      <Label>Staff Members</Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {staff.map((staffMember) => (
+                          <div key={staffMember.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`staff-${staffMember.id}`}
+                              checked={selectedRecipients.includes(parseInt(staffMember.id.split('_')[1]))}
+                              onCheckedChange={(checked) => {
+                                const staffId = parseInt(staffMember.id.split('_')[1]);
+                                if (checked) {
+                                  setSelectedRecipients([...selectedRecipients, staffId]);
+                                } else {
+                                  setSelectedRecipients(selectedRecipients.filter(id => id !== staffId));
+                                }
+                              }}
+                            />
+                            <label
+                              htmlFor={`staff-${staffMember.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                            >
+                              {staffMember.name}
+                            </label>
+                            <Badge variant="outline" className="text-xs">
+                              {staffMember.role}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {recipientCategory === "volunteers" && (
+                    <div className="space-y-3">
+                      <Label>Volunteer Teams</Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {volunteerTeams.filter(v => v.status === "Active").map((volunteer) => (
+                          <div key={volunteer.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`volunteer-${volunteer.id}`}
+                              checked={selectedVolunteers.includes(volunteer.id)}
+                              onCheckedChange={(checked) => handleVolunteerSelection(volunteer.id, checked as boolean)}
+                            />
+                            <label
+                              htmlFor={`volunteer-${volunteer.id}`}
+                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                            >
+                              {volunteer.name}
+                            </label>
+                            <Badge variant="outline" className="text-xs">
+                              {volunteer.memberCount} members
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {recipientCategory === "location" && (
+                    <div className="space-y-3">
+                      <Label>Location-based Selection</Label>
+
+                      {/* State Selection */}
+                      <div className="space-y-2">
+                        <Label className="text-sm">Select State</Label>
+                        <Select value={selectedState} onValueChange={(value) => {
+                          setSelectedState(value);
+                          setSelectedLGA(""); // Reset LGA when state changes
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a state" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {nigeriaStatesAndLGAs.map((state) => (
+                              <SelectItem key={state.name} value={state.name}>
+                                {state.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* LGA Selection */}
+                      {selectedState && (
+                        <div className="space-y-2">
+                          <Label className="text-sm">Select Local Government Area</Label>
+                          <Select value={selectedLGA} onValueChange={setSelectedLGA}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose an LGA" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getLGAsByState(selectedState).map((lga) => (
+                                <SelectItem key={lga} value={lga}>
+                                  {lga}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* Members in selected LGA */}
+                      {selectedLGA && (
+                        <div className="mt-4 p-3 bg-muted/20 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">
+                              Members in {selectedLGA}, {selectedState}
+                            </span>
+                            <Badge variant="secondary">
+                              {Math.floor(Math.random() * 50) + 10} members
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            All active members in this location will be included
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="pt-4 border-t">
                     <div className="text-sm font-medium">
-                      Total Recipients: {selectedRecipients.reduce((sum, id) => {
-                        const group = targetGroups.find(g => g.id === id);
-                        return sum + (group?.count || 0);
-                      }, 0)}
+                      Total Recipients: {getSelectedRecipientsCount()}
                     </div>
                   </div>
                 </CardContent>
@@ -412,20 +684,77 @@ const CommunicationsPage = () => {
                 <p className="text-muted-foreground">
                   Export filtered member lists to CSV format for use with external tools like Mailchimp.
                 </p>
-                
-                <div className="space-y-3">
-                  {targetGroups.map((group) => (
-                    <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div>
-                        <h3 className="font-medium">{group.name}</h3>
-                        <p className="text-sm text-muted-foreground">{group.count} members</p>
-                      </div>
-                      <Button variant="outline" className="gap-2">
-                        <FileDown className="h-4 w-4" />
-                        Export CSV
-                      </Button>
+
+                {/* Export by Category */}
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-base font-medium">Export by Category</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                      {recipientCategories.map((category) => (
+                        <div key={category.value} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <category.icon className="h-5 w-5 text-muted-foreground" />
+                            <div>
+                              <h4 className="font-medium">{category.label}</h4>
+                              <p className="text-sm text-muted-foreground">{category.count} items</p>
+                            </div>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <FileDown className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Export by Groups */}
+                  <div>
+                    <Label className="text-base font-medium">Export by Groups</Label>
+                    <div className="space-y-2 mt-2 max-h-48 overflow-y-auto">
+                      {groups.map((group) => (
+                        <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div>
+                            <h4 className="font-medium">{group.name}</h4>
+                            <p className="text-sm text-muted-foreground">{group.memberCount} members • {group.type}</p>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <FileDown className="h-4 w-4" />
+                            Export
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Export by Location */}
+                  <div>
+                    <Label className="text-base font-medium">Export by Location</Label>
+                    <div className="space-y-2 mt-2">
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div>
+                          <h4 className="font-medium">All States & LGAs</h4>
+                          <p className="text-sm text-muted-foreground">Complete geographical breakdown</p>
+                        </div>
+                        <Button variant="outline" size="sm" className="gap-2">
+                          <FileDown className="h-4 w-4" />
+                          Export All
+                        </Button>
+                      </div>
+                      {selectedState && (
+                        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
+                          <div>
+                            <h4 className="font-medium">{selectedState} State</h4>
+                            <p className="text-sm text-muted-foreground">{getLGAsByState(selectedState).length} LGAs</p>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <FileDown className="h-4 w-4" />
+                            Export State
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

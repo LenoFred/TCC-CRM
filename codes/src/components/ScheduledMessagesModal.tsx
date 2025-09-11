@@ -91,7 +91,7 @@ export const ScheduledMessagesModal = ({ isOpen, onClose }: ScheduledMessagesMod
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
+      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
@@ -153,9 +153,11 @@ export const ScheduledMessagesModal = ({ isOpen, onClose }: ScheduledMessagesMod
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all_members">All Active Members</SelectItem>
+                <SelectItem value="groups">Groups/Departments</SelectItem>
                 <SelectItem value="families">All Families</SelectItem>
-                <SelectItem value="volunteers">All Volunteers</SelectItem>
+                <SelectItem value="volunteers">Volunteer Teams</SelectItem>
                 <SelectItem value="staff">Staff Members</SelectItem>
+                <SelectItem value="location">Location-based</SelectItem>
                 <SelectItem value="custom">Custom List</SelectItem>
               </SelectContent>
             </Select>

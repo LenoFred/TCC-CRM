@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, Plus, Filter, UserPlus } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,11 +20,22 @@ import { useToast } from "@/hooks/use-toast";
 
 const MembersPage = () => {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMember, setSelectedMember] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+
+  // Handle URL parameter for opening add member modal
+  useEffect(() => {
+    const addParam = searchParams.get('add');
+    if (addParam === 'true') {
+      handleAddMember();
+      // Remove the parameter from URL
+      setSearchParams({});
+    }
+  }, [searchParams]);
   const [members, setMembers] = useState([
     {
       id: 1,
