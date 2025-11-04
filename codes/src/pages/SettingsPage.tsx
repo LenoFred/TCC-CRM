@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { Settings, Plus, Database, Users, Bell } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings, Plus, Database, Users, Bell, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,13 +40,32 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { CustomFieldsModal } from "@/components/CustomFieldsModal";
+import { useToast } from "@/hooks/use-toast";
 
 const SettingsPage = () => {
-  const [customFields, setCustomFields] = useState([
-    { id: 1, name: "Spiritual Gifts", type: "Text", required: false, createdAt: "2024-01-15" },
-    { id: 2, name: "Baptism Date", type: "Date", required: false, createdAt: "2024-02-10" },
-    { id: 3, name: "Small Group Leader", type: "Yes/No", required: false, createdAt: "2024-03-05" }
-  ]);
+  const { toast } = useToast();
+  const [customFields, setCustomFields] = useState([]);
+  const [isLoadingFields, setIsLoadingFields] = useState(true);
+  const [isAddingField, setIsAddingField] = useState(false);
+  const [fieldsError, setFieldsError] = useState(null);
+
+  const fetchCustomFields = async () => {
+    setIsLoadingFields(true);
+    setFieldsError(null);
+    try {
+      const data = await api.settings.getCustomFields();
+      setCustomFields(data);
+    } catch (error) {
+      console.error('Error fetching custom fields:', error);
+      setFieldsError(error.message || 'Failed to load custom fields');
+    } finally {
+      setIsLoadingFields(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomFields();
+  }, []);
   const [isCustomFieldsModalOpen, setIsCustomFieldsModalOpen] = useState(false);
 
   const [newField, setNewField] = useState({
@@ -60,16 +82,29 @@ const SettingsPage = () => {
     { value: "dropdown", label: "Dropdown" }
   ];
 
-  const handleFieldAdded = (newField: any) => {
-    // Convert the field format from CustomFieldsModal to SettingsPage format
-    const field = {
-      id: Date.now(),
-      name: newField.name,
-      type: newField.type,
-      required: newField.required,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    setCustomFields([...customFields, field]);
+  const handleFieldAdded = async (newField: any) => {
+    setIsAddingField(true);
+    try {
+      const createdField = await api.settings.createCustomField({
+        sheetName: 'members',
+        fieldName: newField.name,
+        dataType: newField.type
+      });
+      setCustomFields([...customFields, createdField]);
+      toast({
+        title: "Custom Field Added",
+        description: `${newField.name} has been successfully added`,
+      });
+    } catch (error) {
+      console.error('Error creating custom field:', error);
+      toast({
+        title: "Failed to Add Custom Field",
+        description: "Please try again or contact support if the issue persists",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingField(false);
+    }
   };
 
 
@@ -100,9 +135,10 @@ const SettingsPage = () => {
                     <Database className="h-5 w-5" />
                     Custom Member Fields
                   </CardTitle>
-                  <Button 
+                  <Button
                     onClick={() => setIsCustomFieldsModalOpen(true)}
                     className="gap-2"
+                    disabled={isLoadingFields}
                   >
                     <Plus className="h-4 w-4" />
                     Manage Custom Fields
@@ -122,27 +158,66 @@ const SettingsPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {customFields.map((field) => (
-                        <TableRow key={field.id}>
-                          <TableCell className="font-medium">{field.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{field.type}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            {field.required ? (
-                              <Badge variant="destructive">Required</Badge>
-                            ) : (
-                              <Badge variant="secondary">Optional</Badge>
-                            )}
-                          </TableCell>
-                          <TableCell>{field.createdAt}</TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-                              Active
-                            </Badge>
+                      {isLoadingFields ? (
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <TableRow key={index}>
+                            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                          </TableRow>
+                        ))
+                      ) : fieldsError ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8">
+                            <Alert variant="destructive" className="max-w-md mx-auto">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertTitle>Custom Fields Error</AlertTitle>
+                              <AlertDescription className="flex items-center justify-between">
+                                <span>{fieldsError}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={fetchCustomFields}
+                                  disabled={isLoadingFields}
+                                >
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                  Retry
+                                </Button>
+                              </AlertDescription>
+                            </Alert>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : customFields.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No custom fields found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        customFields.map((field) => (
+                          <TableRow key={field.id}>
+                            <TableCell className="font-medium">{field.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{field.type}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              {field.required ? (
+                                <Badge variant="destructive">Required</Badge>
+                              ) : (
+                                <Badge variant="secondary">Optional</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>{field.createdAt}</TableCell>
+                            <TableCell>
+                              <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                                Active
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>

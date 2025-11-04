@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { CheckCircle, AlertCircle, DollarSign, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CheckCircle, AlertCircle, DollarSign, Calendar, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -22,57 +25,63 @@ const DonationsPage = () => {
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [guestMemberData, setGuestMemberData] = useState(null);
-  
-  // Mock pending donations data
-  const [pendingDonations, setPendingDonations] = useState([
-    {
-      id: 1,
-      donorName: "John Smith",
-      email: "john.smith@email.com",
-      phone: "+1 234-567-8901",
-      amount: "$250.00",
-      fund: "General Fund",
-      date: "2024-08-30",
-      submittedAt: "2024-08-30 10:30 AM",
-      isKnownMember: true,
-      memberDetails: {
-        id: 123,
-        name: "John Smith",
-        status: "Active",
-        joinDate: "2022-01-15"
-      }
-    },
-    {
-      id: 2,
-      donorName: "Sarah Williams",
-      email: "sarah.williams@email.com",
-      phone: "+1 555-123-4567",
-      amount: "$100.00",
-      fund: "Mission Fund",
-      date: "2024-08-30",
-      submittedAt: "2024-08-30 09:15 AM",
-      isKnownMember: false
-    },
-    {
-      id: 3,
-      donorName: "Michael Brown",
-      email: "michael.brown@email.com",
-      phone: "+1 555-987-6543",
-      amount: "$500.00",
-      fund: "Building Fund",
-      date: "2024-08-29",
-      submittedAt: "2024-08-29 6:45 PM",
-      isKnownMember: false
+  const [pendingDonations, setPendingDonations] = useState([]);
+  const [isLoadingDonations, setIsLoadingDonations] = useState(true);
+  const [isVerifyingDonation, setIsVerifyingDonation] = useState(false);
+  const [donationsError, setDonationsError] = useState(null);
+
+  const fetchPendingDonations = async () => {
+    setIsLoadingDonations(true);
+    setDonationsError(null);
+    try {
+      const data = await api.donations.getAll(new URLSearchParams({ status: 'pending' }));
+      console.log('Donations data received:', data);
+      console.log('Is donations data array?', Array.isArray(data));
+      setPendingDonations(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error fetching pending donations:', error);
+      setDonationsError(error.message || 'Failed to load pending donations');
+    } finally {
+      setIsLoadingDonations(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    fetchPendingDonations();
+  }, []);
 
   const handleVerifyDonation = (donation) => {
     setSelectedDonation(donation);
     setIsVerifyModalOpen(true);
   };
 
-  const handleVerifyComplete = (donationId, action) => {
-    setPendingDonations(prev => prev.filter(d => d.id !== donationId));
+  const handleVerifyComplete = async (donationId, action) => {
+    setIsVerifyingDonation(true);
+    try {
+      if (action === 'verify') {
+        await api.donations.verify(donationId, {});
+        toast({
+          title: "Donation Verified",
+          description: "The donation has been successfully verified",
+        });
+      } else if (action === 'update') {
+        await api.donations.update(donationId, {});
+        toast({
+          title: "Donation Updated",
+          description: "The donation has been successfully updated",
+        });
+      }
+      setPendingDonations(prev => prev.filter(d => d.id !== donationId));
+    } catch (error) {
+      console.error('Error verifying donation:', error);
+      toast({
+        title: "Verification Failed",
+        description: "Failed to verify the donation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVerifyingDonation(false);
+    }
   };
 
   const handleCreateMemberFromGuest = (guestInfo) => {
@@ -116,7 +125,11 @@ const DonationsPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Pending Verification</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{pendingDonations.length}</div>
+              {isLoadingDonations ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{pendingDonations.length}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -124,7 +137,11 @@ const DonationsPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">This Month Total</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">$12,450</div>
+              {isLoadingDonations ? (
+                <Skeleton className="h-8 w-20" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">$12,450</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -132,7 +149,11 @@ const DonationsPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">This Week</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">$3,200</div>
+              {isLoadingDonations ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">$3,200</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -140,7 +161,11 @@ const DonationsPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Verified Today</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">8</div>
+              {isLoadingDonations ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">8</div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -154,47 +179,89 @@ const DonationsPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Donor</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Fund</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead className="hidden md:table-cell">Amount</TableHead>
+                    <TableHead className="hidden lg:table-cell">Fund</TableHead>
+                    <TableHead className="hidden xl:table-cell">Date</TableHead>
                     <TableHead>Member Status</TableHead>
-                    <TableHead>Submitted</TableHead>
+                    <TableHead className="hidden lg:table-cell">Submitted</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pendingDonations.map((donation) => (
-                    <TableRow key={donation.id}>
-                      <TableCell className="font-medium">{donation.donorName}</TableCell>
-                      <TableCell className="font-semibold">{donation.amount}</TableCell>
-                      <TableCell>{donation.fund}</TableCell>
-                      <TableCell>{donation.date}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={donation.isKnownMember ? 'default' : 'secondary'}
-                          className={donation.isKnownMember ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-orange-100 text-orange-800 border-orange-200'}
-                        >
-                          {donation.isKnownMember ? 'Known Member' : 'Guest'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{donation.submittedAt}</TableCell>
-                       <TableCell className="text-right">
-                        <Button 
-                          size="sm" 
-                          className="gap-2"
-                          onClick={() => handleVerifyDonation(donation)}
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                          Verify
-                        </Button>
+                  {isLoadingDonations ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-8 w-20" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : donationsError ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Alert variant="destructive" className="max-w-md mx-auto">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Donations Error</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between">
+                            <span>{donationsError}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={fetchPendingDonations}
+                              disabled={isLoadingDonations}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Retry
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : pendingDonations.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No pending donations found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    pendingDonations.map((donation) => (
+                      <TableRow key={donation.id}>
+                        <TableCell className="font-medium">{donation.donorName}</TableCell>
+                        <TableCell className="hidden md:table-cell font-semibold">{donation.amount}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{donation.fund}</TableCell>
+                        <TableCell className="hidden xl:table-cell">{donation.date}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={donation.isKnownMember ? 'default' : 'secondary'}
+                            className={donation.isKnownMember ? 'bg-blue-100 text-blue-800 border-blue-200' : 'bg-orange-100 text-orange-800 border-orange-200'}
+                          >
+                            {donation.isKnownMember ? 'Known Member' : 'Guest'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{donation.submittedAt}</TableCell>
+                         <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleVerifyDonation(donation)}
+                            disabled={isVerifyingDonation}
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Verify
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

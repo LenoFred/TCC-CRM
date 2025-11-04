@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, UserCheck, UserPlus, Calendar, Users, Plus, CheckCircle, Eye, Send, CalendarCheck } from "lucide-react";
+import { Search, UserCheck, UserPlus, Calendar, Users, Plus, CheckCircle, Eye, Send, CalendarCheck, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -37,8 +40,10 @@ import { GroupAttendanceModal } from "@/components/GroupAttendanceModal";
 import { EventManagementModal } from "@/components/EventManagementModal";
 import { GuestTrackingModal } from "@/components/GuestTrackingModal";
 import { SendFollowUpModal } from "@/components/SendFollowUpModal";
+import { useToast } from "@/hooks/use-toast";
 
 const AttendancePage = () => {
+  const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<string>("");
@@ -54,6 +59,13 @@ const AttendancePage = () => {
   const [selectedEventForManagement, setSelectedEventForManagement] = useState<any>(null);
   const [selectedEventForGuestTracking, setSelectedEventForGuestTracking] = useState<any>(null);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
+  const [events, setEvents] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
+  const [isLoadingCheckIn, setIsLoadingCheckIn] = useState(false);
+  const [eventsError, setEventsError] = useState(null);
+  const [membersError, setMembersError] = useState(null);
 
   // Handle URL parameter for opening check-in session modal
   useEffect(() => {
@@ -65,77 +77,44 @@ const AttendancePage = () => {
     }
   }, [searchParams]);
 
-  // Mock data - Using today's date (2025-09-10) for current events
-  const events = [
-    // Today's events
-    { 
-      id: "1", 
-      name: "Mid-week Service", 
-      date: "2025-09-10", 
-      type: "Service", 
-      category: "Regular Service", 
-      status: "Active", 
-      expectedAttendance: 75 
-    },
-    { 
-      id: "2", 
-      name: "Youth Bible Study", 
-      date: "2025-09-10", 
-      type: "Group", 
-      category: "Youth Ministry Activity", 
-      status: "Active", 
-      expectedAttendance: 30, 
-      groupName: "Youth Ministry" 
-    },
-    { 
-      id: "3", 
-      name: "Evening Prayer Meeting", 
-      date: "2025-09-10", 
-      type: "Meeting", 
-      category: "Prayer Meeting", 
-      status: "Active", 
-      expectedAttendance: 25 
-    },
-    { 
-      id: "4", 
-      name: "Choir Rehearsal", 
-      date: "2025-09-10", 
-      type: "Group", 
-      category: "Choir Department Activity", 
-      status: "Active", 
-      expectedAttendance: 20, 
-      groupName: "Choir Department" 
-    },
-    // Past events for history
-    { 
-      id: "5", 
-      name: "Sunday Service", 
-      date: "2025-09-08", 
-      type: "Service", 
-      category: "Regular Sunday Service", 
-      status: "Completed", 
-      expectedAttendance: 150 
-    },
-    { 
-      id: "6", 
-      name: "Children's Sunday School", 
-      date: "2025-09-08", 
-      type: "Group", 
-      category: "Children's Ministry", 
-      status: "Completed", 
-      expectedAttendance: 40, 
-      groupName: "Children's Ministry" 
-    },
-    { 
-      id: "7", 
-      name: "Monday Prayer Meeting", 
-      date: "2025-09-09", 
-      type: "Meeting", 
-      category: "Prayer Meeting", 
-      status: "Completed", 
-      expectedAttendance: 30 
+  const fetchEvents = async () => {
+    setIsLoadingEvents(true);
+    setEventsError(null);
+    try {
+      const eventsData = await api.events.getAll(new URLSearchParams({ date: 'today' }));
+      console.log('Events data received:', eventsData);
+      console.log('Is events data array?', Array.isArray(eventsData));
+      setEvents(Array.isArray(eventsData) ? eventsData : []);
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setEventsError(error.message || 'Failed to load events');
+    } finally {
+      setIsLoadingEvents(false);
     }
-  ];
+  };
+
+  const fetchMembers = async () => {
+    setIsLoadingMembers(true);
+    setMembersError(null);
+    try {
+      const membersData = await api.members.getAll();
+      console.log('Members data received in AttendancePage:', membersData);
+      console.log('Is members data array?', Array.isArray(membersData));
+      setMembers(Array.isArray(membersData) ? membersData : []);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      setMembersError(error.message || 'Failed to load members');
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEvents();
+    fetchMembers();
+  }, []);
+
+  // Events fetched from API
 
   const eventCategories = [
     { value: "all", label: "All Events" },
@@ -146,13 +125,7 @@ const AttendancePage = () => {
     { value: "Choir Department Activity", label: "Choir Department Activities" }
   ];
 
-  const members = [
-    { id: 1, name: "John Smith", phone: "+1 234-567-8901", group: "Adult", status: "Active" },
-    { id: 2, name: "Mary Johnson", phone: "+1 234-567-8902", group: "Adult", status: "Active" },
-    { id: 3, name: "David Wilson", phone: "+1 234-567-8903", group: "Youth", status: "Active" },
-    { id: 4, name: "Sarah Brown", phone: "+1 234-567-8904", group: "Adult", status: "Active" },
-    { id: 5, name: "Michael Davis", phone: "+1 234-567-8905", group: "Youth", status: "Active" }
-  ];
+  // Members fetched from API
 
   const filteredMembers = members.filter(member =>
     !checkedInMembers.has(member.id) &&
@@ -160,9 +133,28 @@ const AttendancePage = () => {
      member.phone.includes(searchTerm))
   );
 
-  const handleCheckIn = (memberId: number) => {
-    setCheckedInMembers(new Set([...checkedInMembers, memberId]));
-    setSearchTerm(""); // Clear search after check-in
+  const handleCheckIn = async (memberId: number) => {
+    if (selectedEventForCheckIn) {
+      setIsLoadingCheckIn(true);
+      try {
+        await api.events.checkin(selectedEventForCheckIn.id, { memberIds: [memberId] });
+        setCheckedInMembers(new Set([...checkedInMembers, memberId]));
+        setSearchTerm(""); // Clear search after check-in
+        toast({
+          title: "Check-in Successful",
+          description: "Member has been checked in successfully",
+        });
+      } catch (error) {
+        console.error('Error checking in member:', error);
+        toast({
+          title: "Check-in Failed",
+          description: "Failed to check in member. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoadingCheckIn(false);
+      }
+    }
   };
 
   return (
@@ -174,7 +166,7 @@ const AttendancePage = () => {
             <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
             <p className="text-muted-foreground">Digital check-in and attendance tracking</p>
           </div>
-          <Button className="gap-2" onClick={() => setIsCreateEventModalOpen(true)}>
+          <Button className="gap-2" onClick={() => setIsCreateEventModalOpen(true)} disabled={isLoadingEvents}>
             <Plus className="h-4 w-4" />
             Create Event
           </Button>
@@ -190,10 +182,11 @@ const AttendancePage = () => {
           </CardHeader>
           <CardContent>
             <div className="flex justify-center">
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 onClick={() => setIsSelectEventModalOpen(true)}
                 className="gap-2"
+                disabled={isLoadingEvents}
               >
                 <CalendarCheck className="h-5 w-5" />
                 Start Check-in Session
@@ -211,7 +204,11 @@ const AttendancePage = () => {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Checked In</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{checkedInMembers.size}</div>
+                  {isLoadingMembers ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{checkedInMembers.size}</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -219,7 +216,11 @@ const AttendancePage = () => {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Remaining</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{members.length - checkedInMembers.size}</div>
+                  {isLoadingMembers ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{members.length - checkedInMembers.size}</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -227,7 +228,11 @@ const AttendancePage = () => {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Guests</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">3</div>
+                  {isLoadingMembers ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">3</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -235,7 +240,11 @@ const AttendancePage = () => {
                   <CardTitle className="text-sm font-medium text-muted-foreground">Total Present</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{checkedInMembers.size + 3}</div>
+                  {isLoadingMembers ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{checkedInMembers.size + 3}</div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -293,6 +302,7 @@ const AttendancePage = () => {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-12 text-lg h-12"
+                    disabled={isLoadingMembers}
                   />
                 </div>
 
@@ -318,6 +328,7 @@ const AttendancePage = () => {
                           <Button
                             onClick={() => handleCheckIn(member.id)}
                             className="gap-2"
+                            disabled={isLoadingCheckIn}
                           >
                             <UserCheck className="h-4 w-4" />
                             Check In
@@ -508,9 +519,13 @@ const AttendancePage = () => {
         <CreateEventModal
           isOpen={isCreateEventModalOpen}
           onClose={() => setIsCreateEventModalOpen(false)}
-          onSave={(eventData) => {
-            // Add event to the events list (in a real app, this would be an API call)
-            console.log("New event created:", eventData);
+          onSave={async (eventData) => {
+            try {
+              const newEvent = await api.events.create(eventData);
+              setEvents([...events, newEvent]);
+            } catch (error) {
+              console.error('Error creating event:', error);
+            }
           }}
         />
 
@@ -611,47 +626,89 @@ const AttendancePage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {events.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="font-medium">{event.name}</TableCell>
-                      <TableCell>{event.date}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{event.category}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={event.status === 'Completed' ? 'default' : 'secondary'}>
-                          {event.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{event.expectedAttendance}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedEventForManagement(event);
-                              setIsEventManagementModalOpen(true);
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View Details
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedEventForGuestTracking(event);
-                              setIsGuestTrackingModalOpen(true);
-                            }}
-                          >
-                            <Users className="h-4 w-4 mr-1" />
-                            Track Guests
-                          </Button>
-                        </div>
+                  {isLoadingEvents ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-8 w-32" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : eventsError ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <Alert variant="destructive" className="max-w-md mx-auto">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Events Error</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between">
+                            <span>{eventsError}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={fetchEvents}
+                              disabled={isLoadingEvents}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Retry
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : events.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No events found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    events.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell className="font-medium">{event.name}</TableCell>
+                        <TableCell>{event.date}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{event.category}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={event.status === 'Completed' ? 'default' : 'secondary'}>
+                            {event.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{event.expectedAttendance}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex gap-2 justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedEventForManagement(event);
+                                setIsEventManagementModalOpen(true);
+                              }}
+                              disabled={isLoadingEvents}
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View Details
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedEventForGuestTracking(event);
+                                setIsGuestTrackingModalOpen(true);
+                              }}
+                              disabled={isLoadingEvents}
+                            >
+                              <Users className="h-4 w-4 mr-1" />
+                              Track Guests
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { MessageSquare, Mail, Phone, Send, Users, FileDown, Calendar, Clock, MapPin, Building, UserCheck, Heart, ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { MessageSquare, Mail, Phone, Send, Users, FileDown, Calendar, Clock, MapPin, Building, UserCheck, Heart, ChevronDown, ChevronRight, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,12 +26,17 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScheduledMessagesModal } from "@/components/ScheduledMessagesModal";
 import { nigeriaStatesAndLGAs, getLGAsByState } from "@/data/nigeria-states-lga";
+import { useToast } from "@/hooks/use-toast";
 
 const CommunicationsPage = () => {
+  const { toast } = useToast();
   const [selectedRecipients, setSelectedRecipients] = useState<number[]>([]);
   const [messageContent, setMessageContent] = useState("");
   const [communicationChannel, setCommunicationChannel] = useState<string>("");
   const [isScheduledMessagesModalOpen, setIsScheduledMessagesModalOpen] = useState(false);
+  const [isLoadingRecipients, setIsLoadingRecipients] = useState(true);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [recipientsError, setRecipientsError] = useState(null);
 
   // New state for expanded recipient selection
   const [recipientCategory, setRecipientCategory] = useState<string>("");
@@ -37,52 +45,42 @@ const CommunicationsPage = () => {
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [selectedVolunteers, setSelectedVolunteers] = useState<string[]>([]);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [groups, setGroups] = useState([]);
+  const [families, setFamilies] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [volunteerTeams, setVolunteerTeams] = useState([]);
 
-  // Mock data - could come from analytics/reports
-  const targetGroups = [
-    { id: 1, name: "Youth Fellowship Members", count: 25, category: "groups" },
-    { id: 2, name: "Sunday Service Regulars", count: 180, category: "groups" },
-    { id: 3, name: "New Members (Last 3 Months)", count: 12, category: "members" },
-    { id: 4, name: "Volunteer Team", count: 45, category: "volunteers" }
-  ];
+  const fetchRecipients = async () => {
+    setIsLoadingRecipients(true);
+    setRecipientsError(null);
+    try {
+      const groupsData = await api.communications.recipients.groups();
+      setGroups(groupsData);
 
-  // Mock data for expanded categories
-  const groups = [
-    { id: "grp_1", name: "Youth Ministry", memberCount: 45, type: "Department" },
-    { id: "grp_2", name: "Children's Ministry", memberCount: 32, type: "Department" },
-    { id: "grp_3", name: "Worship Team", memberCount: 28, type: "Department" },
-    { id: "grp_4", name: "Men's Fellowship", memberCount: 67, type: "Fellowship" },
-    { id: "grp_5", name: "Women's Fellowship", memberCount: 89, type: "Fellowship" }
-  ];
+      const staffData = await api.communications.recipients.staff();
+      setStaff(staffData);
 
-  const families = [
-    { id: "fam_1", name: "Smith Family", memberCount: 4 },
-    { id: "fam_2", name: "Johnson Family", memberCount: 3 },
-    { id: "fam_3", name: "Williams Family", memberCount: 5 },
-    { id: "fam_4", name: "Brown Family", memberCount: 2 }
-  ];
+      // Assuming families and volunteers are fetched similarly
+      setFamilies([]);
+      setVolunteerTeams([]);
+    } catch (error) {
+      console.error('Error fetching recipients:', error);
+      setRecipientsError(error.message || 'Failed to load recipients');
+    } finally {
+      setIsLoadingRecipients(false);
+    }
+  };
 
-  const staff = [
-    { id: "staff_1", name: "Pastor John", department: "Leadership", role: "Senior Pastor" },
-    { id: "staff_2", name: "Mary Johnson", department: "Youth", role: "Youth Leader" },
-    { id: "staff_3", name: "David Wilson", department: "Children", role: "Children's Director" },
-    { id: "staff_4", name: "Sarah Brown", department: "Administration", role: "Admin Assistant" }
-  ];
-
-  const volunteerTeams = [
-    { id: "vol_1", name: "Sunday Ushers", memberCount: 12, status: "Active" },
-    { id: "vol_2", name: "Sound Technicians", memberCount: 8, status: "Active" },
-    { id: "vol_3", name: "Children's Workers", memberCount: 15, status: "Active" },
-    { id: "vol_4", name: "Security Team", memberCount: 6, status: "Active" },
-    { id: "vol_5", name: "Greeters", memberCount: 10, status: "Inactive" }
-  ];
+  useEffect(() => {
+    fetchRecipients();
+  }, []);
 
   const recipientCategories = [
-    { value: "all_members", label: "All Active Members", icon: Users, count: 312 },
-    { value: "groups", label: "Groups/Departments", icon: Building, count: groups.length },
-    { value: "families", label: "Families", icon: Heart, count: families.length },
-    { value: "staff", label: "Staff Members", icon: UserCheck, count: staff.length },
-    { value: "volunteers", label: "Volunteer Teams", icon: UserCheck, count: volunteerTeams.filter(v => v.status === "Active").length },
+    { value: "all_members", label: "All Active Members", icon: Users, count: isLoadingRecipients ? '...' : 312 },
+    { value: "groups", label: "Groups/Departments", icon: Building, count: isLoadingRecipients ? '...' : groups.length },
+    { value: "families", label: "Families", icon: Heart, count: isLoadingRecipients ? '...' : families.length },
+    { value: "staff", label: "Staff Members", icon: UserCheck, count: isLoadingRecipients ? '...' : staff.length },
+    { value: "volunteers", label: "Volunteer Teams", icon: UserCheck, count: isLoadingRecipients ? '...' : volunteerTeams.filter(v => v.status === "Active").length },
     { value: "location", label: "Location-based", icon: MapPin, count: nigeriaStatesAndLGAs.length }
   ];
 
@@ -239,51 +237,80 @@ const CommunicationsPage = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label>Recipient Category</Label>
-                    <Select value={recipientCategory} onValueChange={setRecipientCategory}>
-                      <SelectTrigger className="mt-2">
-                        <SelectValue placeholder="Choose recipient category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {recipientCategories.map((category) => (
-                          <SelectItem key={category.value} value={category.value}>
-                            <div className="flex items-center gap-2">
-                              <category.icon className="h-4 w-4" />
-                              {category.label}
-                              <Badge variant="outline" className="text-xs ml-auto">
-                                {category.count}
-                              </Badge>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {recipientsError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Recipients Error</AlertTitle>
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>{recipientsError}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchRecipients}
+                          disabled={isLoadingRecipients}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <div>
+                      <Label>Recipient Category</Label>
+                      <Select value={recipientCategory} onValueChange={setRecipientCategory} disabled={isLoadingRecipients}>
+                        <SelectTrigger className="mt-2">
+                          <SelectValue placeholder="Choose recipient category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {recipientCategories.map((category) => (
+                            <SelectItem key={category.value} value={category.value}>
+                              <div className="flex items-center gap-2">
+                                <category.icon className="h-4 w-4" />
+                                {category.label}
+                                <Badge variant="outline" className="text-xs ml-auto">
+                                  {category.count}
+                                </Badge>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   {/* Expanded recipient selection based on category */}
                   {recipientCategory === "groups" && (
                     <div className="space-y-3">
                       <Label>Groups/Departments</Label>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {groups.map((group) => (
-                          <div key={group.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`group-${group.id}`}
-                              checked={selectedGroups.includes(group.id)}
-                              onCheckedChange={(checked) => handleGroupSelection(group.id, checked as boolean)}
-                            />
-                            <label
-                              htmlFor={`group-${group.id}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                            >
-                              {group.name}
-                            </label>
-                            <Badge variant="outline" className="text-xs">
-                              {group.memberCount}
-                            </Badge>
-                          </div>
-                        ))}
+                        {isLoadingRecipients ? (
+                          Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="flex items-center space-x-2">
+                              <Skeleton className="h-4 w-4" />
+                              <Skeleton className="h-4 w-32 flex-1" />
+                              <Skeleton className="h-6 w-16" />
+                            </div>
+                          ))
+                        ) : (
+                          groups.map((group) => (
+                            <div key={group.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`group-${group.id}`}
+                                checked={selectedGroups.includes(group.id)}
+                                onCheckedChange={(checked) => handleGroupSelection(group.id, checked as boolean)}
+                              />
+                              <label
+                                htmlFor={`group-${group.id}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                              >
+                                {group.name}
+                              </label>
+                              <Badge variant="outline" className="text-xs">
+                                {group.memberCount}
+                              </Badge>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   )}
@@ -325,31 +352,41 @@ const CommunicationsPage = () => {
                     <div className="space-y-3">
                       <Label>Staff Members</Label>
                       <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {staff.map((staffMember) => (
-                          <div key={staffMember.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`staff-${staffMember.id}`}
-                              checked={selectedRecipients.includes(parseInt(staffMember.id.split('_')[1]))}
-                              onCheckedChange={(checked) => {
-                                const staffId = parseInt(staffMember.id.split('_')[1]);
-                                if (checked) {
-                                  setSelectedRecipients([...selectedRecipients, staffId]);
-                                } else {
-                                  setSelectedRecipients(selectedRecipients.filter(id => id !== staffId));
-                                }
-                              }}
-                            />
-                            <label
-                              htmlFor={`staff-${staffMember.id}`}
-                              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
-                            >
-                              {staffMember.name}
-                            </label>
-                            <Badge variant="outline" className="text-xs">
-                              {staffMember.role}
-                            </Badge>
-                          </div>
-                        ))}
+                        {isLoadingRecipients ? (
+                          Array.from({ length: 3 }).map((_, index) => (
+                            <div key={index} className="flex items-center space-x-2">
+                              <Skeleton className="h-4 w-4" />
+                              <Skeleton className="h-4 w-32 flex-1" />
+                              <Skeleton className="h-6 w-16" />
+                            </div>
+                          ))
+                        ) : (
+                          staff.map((staffMember) => (
+                            <div key={staffMember.id} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`staff-${staffMember.id}`}
+                                checked={selectedRecipients.includes(parseInt(staffMember.id.split('_')[1]))}
+                                onCheckedChange={(checked) => {
+                                  const staffId = parseInt(staffMember.id.split('_')[1]);
+                                  if (checked) {
+                                    setSelectedRecipients([...selectedRecipients, staffId]);
+                                  } else {
+                                    setSelectedRecipients(selectedRecipients.filter(id => id !== staffId));
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`staff-${staffMember.id}`}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
+                              >
+                                {staffMember.name}
+                              </label>
+                              <Badge variant="outline" className="text-xs">
+                                {staffMember.role}
+                              </Badge>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
                   )}
@@ -506,12 +543,40 @@ const CommunicationsPage = () => {
                   </div>
 
                   <div className="flex gap-3 pt-4">
-                    <Button 
+                    <Button
                       className="gap-2"
-                      disabled={selectedRecipients.length === 0 || !messageContent || !communicationChannel}
+                      disabled={selectedRecipients.length === 0 || !messageContent || !communicationChannel || isSendingMessage}
+                      onClick={async () => {
+                        setIsSendingMessage(true);
+                        try {
+                          await api.communications.send({
+                            recipients: selectedRecipients,
+                            message: messageContent,
+                            channel: communicationChannel
+                          });
+                          toast({
+                            title: "Message Sent Successfully",
+                            description: `Message sent to ${getSelectedRecipientsCount()} recipients`,
+                          });
+                          // Clear form after successful send
+                          setMessageContent("");
+                          setSelectedRecipients([]);
+                          setRecipientCategory("");
+                          setCommunicationChannel("");
+                        } catch (error) {
+                          console.error('Error sending message:', error);
+                          toast({
+                            title: "Failed to Send Message",
+                            description: "Please try again or contact support if the issue persists",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setIsSendingMessage(false);
+                        }
+                      }}
                     >
                       <Send className="h-4 w-4" />
-                      Send Message
+                      {isSendingMessage ? "Sending..." : "Send Message"}
                     </Button>
                     <Button variant="outline">
                       Save Draft
@@ -712,18 +777,30 @@ const CommunicationsPage = () => {
                   <div>
                     <Label className="text-base font-medium">Export by Groups</Label>
                     <div className="space-y-2 mt-2 max-h-48 overflow-y-auto">
-                      {groups.map((group) => (
-                        <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div>
-                            <h4 className="font-medium">{group.name}</h4>
-                            <p className="text-sm text-muted-foreground">{group.memberCount} members • {group.type}</p>
+                      {isLoadingRecipients ? (
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="space-y-2">
+                              <Skeleton className="h-4 w-32" />
+                              <Skeleton className="h-3 w-48" />
+                            </div>
+                            <Skeleton className="h-8 w-20" />
                           </div>
-                          <Button variant="outline" size="sm" className="gap-2">
-                            <FileDown className="h-4 w-4" />
-                            Export
-                          </Button>
-                        </div>
-                      ))}
+                        ))
+                      ) : (
+                        groups.map((group) => (
+                          <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div>
+                              <h4 className="font-medium">{group.name}</h4>
+                              <p className="text-sm text-muted-foreground">{group.memberCount} members • {group.type}</p>
+                            </div>
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <FileDown className="h-4 w-4" />
+                              Export
+                            </Button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
 

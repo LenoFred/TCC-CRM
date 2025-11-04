@@ -1,8 +1,11 @@
 import { useState, useEffect } from "react";
-import { BarChart, FileDown, Plus, Filter, TrendingUp, Table as TableIcon } from "lucide-react";
+import { BarChart, FileDown, Plus, Filter, TrendingUp, Table as TableIcon, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -20,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 // Define interface for the column metadata
 interface ColumnMetadata {
@@ -35,11 +39,14 @@ interface Sheet {
 }
 
 const AnalyticsPage = () => {
+  const { toast } = useToast();
   const [selectedDataSource, setSelectedDataSource] = useState<string>("");
   const [selectedSheet, setSelectedSheet] = useState<string>("");
   const [filters, setFilters] = useState<Array<{id: number, field: string, operator: string, value: string}>>([]);
   const [reportResults, setReportResults] = useState<any[]>([]);
   const [availableColumns, setAvailableColumns] = useState<ColumnMetadata[]>([]);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [reportError, setReportError] = useState(null);
 
   // Data sources based on schema
   const dataSources = [
@@ -276,52 +283,32 @@ const AnalyticsPage = () => {
     setFilters(filters.filter(f => f.id !== id));
   };
 
-  const generateReport = () => {
-    // Mock report results based on selected sheet
-    let mockResults = [];
-    
-    if (selectedDataSource === "groups") {
-      mockResults = [
-        { 
-          id: 1, 
-          name: "Youth Ministry", 
-          type: "Ministry", 
-          leader: "John Smith", 
-          memberCount: 25, 
-          activityCount: 8,
-          lastActivity: "2024-08-30",
-          avgAttendance: "85%"
-        },
-        { 
-          id: 2, 
-          name: "Choir Department", 
-          type: "Department", 
-          leader: "Mary Johnson", 
-          memberCount: 15, 
-          activityCount: 12,
-          lastActivity: "2024-08-31",
-          avgAttendance: "92%"
-        },
-        { 
-          id: 3, 
-          name: "Finance Committee", 
-          type: "Committee", 
-          leader: "Robert Wilson", 
-          memberCount: 8, 
-          activityCount: 4,
-          lastActivity: "2024-08-25",
-          avgAttendance: "100%"
-        }
-      ];
-    } else {
-      mockResults = [
-        { id: 1, name: "John Smith", group: "Youth Fellowship", lastAttendance: "2024-08-15", status: "Active" },
-        { id: 2, name: "Mary Johnson", group: "Youth Fellowship", lastAttendance: "2024-08-10", status: "Active" },
-        { id: 3, name: "David Wilson", group: "Youth Fellowship", lastAttendance: "2024-08-05", status: "Active" }
-      ];
+  const generateReport = async () => {
+    setIsGeneratingReport(true);
+    setReportError(null);
+    try {
+      const outputFields = availableColumns.map(col => col.name);
+      const reportData = await api.analytics.custom({
+        dataSource: selectedDataSource,
+        filters: filters,
+        outputFields: outputFields
+      });
+      setReportResults(reportData);
+      toast({
+        title: "Report Generated",
+        description: `Found ${reportData.length} records matching your criteria`,
+      });
+    } catch (error) {
+      console.error('Error generating report:', error);
+      setReportError(error.message || 'Failed to generate report');
+      toast({
+        title: "Report Generation Failed",
+        description: "Please check your filters and try again",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingReport(false);
     }
-    
-    setReportResults(mockResults);
   };
 
   return (
@@ -512,16 +499,16 @@ const AnalyticsPage = () => {
 
             {/* Generate Report */}
             <div className="flex gap-3">
-              <Button 
+              <Button
                 onClick={generateReport}
-                disabled={!selectedDataSource}
+                disabled={!selectedDataSource || isGeneratingReport}
                 className="gap-2"
               >
                 <TrendingUp className="h-4 w-4" />
-                Generate Report
+                {isGeneratingReport ? "Generating..." : "Generate Report"}
               </Button>
               {reportResults.length > 0 && (
-                <Button variant="outline" className="gap-2">
+                <Button variant="outline" className="gap-2" disabled={isGeneratingReport}>
                   <FileDown className="h-4 w-4" />
                   Export to CSV
                 </Button>
@@ -531,71 +518,156 @@ const AnalyticsPage = () => {
         </Card>
 
         {/* Report Results */}
-        {reportResults.length > 0 && (
+        {(isGeneratingReport || reportResults.length > 0 || reportError) && (
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>Report Results</CardTitle>
-                <Badge variant="secondary">
-                  {reportResults.length} records found
-                </Badge>
+                {reportResults.length > 0 && (
+                  <Badge variant="secondary">
+                    {reportResults.length} records found
+                  </Badge>
+                )}
               </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      {selectedDataSource === "groups" ? (
-                        <>
-                          <TableHead>Group Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Leader</TableHead>
-                          <TableHead>Members</TableHead>
-                          <TableHead>Activities</TableHead>
-                          <TableHead>Avg Attendance</TableHead>
-                          <TableHead>Last Activity</TableHead>
-                        </>
-                      ) : (
-                        <>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Group</TableHead>
-                          <TableHead>Last Attendance</TableHead>
-                          <TableHead>Status</TableHead>
-                        </>
-                      )}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {reportResults.map((result) => (
-                      <TableRow key={result.id}>
+              {isGeneratingReport ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <TrendingUp className="h-8 w-8 mx-auto mb-4 text-muted-foreground animate-pulse" />
+                      <p className="text-muted-foreground">Generating report...</p>
+                    </div>
+                  </div>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          {selectedDataSource === "groups" ? (
+                            <>
+                              <TableHead>Group Name</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Leader</TableHead>
+                              <TableHead>Members</TableHead>
+                              <TableHead>Activities</TableHead>
+                              <TableHead>Avg Attendance</TableHead>
+                              <TableHead>Last Activity</TableHead>
+                            </>
+                          ) : (
+                            <>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Group</TableHead>
+                              <TableHead>Last Attendance</TableHead>
+                              <TableHead>Status</TableHead>
+                            </>
+                          )}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={index}>
+                            {selectedDataSource === "groups" ? (
+                              <>
+                                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                                <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                              </>
+                            ) : (
+                              <>
+                                <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                                <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                              </>
+                            )}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              ) : reportError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Report Generation Error</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{reportError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={generateReport}
+                      disabled={isGeneratingReport}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : reportResults.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <TableIcon className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No records found matching your criteria</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
                         {selectedDataSource === "groups" ? (
                           <>
-                            <TableCell className="font-medium">{result.name}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{result.type}</Badge>
-                            </TableCell>
-                            <TableCell>{result.leader}</TableCell>
-                            <TableCell>{result.memberCount}</TableCell>
-                            <TableCell>{result.activityCount}</TableCell>
-                            <TableCell>{result.avgAttendance}</TableCell>
-                            <TableCell>{result.lastActivity}</TableCell>
+                            <TableHead>Group Name</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Leader</TableHead>
+                            <TableHead>Members</TableHead>
+                            <TableHead>Activities</TableHead>
+                            <TableHead>Avg Attendance</TableHead>
+                            <TableHead>Last Activity</TableHead>
                           </>
                         ) : (
                           <>
-                            <TableCell className="font-medium">{result.name}</TableCell>
-                            <TableCell>{result.group}</TableCell>
-                            <TableCell>{result.lastAttendance}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{result.status}</Badge>
-                            </TableCell>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Group</TableHead>
+                            <TableHead>Last Attendance</TableHead>
+                            <TableHead>Status</TableHead>
                           </>
                         )}
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {reportResults.map((result) => (
+                        <TableRow key={result.id}>
+                          {selectedDataSource === "groups" ? (
+                            <>
+                              <TableCell className="font-medium">{result.name}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{result.type}</Badge>
+                              </TableCell>
+                              <TableCell>{result.leader}</TableCell>
+                              <TableCell>{result.memberCount}</TableCell>
+                              <TableCell>{result.activityCount}</TableCell>
+                              <TableCell>{result.avgAttendance}</TableCell>
+                              <TableCell>{result.lastActivity}</TableCell>
+                            </>
+                          ) : (
+                            <>
+                              <TableCell className="font-medium">{result.name}</TableCell>
+                              <TableCell>{result.group}</TableCell>
+                              <TableCell>{result.lastAttendance}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">{result.status}</Badge>
+                              </TableCell>
+                            </>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

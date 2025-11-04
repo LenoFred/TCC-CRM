@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, AlertCircle } from "lucide-react";
+import { api } from "@/config/api";
 import {
   Dialog,
   DialogContent,
@@ -17,25 +18,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { getAllStates, getLGAsByState } from "@/data/nigeria-states-lga";
 
 interface Member {
-  id?: number;
+  id?: number | string;
+  memberID?: string; // Backend ID field
   firstName: string;
   surname: string;
+  lastName?: string; // Backend field name
   otherNames?: string;
   email: string;
   phone: string;
+  phoneNumber?: string; // Backend field name
   status: string;
+  memberStatus?: string; // Backend field name
   joinDate: string;
+  gender?: string;
   state?: string;
   lga?: string;
+  lGA?: string; // Backend field name
   address?: string;
   emergencyContact?: string;
   dateOfBirth?: string;
+  dOB?: string; // Backend field name
   membershipType?: string;
-  customFields?: Record<string, any>;
+  memberType?: string; // Backend field name
+  familyId?: string;
+  familyID?: string; // Backend field name
+  family?: string;
 }
 
 interface AddEditMemberModalProps {
@@ -67,8 +80,8 @@ export const AddEditMemberModal = ({
     address: "",
     emergencyContact: "",
     dateOfBirth: "",
-    membershipType: "Regular Member",
-    customFields: {}
+    gender: "",
+    membershipType: "Regular Member"
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -76,28 +89,50 @@ export const AddEditMemberModal = ({
   const [availableLGAs, setAvailableLGAs] = useState<string[]>([]);
   const [states] = useState<string[]>(getAllStates());
 
-  // Mock custom fields - in real app, this would come from API/Settings context
-  // These should match the custom fields added in Settings
-  const [customFields] = useState([
-    { id: "1", name: "Spiritual Gifts", type: "text", required: false },
-    { id: "2", name: "Baptism Date", type: "date", required: false },
-    { id: "3", name: "Small Group Leader", type: "boolean", required: false }
-  ]);
-
   useEffect(() => {
     if (isEdit && member) {
-      setFormData({
-        ...member,
-        dateOfBirth: member.dateOfBirth || "",
+      console.log('Loading member for edit:', member);
+      console.log('Member status:', member.status);
+      console.log('Member state:', member.state);
+      console.log('Member lga:', member.lga, 'Member lGA:', member.lGA);
+      
+      // Map backend field names to form field names
+      const loadedData = {
+        firstName: member.firstName || "",
+        surname: member.surname || member.lastName || "",
+        otherNames: member.otherNames || "",
+        email: member.email || "",
+        phone: member.phone || member.phoneNumber || "",
+        status: member.status || "Active",  // Use status directly (not memberStatus)
+        joinDate: member.joinDate || new Date().toISOString().split('T')[0],
+        dateOfBirth: member.dateOfBirth || member.dOB || "",
+        gender: member.gender || "",
         address: member.address || "",
         emergencyContact: member.emergencyContact || "",
-        membershipType: member.membershipType || "Regular Member",
+        membershipType: member.membershipType || member.memberType || "Regular Member",
         state: member.state || "",
-        lga: member.lga || "",
-        customFields: member.customFields || {}
-      });
+        lga: member.lga || member.lGA || ""
+      };
+      
+      console.log('Form data being set:', loadedData);
+      console.log('Status specifically:', loadedData.status);
+      console.log('LGA specifically:', loadedData.lga);
+      
+      setFormData(loadedData);
+      
+      // Load LGAs for the state
       if (member.state) {
-        setAvailableLGAs(getLGAsByState(member.state));
+        const lgas = getLGAsByState(member.state);
+        console.log('Available LGAs for state', member.state, ':', lgas);
+        setAvailableLGAs(lgas);
+        
+        // Check if LGA is in the available LGAs
+        const lgaValue = member.lga || member.lGA || "";
+        if (lgaValue && !lgas.includes(lgaValue)) {
+          console.warn('LGA value not found in available LGAs!', { lgaValue, lgas });
+        } else if (lgaValue) {
+          console.log('LGA value IS in available LGAs:', lgaValue);
+        }
       }
     } else if (!isEdit) {
       setFormData({
@@ -113,8 +148,8 @@ export const AddEditMemberModal = ({
         address: "",
         emergencyContact: "",
         dateOfBirth: "",
-        membershipType: "Regular Member",
-        customFields: {}
+        gender: "",
+        membershipType: "Regular Member"
       });
       setAvailableLGAs([]);
     }
@@ -146,6 +181,35 @@ export const AddEditMemberModal = ({
       newErrors.joinDate = "Join date is required";
     }
 
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = "Date of birth is required";
+    }
+
+    if (!formData.gender) {
+      newErrors.gender = "Gender is required";
+    }
+
+    if (!formData.address?.trim()) {
+      newErrors.address = "Address is required";
+    }
+
+    if (!formData.state) {
+      newErrors.state = "State is required";
+    }
+
+    // LGA is only required for new members, not when editing
+    if (!isEdit && !formData.lga) {
+      newErrors.lga = "LGA is required";
+    }
+
+    if (!formData.membershipType) {
+      newErrors.membershipType = "Membership type is required";
+    }
+
+    if (!formData.emergencyContact?.trim()) {
+      newErrors.emergencyContact = "Emergency contact is required";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -158,21 +222,20 @@ export const AddEditMemberModal = ({
     }
 
     setIsSubmitting(true);
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      onSave({
+      const dataToSave = {
         ...formData,
         id: isEdit ? member?.id : Date.now()
-      });
+      };
       
-      toast({
-        title: `Member ${isEdit ? 'updated' : 'added'} successfully`,
-        description: `${formData.firstName} ${formData.surname} has been ${isEdit ? 'updated' : 'added'} to the system.`,
-      });
+      console.log('Form submitting with data:', dataToSave);
+      console.log('Status field:', dataToSave.status);
+      console.log('LGA field:', dataToSave.lga);
+      console.log('State field:', dataToSave.state);
       
+      onSave(dataToSave);
+
       onClose();
     } catch (error) {
       toast({
@@ -282,13 +345,29 @@ export const AddEditMemberModal = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                <Label htmlFor="dateOfBirth">Date of Birth *</Label>
                 <Input
                   id="dateOfBirth"
                   type="date"
                   value={formData.dateOfBirth}
                   onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                  className={errors.dateOfBirth ? "border-destructive" : ""}
                 />
+                {errors.dateOfBirth && <p className="text-sm text-destructive">{errors.dateOfBirth}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gender">Gender *</Label>
+                <Select value={formData.gender} onValueChange={(value) => handleInputChange('gender', value)}>
+                  <SelectTrigger className={errors.gender ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.gender && <p className="text-sm text-destructive">{errors.gender}</p>}
               </div>
 
               <div className="space-y-2">
@@ -300,16 +379,14 @@ export const AddEditMemberModal = ({
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Inactive">Inactive</SelectItem>
-                    <SelectItem value="Visitor">Visitor</SelectItem>
-                    <SelectItem value="Guest">Guest</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="membershipType">Membership Type</Label>
+                <Label htmlFor="membershipType">Membership Type *</Label>
                 <Select value={formData.membershipType} onValueChange={(value) => handleInputChange('membershipType', value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.membershipType ? "border-destructive" : ""}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -319,6 +396,7 @@ export const AddEditMemberModal = ({
                     <SelectItem value="Child Member">Child Member</SelectItem>
                   </SelectContent>
                 </Select>
+                {errors.membershipType && <p className="text-sm text-destructive">{errors.membershipType}</p>}
               </div>
 
               <div className="space-y-2">
@@ -334,9 +412,9 @@ export const AddEditMemberModal = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="state">State</Label>
+                <Label htmlFor="state">State *</Label>
                 <Select value={formData.state} onValueChange={(value) => handleInputChange('state', value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.state ? "border-destructive" : ""}>
                     <SelectValue placeholder="Select state" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60 overflow-y-auto">
@@ -345,16 +423,17 @@ export const AddEditMemberModal = ({
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.state && <p className="text-sm text-destructive">{errors.state}</p>}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="lga">Local Government Area</Label>
+                <Label htmlFor="lga">Local Government Area{!isEdit && ' *'}</Label>
                 <Select 
                   value={formData.lga} 
                   onValueChange={(value) => handleInputChange('lga', value)}
                   disabled={!formData.state || availableLGAs.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={errors.lga ? "border-destructive" : ""}>
                     <SelectValue placeholder={
                       !formData.state ? "Select state first" : 
                       availableLGAs.length === 0 ? "No LGAs available" : 
@@ -367,207 +446,35 @@ export const AddEditMemberModal = ({
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.lga && <p className="text-sm text-destructive">{errors.lga}</p>}
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
+              <Label htmlFor="address">Address *</Label>
               <Textarea
                 id="address"
                 value={formData.address}
                 onChange={(e) => handleInputChange('address', e.target.value)}
                 placeholder="Enter full address"
                 rows={3}
+                className={errors.address ? "border-destructive" : ""}
               />
+              {errors.address && <p className="text-sm text-destructive">{errors.address}</p>}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="emergencyContact">Emergency Contact</Label>
+              <Label htmlFor="emergencyContact">Emergency Contact *</Label>
               <Input
                 id="emergencyContact"
                 value={formData.emergencyContact}
                 onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
                 placeholder="Name and phone number of emergency contact"
+                className={errors.emergencyContact ? "border-destructive" : ""}
               />
+              {errors.emergencyContact && <p className="text-sm text-destructive">{errors.emergencyContact}</p>}
             </div>
           </div>
-
-          {/* Custom Fields Section */}
-          {customFields.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Additional Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {customFields.map((field) => (
-                  <div key={field.id} className="space-y-2">
-                    <Label htmlFor={`custom-${field.id}`}>
-                      {field.name}
-                      {field.required && <span className="text-destructive ml-1">*</span>}
-                    </Label>
-
-                    {field.type === "text" && (
-                      <Input
-                        id={`custom-${field.id}`}
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                        required={field.required}
-                      />
-                    )}
-
-                    {field.type === "number" && (
-                      <Input
-                        id={`custom-${field.id}`}
-                        type="number"
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                        required={field.required}
-                      />
-                    )}
-
-                    {field.type === "date" && (
-                      <Input
-                        id={`custom-${field.id}`}
-                        type="date"
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        required={field.required}
-                      />
-                    )}
-
-                    {field.type === "email" && (
-                      <Input
-                        id={`custom-${field.id}`}
-                        type="email"
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                        required={field.required}
-                      />
-                    )}
-
-                    {field.type === "phone" && (
-                      <Input
-                        id={`custom-${field.id}`}
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                        required={field.required}
-                      />
-                    )}
-
-                    {field.type === "boolean" && (
-                      <Select
-                        value={formData.customFields?.[field.name] || ""}
-                        onValueChange={(value) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: value
-                            }
-                          }));
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="true">Yes</SelectItem>
-                          <SelectItem value="false">No</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    {field.type === "dropdown" && field.options && (
-                      <Select
-                        value={formData.customFields?.[field.name] || ""}
-                        onValueChange={(value) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: value
-                            }
-                          }));
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {field.options.map((option) => (
-                            <SelectItem key={option} value={option}>
-                              {option}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-
-                    {field.type === "textarea" && (
-                      <Textarea
-                        id={`custom-${field.id}`}
-                        value={formData.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            customFields: {
-                              ...prev.customFields,
-                              [field.name]: e.target.value
-                            }
-                          }));
-                        }}
-                        placeholder={`Enter ${field.name.toLowerCase()}`}
-                        rows={3}
-                        required={field.required}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Form Actions */}
           <div className="flex justify-end gap-2 pt-4 border-t">

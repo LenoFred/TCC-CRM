@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { X, Edit, Users, Calendar, DollarSign, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Edit, Users, Calendar, DollarSign, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import {
   Dialog,
   DialogContent,
@@ -10,19 +11,34 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
 
 interface Member {
-  id: number;
+  id: string | number;
+  memberID?: string; // Backend ID field
   name: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
   phone: string;
+  phoneNumber?: string; // Backend field
   status: string;
+  memberStatus?: string; // Backend field
   joinDate: string;
   family: string;
+  familyID?: string; // Backend field
   address?: string;
   emergencyContact?: string;
   dateOfBirth?: string;
+  dOB?: string; // Backend field
+  gender?: string;
+  state?: string;
+  lga?: string;
+  lGA?: string; // Backend field
   membershipType?: string;
+  memberType?: string; // Backend field
 }
 
 interface MemberProfileModalProps {
@@ -33,30 +49,124 @@ interface MemberProfileModalProps {
 }
 
 export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberProfileModalProps) => {
+  const { toast } = useToast();
+  const [attendance, setAttendance] = useState([]);
+  const [donations, setDonations] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [family, setFamily] = useState([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dataError, setDataError] = useState(null);
+
+  const fetchMemberData = async () => {
+    if (!member) {
+      console.log('No member provided to fetchMemberData');
+      return;
+    }
+
+    setIsLoadingData(true);
+    setDataError(null);
+    try {
+      // Use memberID from backend
+      const memberId = member.memberID || member.id;
+      console.log('Fetching member data for:', { member, memberId });
+      
+      // Guard against undefined memberId
+      if (!memberId) {
+        console.error('Member ID is undefined:', member);
+        setDataError('Invalid member ID');
+        setIsLoadingData(false);
+        return;
+      }
+      
+      // Don't fetch member details from API - we already have it from the list
+      // The member prop contains all the data we need
+      const memberData = member;
+      
+      // Fetch attendance records for this member
+      try {
+        const attendanceResponse: any = await api.attendance.getByMember(String(memberId));
+        console.log('Attendance data:', attendanceResponse);
+        // API returns { memberID, total, attendance: [...] }
+        const attendanceData = attendanceResponse.attendance || [];
+        setAttendance(attendanceData);
+      } catch (error) {
+        console.error('Error fetching attendance:', error);
+        setAttendance([]);
+      }
+      
+      // Fetch donations for this member
+      try {
+        const donationsResponse: any = await api.donations.getByMember(String(memberId));
+        console.log('Donations data:', donationsResponse);
+        // API returns { memberID, total, totalAmount, donations: [...] }
+        const donationsData = donationsResponse.donations || [];
+        setDonations(donationsData);
+      } catch (error) {
+        console.error('Error fetching donations:', error);
+        setDonations([]);
+      }
+      
+      // Fetch family members if member has a familyID
+      try {
+        if (memberData.familyID && memberData.familyID.trim() !== '') {
+          const familyID = memberData.familyID;
+          const familyResponse: any = await api.members.getAll();
+          const allMembers = familyResponse.data || [];
+          const familyMembers = allMembers.filter((m: any) => 
+            m.familyID === familyID && m.memberID !== memberId
+          );
+          console.log('Family members:', familyMembers);
+          setFamily(familyMembers.map((m: any) => ({
+            name: `${m.firstName} ${m.lastName}`,
+            relationship: 'Family Member',
+            status: m.memberStatus
+          })));
+        } else {
+          setFamily([]);
+        }
+      } catch (error) {
+        console.error('Error fetching family members:', error);
+        setFamily([]);
+      }
+      
+            // Fetch groups - backend already joins GroupMembers with Groups data
+      try {
+        const groupMembersResponse: any = await api.groupMembers.getByMember(String(memberId));
+        const groupMembershipsData = groupMembersResponse.groups || [];
+        
+        // Transform the data - no need for extra API calls, backend provides group details
+        const groupsData = groupMembershipsData.map((membership: any) => ({
+          name: membership.group?.groupName || 'Unknown Group',
+          type: membership.group?.groupType || 'N/A',
+          role: membership.role || 'Member',
+          joinDate: membership.joinedDate ? new Date(membership.joinedDate).toLocaleDateString() : 'N/A',
+          status: membership.status || 'Active'
+        }));
+        
+        setGroups(groupsData);
+      } catch (error) {
+        console.error('Error fetching groups:', error);
+      }
+    } catch (error: any) {
+      console.error('Error fetching member data:', error);
+      setDataError(error.message || 'Failed to load member data');
+      toast({
+        title: "Error",
+        description: "Failed to load member data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    if (member && isOpen) {
+      fetchMemberData();
+    }
+  }, [member, isOpen]);
+
   if (!member) return null;
-
-  const mockAttendance = [
-    { date: "2024-01-07", event: "Sunday Service", status: "Present" },
-    { date: "2024-01-03", event: "Bible Study", status: "Present" },
-    { date: "2023-12-31", event: "Sunday Service", status: "Absent" },
-  ];
-
-  const mockDonations = [
-    { date: "2024-01-01", amount: "$250.00", fund: "General Fund" },
-    { date: "2023-12-15", amount: "$100.00", fund: "Building Fund" },
-    { date: "2023-11-20", amount: "$500.00", fund: "Missions" },
-  ];
-
-  const mockGroups = [
-    { name: "Youth Fellowship", role: "Member", joinDate: "2023-06-15" },
-    { name: "Worship Team", role: "Vocalist", joinDate: "2023-08-01" },
-  ];
-
-  const mockFamily = [
-    { name: "Jane Smith", relationship: "Spouse", status: "Active" },
-    { name: "Michael Smith", relationship: "Son", status: "Active" },
-    { name: "Sarah Smith", relationship: "Daughter", status: "Active" },
-  ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -110,12 +220,34 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                 <p className="text-sm">{member.joinDate}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Family</label>
-                <p className="text-sm">{member.family}</p>
+                <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
+                <p className="text-sm">
+                  {member.dateOfBirth ? new Date(member.dateOfBirth).toLocaleDateString() : 'Not provided'}
+                </p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Gender</label>
+                <p className="text-sm">{member.gender || 'Not specified'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">State</label>
+                <p className="text-sm">{member.state || 'Not provided'}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">LGA</label>
+                <p className="text-sm">{member.lga || member.lGA || 'Not provided'}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Membership Type</label>
-                <p className="text-sm">{member.membershipType || 'Regular Member'}</p>
+                <p className="text-sm">{member.membershipType || member.memberType || 'Regular Member'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-muted-foreground">Address</label>
+                <p className="text-sm">{member.address || 'Not provided'}</p>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-medium text-muted-foreground">Emergency Contact</label>
+                <p className="text-sm">{member.emergencyContact || 'Not provided'}</p>
               </div>
             </CardContent>
           </Card>
@@ -147,19 +279,55 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                   <CardTitle>Family Members</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {mockFamily.map((familyMember, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{familyMember.name}</p>
-                          <p className="text-sm text-muted-foreground">{familyMember.relationship}</p>
+                  {isLoadingData ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                          <Skeleton className="h-6 w-16" />
                         </div>
-                        <Badge variant={familyMember.status === 'Active' ? 'default' : 'secondary'}>
-                          {familyMember.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : dataError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Family Data Error</AlertTitle>
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>{dataError}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchMemberData}
+                          disabled={isLoadingData}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : family.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No family members found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {family.map((familyMember, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div>
+                            <p className="font-medium">{familyMember.name}</p>
+                            <p className="text-sm text-muted-foreground">{familyMember.relationship}</p>
+                          </div>
+                          <Badge variant={familyMember.status === 'Active' ? 'default' : 'secondary'}>
+                            {familyMember.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -170,19 +338,67 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                   <CardTitle>Recent Attendance</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {mockAttendance.map((record, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{record.event}</p>
-                          <p className="text-sm text-muted-foreground">{record.date}</p>
+                  {isLoadingData ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                          <Skeleton className="h-6 w-16" />
                         </div>
-                        <Badge variant={record.status === 'Present' ? 'default' : 'destructive'}>
-                          {record.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : dataError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Attendance Data Error</AlertTitle>
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>{dataError}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchMemberData}
+                          disabled={isLoadingData}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : attendance.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No attendance records found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {attendance.map((record: any, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div>
+                            <p className="font-medium">
+                              {record.gathering?.gatheringName || `Gathering: ${record.gatheringID || 'N/A'}`}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {record.checkInTime ? new Date(record.checkInTime).toLocaleDateString() : 
+                                record.gathering?.date ? new Date(record.gathering.date).toLocaleDateString() : 'No date'} 
+                              {record.checkInTime && ` at ${new Date(record.checkInTime).toLocaleTimeString()}`}
+                            </p>
+                            {record.checkInMethod && (
+                              <p className="text-xs text-muted-foreground mt-1">Method: {record.checkInMethod}</p>
+                            )}
+                            {record.gathering?.gatheringType && (
+                              <p className="text-xs text-muted-foreground">Type: {record.gathering.gatheringType}</p>
+                            )}
+                          </div>
+                          <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                            {record.status || 'Present'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -193,16 +409,66 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                   <CardTitle>Donation History</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {mockDonations.map((donation, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{donation.amount}</p>
-                          <p className="text-sm text-muted-foreground">{donation.fund} • {donation.date}</p>
+                  {isLoadingData ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-3 w-32" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : dataError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Donations Data Error</AlertTitle>
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>{dataError}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchMemberData}
+                          disabled={isLoadingData}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : donations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <DollarSign className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No donation records found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {donations.map((donation: any, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div className="flex-1">
+                            <p className="font-medium">
+                              {donation.currency ? `${donation.currency} ` : ''}
+                              {donation.amount || 'N/A'}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {donation.fund || donation.donationType || 'General'} 
+                              {donation.paymentMethod && ` • ${donation.paymentMethod}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {donation.donationDate ? new Date(donation.donationDate).toLocaleDateString() : 'No date'}
+                            </p>
+                            {donation.notes && (
+                              <p className="text-xs text-muted-foreground italic mt-1">{donation.notes}</p>
+                            )}
+                          </div>
+                          <Badge variant={donation.verificationStatus === 'Verified' ? 'default' : 'secondary'}>
+                            {donation.verificationStatus || 'Pending'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -213,16 +479,56 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                   <CardTitle>Group Memberships</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {mockGroups.map((group, index) => (
-                      <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                        <div>
-                          <p className="font-medium">{group.name}</p>
-                          <p className="text-sm text-muted-foreground">{group.role} • Joined {group.joinDate}</p>
+                  {isLoadingData ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-40" />
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : dataError ? (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Groups Data Error</AlertTitle>
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>{dataError}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={fetchMemberData}
+                          disabled={isLoadingData}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Retry
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  ) : groups.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No group memberships found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groups.map((group: any, index) => (
+                        <div key={index} className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
+                          <div>
+                            <p className="font-medium">{group.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {group.type} • {group.role} • Joined {group.joinDate}
+                            </p>
+                          </div>
+                          <Badge variant={group.status?.toLowerCase() === 'active' ? 'default' : 'secondary'}>
+                            {group.status}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { api } from "@/config/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calendar, Users, UserCheck, BarChart3, Eye, FileText } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Calendar, Users, UserCheck, BarChart3, Eye, FileText, AlertCircle, RefreshCw } from "lucide-react";
 import { SendFollowUpModal } from "./SendFollowUpModal";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -33,29 +37,55 @@ interface EventManagementModalProps {
 }
 
 export function EventManagementModal({ isOpen, onClose, event }: EventManagementModalProps) {
+  const { toast } = useToast();
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
-  
+  const [attendanceData, setAttendanceData] = useState([]);
+  const [guests, setGuests] = useState([]);
+  const [eventDetails, setEventDetails] = useState(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dataError, setDataError] = useState(null);
+
+  const fetchEventData = async () => {
+    if (!event) return;
+
+    setIsLoadingData(true);
+    setDataError(null);
+    try {
+      const details = await api.events.getDetails(event.id);
+      setEventDetails(details);
+
+      const attendees = await api.events.getAttendees(event.id);
+      setAttendanceData(attendees);
+
+      const guestData = await api.events.getGuests(event.id);
+      setGuests(guestData);
+    } catch (error) {
+      console.error('Error fetching event data:', error);
+      setDataError(error.message || 'Failed to load event data');
+      toast({
+        title: "Error",
+        description: "Failed to load event data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    if (event && isOpen) {
+      fetchEventData();
+    }
+  }, [event, isOpen]);
+
   if (!event) return null;
 
-  // Mock attendance data
-  const attendanceData = [
-    { id: 1, name: "John Smith", checkedInAt: "09:15 AM", status: "Present" },
-    { id: 2, name: "Mary Johnson", checkedInAt: "09:20 AM", status: "Present" },
-    { id: 3, name: "David Wilson", checkedInAt: "09:25 AM", status: "Present" },
-    { id: 4, name: "Sarah Brown", checkedInAt: "09:30 AM", status: "Present" },
-    { id: 5, name: "Michael Davis", checkedInAt: "09:35 AM", status: "Present" },
-  ];
-
-  const absentMembers = [
-    { id: 6, name: "Lisa Anderson", lastAttended: "2024-08-24" },
-    { id: 7, name: "Robert Taylor", lastAttended: "2024-08-17" },
-    { id: 8, name: "Jennifer Wilson", lastAttended: "2024-08-10" },
-  ];
+  const absentMembers = []; // Calculate from attendees vs expected
 
   const eventStats = {
     totalAttendees: attendanceData.length,
     expectedAttendance: event.expectedAttendance || 50,
-    guestCount: 3,
+    guestCount: guests.length,
     absentCount: absentMembers.length,
     attendanceRate: Math.round((attendanceData.length / (event.expectedAttendance || 50)) * 100)
   };
@@ -96,7 +126,11 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{eventStats.totalAttendees}</div>
+                  {isLoadingData ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{eventStats.totalAttendees}</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -104,7 +138,11 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
                   <CardTitle className="text-sm font-medium text-muted-foreground">Expected</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{eventStats.expectedAttendance}</div>
+                  {isLoadingData ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{eventStats.expectedAttendance}</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -112,7 +150,11 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
                   <CardTitle className="text-sm font-medium text-muted-foreground">Guests</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{eventStats.guestCount}</div>
+                  {isLoadingData ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{eventStats.guestCount}</div>
+                  )}
                 </CardContent>
               </Card>
               <Card>
@@ -120,7 +162,11 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
                   <CardTitle className="text-sm font-medium text-muted-foreground">Attendance Rate</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-foreground">{eventStats.attendanceRate}%</div>
+                  {isLoadingData ? (
+                    <Skeleton className="h-8 w-16" />
+                  ) : (
+                    <div className="text-2xl font-bold text-foreground">{eventStats.attendanceRate}%</div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -166,34 +212,82 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserCheck className="h-5 w-5" />
-                  Attendance List ({attendanceData.length} present)
+                  Attendance List ({isLoadingData ? '...' : attendanceData.length} present)
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Check-in Time</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {attendanceData.map((attendee) => (
-                        <TableRow key={attendee.id}>
-                          <TableCell className="font-medium">{attendee.name}</TableCell>
-                          <TableCell>{attendee.checkedInAt}</TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-                              {attendee.status}
-                            </Badge>
-                          </TableCell>
+                {isLoadingData ? (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Check-in Time</TableHead>
+                          <TableHead>Status</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={index}>
+                            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : dataError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Attendance Data Error</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>{dataError}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchEventData}
+                        disabled={isLoadingData}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Check-in Time</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {attendanceData.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                              No attendance records found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          attendanceData.map((attendee) => (
+                            <TableRow key={attendee.id}>
+                              <TableCell className="font-medium">{attendee.name}</TableCell>
+                              <TableCell>{attendee.checkedInAt}</TableCell>
+                              <TableCell>
+                                <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                                  {attendee.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -203,38 +297,86 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
-                  Absent Members ({absentMembers.length})
+                  Absent Members ({isLoadingData ? '...' : absentMembers.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Last Attended</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {absentMembers.map((member) => (
-                        <TableRow key={member.id}>
-                          <TableCell className="font-medium">{member.name}</TableCell>
-                          <TableCell>{member.lastAttended}</TableCell>
-                          <TableCell className="text-right">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => setIsFollowUpModalOpen(true)}
-                            >
-                              Send Follow-up
-                            </Button>
-                          </TableCell>
+                {isLoadingData ? (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Last Attended</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {Array.from({ length: 3 }).map((_, index) => (
+                          <TableRow key={index}>
+                            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell className="text-right"><Skeleton className="h-8 w-24" /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : dataError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Absent Members Data Error</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>{dataError}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchEventData}
+                        disabled={isLoadingData}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Name</TableHead>
+                          <TableHead>Last Attended</TableHead>
+                          <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {absentMembers.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                              No absent members found
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          absentMembers.map((member) => (
+                            <TableRow key={member.id}>
+                              <TableCell className="font-medium">{member.name}</TableCell>
+                              <TableCell>{member.lastAttended}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setIsFollowUpModalOpen(true)}
+                                >
+                                  Send Follow-up
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -248,30 +390,64 @@ export function EventManagementModal({ isOpen, onClose, event }: EventManagement
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">Attendance Rate</p>
-                    <p className="text-2xl font-bold">{eventStats.attendanceRate}%</p>
-                    <p className="text-xs text-muted-foreground">
-                      {eventStats.totalAttendees} of {eventStats.expectedAttendance} expected
-                    </p>
+                {isLoadingData ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 border rounded-lg">
+                      <Skeleton className="h-4 w-24 mb-2" />
+                      <Skeleton className="h-8 w-12 mb-2" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <Skeleton className="h-4 w-32 mb-2" />
+                      <Skeleton className="h-8 w-8 mb-2" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
                   </div>
-                  <div className="p-4 border rounded-lg">
-                    <p className="text-sm text-muted-foreground">Guest Conversion</p>
-                    <p className="text-2xl font-bold">{eventStats.guestCount}</p>
-                    <p className="text-xs text-muted-foreground">New guests attended</p>
-                  </div>
-                </div>
-                
-                <div className="p-4 border rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-2">Quick Insights</p>
-                  <ul className="space-y-1 text-sm">
-                    <li>• Peak check-in time: 9:15 - 9:30 AM</li>
-                    <li>• {eventStats.guestCount} new guests for follow-up</li>
-                    <li>• {absentMembers.length} regular members were absent</li>
-                    <li>• Attendance was {eventStats.attendanceRate > 80 ? 'above' : 'below'} expected</li>
-                  </ul>
-                </div>
+                ) : dataError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Analytics Data Error</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>{dataError}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchEventData}
+                        disabled={isLoadingData}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 border rounded-lg">
+                        <p className="text-sm text-muted-foreground">Attendance Rate</p>
+                        <p className="text-2xl font-bold">{eventStats.attendanceRate}%</p>
+                        <p className="text-xs text-muted-foreground">
+                          {eventStats.totalAttendees} of {eventStats.expectedAttendance} expected
+                        </p>
+                      </div>
+                      <div className="p-4 border rounded-lg">
+                        <p className="text-sm text-muted-foreground">Guest Conversion</p>
+                        <p className="text-2xl font-bold">{eventStats.guestCount}</p>
+                        <p className="text-xs text-muted-foreground">New guests attended</p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 border rounded-lg">
+                      <p className="text-sm text-muted-foreground mb-2">Quick Insights</p>
+                      <ul className="space-y-1 text-sm">
+                        <li>• Peak check-in time: 9:15 - 9:30 AM</li>
+                        <li>• {eventStats.guestCount} new guests for follow-up</li>
+                        <li>• {absentMembers.length} regular members were absent</li>
+                        <li>• Attendance was {eventStats.attendanceRate > 80 ? 'above' : 'below'} expected</li>
+                      </ul>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

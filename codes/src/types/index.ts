@@ -15,14 +15,28 @@ export interface Member {
   id: string;
   firstName: string;
   lastName: string;
+  surname?: string; // Alias for lastName
   email?: string;
   phone?: string;
+  phoneNumber?: string; // Backend field name
   address?: string;
   dateOfBirth?: string;
+  dOB?: string; // Backend field name
   joinDate: string;
   status: string;
+  memberStatus?: string; // Backend field name
+  gender?: string;
+  state?: string;
+  lga?: string;
+  lGA?: string; // Backend field name
   familyId?: string;
+  familyID?: string; // Backend field name
+  family?: string;
+  membershipType?: string;
+  memberType?: string; // Backend field name
+  emergencyContact?: string;
   branchId: string;
+  memberID?: string; // Backend ID field
   customFields?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
@@ -30,9 +44,12 @@ export interface Member {
 
 export interface Family {
   id: string;
+  familyID?: string; // Backend field name (Google Sheets)
   familyName: string;
   branchId: string;
   members?: FamilyMember[];
+  memberCount?: number; // Calculated count of family members
+  createdDate?: string; // Date family was created
   createdAt: string;
   updatedAt: string;
 }

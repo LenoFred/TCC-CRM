@@ -20,8 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { MessageSquare, Send, Users, Mail, Smartphone } from "lucide-react";
+import { MessageSquare, Send, Users, Mail, Smartphone, Loader2, CheckCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useCommunication } from "@/hooks/useBusinessLogic";
 
 interface BulkMessageModalProps {
   isOpen: boolean;
@@ -32,12 +34,17 @@ interface BulkMessageModalProps {
 
 export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: BulkMessageModalProps) => {
   const { toast } = useToast();
+  
+  // Use business logic hook
+  const { sendBulk, loading, error } = useCommunication();
+  
   const [formData, setFormData] = useState({
     subject: "",
     message: "",
     channels: [] as string[],
     scheduleType: "now"
   });
+  const [sendResult, setSendResult] = useState<{sent: number, failed: number} | null>(null);
 
   const handleChannelChange = (channel: string, checked: boolean) => {
     if (checked) {
@@ -53,7 +60,7 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
     }
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!formData.message.trim()) {
       toast({
         title: "Validation Error",
@@ -72,28 +79,59 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
       return;
     }
 
-    const messageData = {
-      ...formData,
-      recipients: recipients.length,
-      timestamp: new Date().toISOString(),
-    };
+    if (recipients.length === 0) {
+      toast({
+        title: "No Recipients",
+        description: "Please select at least one recipient.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    onSend(messageData);
+    try {
+      // Send via each selected channel
+      for (const channel of formData.channels) {
+        const result = await sendBulk(
+          recipients,
+          channel as 'sms' | 'email' | 'whatsapp',
+          formData.message,
+          formData.channels.includes('email') ? formData.subject : undefined
+        );
+        
+        setSendResult(result);
+      }
 
-    toast({
-      title: "Message Sent",
-      description: `Bulk message sent to ${recipients.length} recipient${recipients.length !== 1 ? 's' : ''}.`,
-    });
+      // Call parent callback
+      const messageData = {
+        ...formData,
+        recipients: recipients.length,
+        timestamp: new Date().toISOString(),
+      };
+      onSend(messageData);
 
-    // Reset form
-    setFormData({
-      subject: "",
-      message: "",
-      channels: [],
-      scheduleType: "now"
-    });
+      toast({
+        title: "Messages Sent",
+        description: `Successfully sent bulk message to ${recipients.length} recipient${recipients.length !== 1 ? 's' : ''} via ${formData.channels.join(', ')}.`,
+      });
 
-    onClose();
+      // Reset form
+      setFormData({
+        subject: "",
+        message: "",
+        channels: [],
+        scheduleType: "now"
+      });
+      setSendResult(null);
+
+      onClose();
+    } catch (err) {
+      console.error('Bulk send error:', err);
+      toast({
+        title: "Send Failed",
+        description: error || "Failed to send bulk messages. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -185,6 +223,7 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
                   placeholder="Enter email subject..."
                   value={formData.subject}
                   onChange={(e) => setFormData(prev => ({ ...prev, subject: e.target.value }))}
+                  disabled={loading}
                 />
               </div>
             )}
@@ -197,12 +236,31 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
                 value={formData.message}
                 onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
                 rows={6}
+                disabled={loading}
               />
               <p className="text-sm text-muted-foreground mt-1">
                 {formData.message.length}/500 characters
               </p>
             </div>
           </div>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Success Result */}
+          {sendResult && (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Sent to {sendResult.sent} recipient{sendResult.sent !== 1 ? 's' : ''}.
+                {sendResult.failed > 0 && ` ${sendResult.failed} failed.`}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Scheduling Options */}
           <div>
@@ -224,13 +282,22 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={handleSend} className="gap-2">
-            <Send className="h-4 w-4" />
-            {formData.scheduleType === "draft" ? "Save Draft" : 
-             formData.scheduleType === "schedule" ? "Schedule" : "Send Now"}
+          <Button onClick={handleSend} className="gap-2" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                {formData.scheduleType === "draft" ? "Save Draft" : 
+                 formData.scheduleType === "schedule" ? "Schedule" : "Send Now"}
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

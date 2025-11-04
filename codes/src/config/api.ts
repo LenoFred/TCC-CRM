@@ -1,7 +1,7 @@
 // API Configuration for TCC CRM
-const API_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api.tccchurch.com' 
-  : 'http://localhost:8000';
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? 'https://api.tccchurch.com'
+  : 'http://localhost:3001/api';
 
 // CORS configuration headers
 const corsHeaders = {
@@ -48,17 +48,22 @@ export const apiRequest = async <T>(
     mode: 'cors', // Explicitly set CORS mode
   };
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  // Add cache-busting timestamp for GET requests
+  let url = `${API_BASE_URL}${endpoint}`;
+  if (!options.method || options.method.toUpperCase() === 'GET') {
+    const separator = endpoint.includes('?') ? '&' : '?';
+    url += `${separator}_t=${Date.now()}`;
+  }
   
   try {
     const response = await fetch(url, config);
     
-    // Handle 401 Unauthorized - redirect to login
-    if (response.status === 401) {
-      removeAuthToken();
-      window.location.href = '/login';
-      throw new Error('Unauthorized');
-    }
+    // Handle 401 Unauthorized - DISABLED redirect to login
+    // if (response.status === 401) {
+    //   removeAuthToken();
+    //   window.location.href = '/login';
+    //   throw new Error('Unauthorized');
+    // }
     
     // Handle other HTTP errors
     if (!response.ok) {
@@ -91,13 +96,24 @@ export const api = {
       apiRequest<{ token: string }>('/auth/refresh', { method: 'POST' }),
   },
 
+  // Metrics
+  metrics: {
+    get: () =>
+      apiRequest<any>('/metrics'),
+  },
+
   // Members
   members: {
-    getAll: (params?: URLSearchParams) =>
-      apiRequest<any[]>(`/members${params ? `?${params}` : ''}`),
+    getAll: (params?: URLSearchParams) => {
+      const timestamp = Date.now();
+      const separator = params ? '&' : '?';
+      return apiRequest<{success: boolean; data: any[]; total: number}>(`/members${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
+    },
     
-    getById: (id: string) =>
-      apiRequest<any>(`/members/${id}`),
+    getById: (id: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{success: boolean; data: any}>(`/members/${id}?_t=${timestamp}`);
+    },
     
     create: (data: any) =>
       apiRequest<any>('/members', {
@@ -107,7 +123,7 @@ export const api = {
     
     update: (id: string, data: any) =>
       apiRequest<any>(`/members/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify(data),
       }),
     
@@ -117,38 +133,130 @@ export const api = {
 
   // Donations
   donations: {
-    getPending: () =>
-      apiRequest<any[]>('/donations/pending'),
-    
-    verify: (data: any) =>
-      apiRequest<any>('/donations/verify', {
+    getAll: (params?: URLSearchParams) => {
+      const timestamp = Date.now();
+      const separator = params ? '&' : '?';
+      return apiRequest<any[]>(`/donations${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
+    },
+
+    getByMember: (memberID: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{memberID: string; total: number; totalAmount: number; donations: any[]}>(`/donations/member/${memberID}?_t=${timestamp}`);
+    },
+
+    verify: (id: string, data: any) =>
+      apiRequest<any>(`/donations/${id}/verify`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-  },
 
-  // Attendance & Gatherings
-  gatherings: {
-    getAll: () =>
-      apiRequest<any[]>('/gatherings'),
-    
-    getById: (id: string) =>
-      apiRequest<any>(`/gatherings/${id}`),
-    
-    getEligibleMembers: (id: string) =>
-      apiRequest<any[]>(`/gatherings/${id}/eligible-members`),
-    
-    create: (data: any) =>
-      apiRequest<any>('/gatherings', {
-        method: 'POST',
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/donations/${id}`, {
+        method: 'PATCH',
         body: JSON.stringify(data),
       }),
   },
 
   // Attendance
   attendance: {
-    checkIn: (data: { memberIds: string[]; gatheringId: string }) =>
-      apiRequest<any>('/attendance/check-in', {
+    getAll: (params?: URLSearchParams) => {
+      const timestamp = Date.now();
+      const separator = params ? '&' : '?';
+      return apiRequest<any[]>(`/attendance${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
+    },
+
+    getByMember: (memberID: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{memberID: string; total: number; attendance: any[]}>(`/attendance/member/${memberID}?_t=${timestamp}`);
+    },
+  },
+
+  // Group Members
+  groupMembers: {
+    getAll: (params?: URLSearchParams) => {
+      const timestamp = Date.now();
+      const separator = params ? '&' : '?';
+      return apiRequest<{success: boolean; data: any[]}>(`/group-members${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
+    },
+
+    getByMember: (memberID: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{memberID: string; total: number; groups: any[]}>(`/group-members/member/${memberID}?_t=${timestamp}`);
+    },
+
+    getByGroup: (groupID: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{success: boolean; data: any[]}>(`/group-members/group/${groupID}?_t=${timestamp}`);
+    },
+  },
+
+  // Groups
+  groups: {
+    getAll: (params?: URLSearchParams) =>
+      apiRequest<{success: boolean; data: any[]}>(`/groups${params ? `?${params}` : ''}`),
+
+    getById: (id: string) =>
+      apiRequest<{success: boolean; data: any}>(`/groups/${id}`),
+
+    create: (data: any) =>
+      apiRequest<any>('/groups', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/groups/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      apiRequest<void>(`/groups/${id}`, { method: 'DELETE' }),
+  },
+
+  // Events
+  events: {
+    getAll: (params?: URLSearchParams) =>
+      apiRequest<any[]>(`/events${params ? `?${params}` : ''}`),
+
+    getById: (id: string) =>
+      apiRequest<any>(`/events/${id}`),
+
+    getDetails: (id: string) =>
+      apiRequest<any>(`/events/${id}/details`),
+
+    getAttendees: (id: string) =>
+      apiRequest<any[]>(`/events/${id}/attendees`),
+
+    getGuests: (id: string) =>
+      apiRequest<any[]>(`/events/${id}/guests`),
+
+    create: (data: any) =>
+      apiRequest<any>('/events', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (id: string, data: any) =>
+      apiRequest<any>(`/events/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    checkin: (id: string, data: any) =>
+      apiRequest<any>(`/events/${id}/checkin`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    finish: (id: string, data: any) =>
+      apiRequest<any>(`/events/${id}/finish`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    followup: (id: string, data: any) =>
+      apiRequest<any>(`/events/${id}/followup`, {
         method: 'POST',
         body: JSON.stringify(data),
       }),
@@ -179,23 +287,33 @@ export const api = {
     
     updatePermissions: (id: string, permissions: Record<string, boolean>) =>
       apiRequest<any>(`/staff/${id}/permissions`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify(permissions),
       }),
   },
 
   // Communications
   communications: {
-    sendBulk: (data: {
-      memberIds: string[];
-      message: string;
-      channels: string[];
-    }) =>
-      apiRequest<any>('/communications/send-bulk', {
+    send: (data: any) =>
+      apiRequest<any>('/communications/send', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
+
+    schedule: (data: any) =>
+      apiRequest<any>('/communications/schedule', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    recipients: {
+      groups: () =>
+        apiRequest<any[]>('/recipients/groups'),
+
+      staff: () =>
+        apiRequest<any[]>('/recipients/staff'),
+    },
+
     // Drafts management
     getDrafts: () =>
       apiRequest<any[]>('/communications/drafts'),
@@ -235,8 +353,14 @@ export const api = {
       apiRequest<void>(`/communications/scheduled/${id}`, { method: 'DELETE' }),
   },
 
-  // Analytics & Reports
-  reports: {
+  // Analytics
+  analytics: {
+    attendanceSummary: () =>
+      apiRequest<any>('/analytics/attendance-summary'),
+
+    donationsSummary: () =>
+      apiRequest<any>('/analytics/donations-summary'),
+
     custom: (data: {
       dataSource: string;
       filters: any[];
@@ -246,19 +370,37 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
+
     getHistory: () =>
       apiRequest<any[]>('/analytics/history'),
   },
 
+  // Guests
+  guests: {
+    convert: (id: string, data: any) =>
+      apiRequest<any>(`/guests/${id}/convert`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
   // Settings & Custom Fields
   settings: {
+    get: () =>
+      apiRequest<any>('/settings'),
+
+    update: (data: any) =>
+      apiRequest<any>('/settings', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
     getSheets: () =>
       apiRequest<string[]>('/settings/sheets'),
-    
+
     getCustomFields: (sheet?: string) =>
       apiRequest<any[]>(`/settings/custom-fields${sheet ? `?sheet=${sheet}` : ''}`),
-    
+
     createCustomField: (data: {
       sheetName: string;
       fieldName: string;
@@ -269,7 +411,7 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
+
     updateCustomField: (id: string, data: any) =>
       apiRequest<any>(`/settings/custom-fields/${id}`, {
         method: 'PUT',
@@ -277,22 +419,32 @@ export const api = {
       }),
   },
 
+  // Schema
+  schema: {
+    members: () =>
+      apiRequest<any>('/schema/members'),
+  },
+
   // Families
   families: {
-    getAll: () =>
-      apiRequest<any[]>('/families'),
+    getAll: () => {
+      const timestamp = Date.now();
+      return apiRequest<{ success: boolean; data: any[]; total: number }>(`/families?_t=${timestamp}`);
+    },
     
-    getById: (id: string) =>
-      apiRequest<any>(`/families/${id}`),
+    getById: (id: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{ success: boolean; data: any }>(`/families/${id}?_t=${timestamp}`);
+    },
     
     create: (data: any) =>
-      apiRequest<any>('/families', {
+      apiRequest<{ success: boolean; data: any }>('/families', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     
     update: (id: string, data: any) =>
-      apiRequest<any>(`/families/${id}`, {
+      apiRequest<{ success: boolean; data: any }>(`/families/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
@@ -321,9 +473,18 @@ export const api = {
     deleteRole: (id: string) =>
       apiRequest<void>(`/volunteer-roles/${id}`, { method: 'DELETE' }),
     
+    getAll: (params?: URLSearchParams) =>
+      apiRequest<any[]>(`/volunteers${params ? `?${params}` : ''}`),
+
+    assign: (data: any) =>
+      apiRequest<any>('/volunteers/assign', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
     getAssignments: () =>
       apiRequest<any[]>('/volunteer-assignments'),
-    
+
     createAssignment: (data: {
       memberId: string;
       gatheringId: string;
@@ -345,22 +506,25 @@ export const api = {
   branches: {
     getAll: () =>
       apiRequest<any[]>('/branches'),
-    
+
     getById: (id: string) =>
       apiRequest<any>(`/branches/${id}`),
-    
+
+    getMembers: (id: string) =>
+      apiRequest<any[]>(`/branches/${id}/members`),
+
     create: (data: any) =>
       apiRequest<any>('/branches', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    
+
     update: (id: string, data: any) =>
       apiRequest<any>(`/branches/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
-    
+
     delete: (id: string) =>
       apiRequest<void>(`/branches/${id}`, { method: 'DELETE' }),
   },

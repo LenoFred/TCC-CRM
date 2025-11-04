@@ -157,12 +157,12 @@ const GroupsPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Groups & Departments</h1>
-            <p className="text-muted-foreground">Manage church groups, ministries, and departments</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Groups & Departments</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Manage church groups, ministries, and departments</p>
           </div>
           <Button 
             onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 w-full sm:w-auto"
           >
             <Plus className="w-4 h-4" />
             Add New Group
@@ -172,87 +172,66 @@ const GroupsPage = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Groups</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Groups</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{groups.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Active groups and departments
-              </p>
+              <div className="text-2xl font-bold text-foreground">{groups.length}</div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Departments</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Departments</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{groups.filter(g => g.type === 'Department').length}</div>
-              <p className="text-xs text-muted-foreground">
-                Church departments
-              </p>
+              <div className="text-2xl font-bold text-foreground">{groups.filter(g => g.type === 'Department').length}</div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Ministries</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Ministries</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{groups.filter(g => g.type === 'Ministry').length}</div>
-              <p className="text-xs text-muted-foreground">
-                Active ministries
-              </p>
+              <div className="text-2xl font-bold text-foreground">{groups.filter(g => g.type === 'Ministry').length}</div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Members</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Members</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{groups.reduce((acc, g) => acc + g.members.length, 0)}</div>
-              <p className="text-xs text-muted-foreground">
-                Across all groups
-              </p>
+              <div className="text-2xl font-bold text-foreground">{groups.reduce((acc, g) => acc + g.members.length, 0)}</div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-            <Input
-              placeholder="Search groups by name, type, or leader..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
         </div>
 
         {/* Groups List */}
         <Card>
           <CardHeader>
-            <CardTitle>Groups Directory</CardTitle>
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+              <CardTitle>Groups Directory</CardTitle>
+              <div className="relative flex-1 max-w-md w-full sm:w-auto">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input
+                  placeholder="Search groups by name, type, or leader..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {/* Desktop View */}
-            <div className="hidden md:block overflow-x-auto">
+            {/* Groups Table */}
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Group Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Leader</TableHead>
+                    <TableHead className="hidden lg:table-cell">Type</TableHead>
+                    <TableHead className="hidden xl:table-cell">Leader</TableHead>
                     <TableHead>Members</TableHead>
-                    <TableHead>Meeting</TableHead>
+                    <TableHead className="hidden lg:table-cell">Meeting</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -261,43 +240,29 @@ const GroupsPage = () => {
                   {filteredGroups.map((group) => (
                     <TableRow key={group.id}>
                       <TableCell className="font-medium">
-                        <div>
-                          <div className="font-semibold">{group.name}</div>
-                          {group.description && (
-                            <div className="text-sm text-muted-foreground truncate max-w-xs">
-                              {group.description}
-                            </div>
-                          )}
-                        </div>
+                        <div className="font-semibold">{group.name}</div>
+                        {group.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {group.description}
+                          </div>
+                        )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
                         <Badge className={getTypeColor(group.type)}>
                           {group.type}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{group.leader || 'No Leader'}</div>
-                          {group.leaderContact && (
-                            <div className="text-sm text-muted-foreground">{group.leaderContact}</div>
-                          )}
-                        </div>
+                      <TableCell className="hidden xl:table-cell">
+                        {group.leader || 'No Leader'}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Users className="w-4 h-4 text-muted-foreground" />
-                          <span>{group.members.length}</span>
-                        </div>
+                        <Badge variant="outline">
+                          <Users className="h-3 w-3 mr-1" />
+                          {group.members.length}
+                        </Badge>
                       </TableCell>
-                      <TableCell>
-                        {group.location ? (
-                          <div className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm">{group.location}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">Not set</span>
-                        )}
+                      <TableCell className="hidden lg:table-cell">
+                        {group.location || 'Not set'}
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(group.status)}>
@@ -334,79 +299,6 @@ const GroupsPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            </div>
-
-            {/* Mobile View */}
-            <div className="grid grid-cols-1 gap-4 md:hidden">
-              {filteredGroups.map((group) => (
-                <div key={group.id} className="p-4 rounded-lg border bg-card">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold">{group.name}</h3>
-                      {group.description && (
-                        <p className="text-sm text-muted-foreground">{group.description}</p>
-                      )}
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover border border-border">
-                        <DropdownMenuItem onClick={() => handleViewProfile(group)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View Profile
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEditGroup(group)}>
-                          <Edit2 className="mr-2 h-4 w-4" />
-                          Edit Group
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => handleDeleteGroup(group)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Group
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <div>
-                      <Badge className={getTypeColor(group.type)}>
-                        {group.type}
-                      </Badge>
-                    </div>
-                    <div>
-                      <Badge className={getStatusColor(group.status)}>
-                        {group.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="mt-3 space-y-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      <span>Members: {group.members.length}</span>
-                    </div>
-                    {group.leader && (
-                      <div className="flex flex-col">
-                        <span className="text-muted-foreground">Leader:</span>
-                        <span>{group.leader}</span>
-                        {group.leaderContact && (
-                          <span className="text-muted-foreground text-xs">{group.leaderContact}</span>
-                        )}
-                      </div>
-                    )}
-                    {group.location && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span>{group.location}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>

@@ -1,3 +1,18 @@
+# ===================================
+# Frontend (codes/) .gitignore
+# ===================================
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build Output
+dist
+dist-ssr
+build
+out
+*.local
+
 # Logs
 logs
 *.log
@@ -7,10 +22,12 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +39,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Testing
+coverage
+.nyc_output
+
+# Cache
+.cache
+.parcel-cache
+.vite
+.eslintcache
+
+# Temporary
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+.DS_Store
