@@ -1,133 +1,128 @@
 # TCC CRM System
 
-A comprehensive CRM for managing church members, families, events, donations, etc., with Google Sheets integration.
+Church relationship management system with Google Sheets integration for member management, attendance tracking, donations, and communications.
 
 ## Features
 
-- **Dashboard**: Overview of key metrics and recent activities
-- **Members**: Manage church member profiles and information
-- **Families**: Group members into family units
-- **Attendance**: Track attendance for events and gatherings
-- **Communications**: Send messages and manage communications
-- **Donations**: Record and verify financial contributions
-- **Volunteers**: Manage volunteer roles and assignments
-- **Staff**: Handle staff information and permissions
-- **Branches**: Manage different church branches
-- **Analytics**: Generate reports and insights
-- **Settings**: Configure system preferences
+- Member and family management with custom fields
+- Event and attendance tracking with digital check-in
+- Donation recording and verification workflow
+- Guest registration and conversion tracking
+- Volunteer role management and scheduling
+- Staff permissions and access control
+- Multi-branch support
+- Communications hub (SMS, Email, WhatsApp)
+- Analytics and reporting
+- Progressive Web App with offline support
+
+## Technology Stack
+
+### Frontend
+- React 18 with TypeScript
+- Vite build tool
+- Tailwind CSS + shadcn/ui components
+- React Router for navigation
+- Service Worker for offline support
+
+### Backend
+- Node.js with Express
+- Google Sheets API for data storage
+- JWT authentication
+- Winston logging
+- Zod validation
 
 ## Prerequisites
 
-- Node.js (version 16 or higher)
-- npm (comes with Node.js)
-- Google Cloud Service Account with Google Sheets API enabled
+- Node.js 18 or higher
+- npm or yarn package manager
+- Google Cloud Service Account with Sheets API enabled
+- Google Sheet configured as database
 
-## Installation
+## Quick Start
 
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd tcc-crm
+1. Clone repository:
+   ```bash
+   git clone https://github.com/LenoFred/TCC-CRM.git
+   cd TCC-CRM/Codebase
    ```
 
-2. Install backend dependencies:
-   ```
-   cd backend
+2. Install dependencies:
+   ```bash
+   # Backend
+   cd codes/backend
+   npm install
+   
+   # Frontend
+   cd ../
    npm install
    ```
 
-3. Install frontend dependencies:
-   ```
-   cd ../codes
-   npm install
+3. Configure environment:
+   ```bash
+   # Backend
+   cd codes/backend
+   cp .env.example .env
+   # Edit .env with your Google Sheet ID and credentials
+   
+   # Frontend (optional)
+   cd ../
+   echo "VITE_API_BASE_URL=http://localhost:3001" > .env
    ```
 
-## Configuration
+4. Add Google service account credentials:
+   ```bash
+   # Place credentials.json in codes/backend/
+   cp /path/to/credentials.json codes/backend/credentials.json
+   ```
 
-1. Copy the Google service account credentials file to the backend directory:
-   ```
-   cp tcc-crm-backend-121789771aad.json backend/credentials.json
+5. Start servers:
+   ```bash
+   # Terminal 1 - Backend
+   cd codes/backend
+   npm start
+   
+   # Terminal 2 - Frontend
+   cd codes
+   npm run dev
    ```
 
-2. Update the backend environment file (`backend/.env`):
-   ```
-   GOOGLE_SHEET_ID=your_google_sheet_id_here
-   ```
-   Replace `your_google_sheet_id_here` with the actual ID of your Google Sheet (e.g., `1XCqJk2XBPcPjXFo1nN-h4tWMLLOrAJnajfT63rQ3iDs`).
-
-3. (Optional) Update the frontend environment file (`codes/.env`) if needed:
-   ```
-   VITE_API_BASE_URL=http://localhost:3001
-   ```
+6. Access application:
+   - Frontend: http://localhost:5173
+   - Backend API: http://localhost:3001
 
 ## Google Sheets Setup
 
-1. Create a new Google Sheet or use an existing one.
+Create a Google Sheet and share it with your service account email (found in credentials.json). Grant "Editor" access.
 
-2. Share the Google Sheet with the service account email:
-   ```
-   tcc-crm-service@tcc-crm-backend.iam.gserviceaccount.com
-   ```
-   Grant "Editor" access to the service account.
+### Required Sheet Tabs
 
-3. Ensure the Google Sheet has the following tabs (sheets) with the specified column structures:
+Create tabs with these exact column headers:
 
-   ### Members
-   - MemberID (PK): String, Required, Unique
-   - FirstName: String, Required
-   - LastName: String, Required
-   - PhoneNumber: String, Unique (if provided)
-   - Email: String, Unique (if provided)
-   - DOB: Date (YYYY-MM-DD format)
-   - Gender: String (e.g., Male, Female, Other)
-   - Address: String
-   - FamilyID (FK): String -> Families.FamilyID
-   - MemberStatus: String, Required (e.g., Active, Inactive, Child, Guest)
-   - (Custom Fields): Varies
+**Members**: MemberID, FirstName, MiddleName, LastName, Email, Phone, DateOfBirth, Gender, MaritalStatus, Address, City, State, Country, PostalCode, JoinDate, BaptismDate, MembershipStatus, FamilyID, EmergencyContactName, EmergencyContactPhone, Notes, CustomField1-5, CreatedAt, UpdatedAt
 
-   ### Families
-   - FamilyID (PK): String, Required, Unique
-   - FamilyName: String, Required
+**Families**: FamilyID, FamilyName, Address, City, State, Country, PostalCode, HomePhone, Notes, CreatedAt, UpdatedAt
 
-   ### Groups
-   - GroupID (PK): String, Required, Unique
-   - GroupName: String, Required
-   - GroupType: String, Required (e.g., Department, Fellowship, Cell)
-   - LeaderMemberID (FK): String -> Members.MemberID
+**Groups**: GroupID, GroupName, GroupType, Description, LeaderID, MeetingDay, MeetingTime, Location, IsActive, CreatedAt, UpdatedAt
 
-   ### GroupMembers
-   - GroupMemberID (PK): String, Required, Unique
-   - MemberID (FK): String -> Members.MemberID
-   - GroupID (FK): String -> Groups.GroupID
+**GroupMembers**: GroupMemberID, MemberID, GroupID, JoinDate, Role, IsActive, CreatedAt, UpdatedAt
 
-   ### Events
-   - EventID (PK): String, Required, Unique
-   - EventName: String, Required
-   - EventType: String, Required (e.g., Weekly Service, Annual Program)
+**Events**: EventID, EventName, EventType, EventDate, StartTime, EndTime, Location, Description, IsRecurring, RecurrencePattern, CreatedBy, CreatedAt, UpdatedAt
 
-   ### Gatherings
-   - GatheringID (PK): String, Required, Unique
-   - GatheringName: String, Required
-   - GatheringType: String, Required (EVENT or GROUP)
-   - ParentID (FK): String, Required (ID from Events or Groups)
-   - GatheringDate: DateTime, Required
+**Gatherings**: GatheringID, EventID, GatheringDate, StartTime, EndTime, Location, ActualAttendance, Notes, CreatedAt, UpdatedAt
 
-   ### Attendance
-   - AttendanceID (PK): String, Required, Unique
-   - MemberID (FK): String -> Members.MemberID
-   - GatheringID (FK): String -> Gatherings.GatheringID
+**Attendance**: AttendanceID, GatheringID, MemberID, AttendanceStatus, AttendanceMethod, CheckInTime, Notes, CreatedAt
 
-   ### Donations
-   - DonationID (PK): String, Required, Unique
-   - MemberID (FK): String -> Members.MemberID (can be blank for guests)
-   - Amount: Number, Required
-   - DonationDate: Date, Required
-   - Fund: String, Required (e.g., Tithe, Building Fund)
-   - Notes: String
+**Donations**: DonationID, MemberID, DonationDate, Amount, Currency, DonationType, PaymentMethod, ReferenceNumber, Notes, VerifiedBy, VerificationDate, VerificationStatus, CreatedAt, UpdatedAt
 
-   ### VolunteerRoles
-   - RoleID (PK): String, Required, Unique
-   - RoleName: String, Required, Unique
+**VolunteerRoles**: RoleID, RoleName, Department, Description, RequiredSkills, IsActive, CreatedAt, UpdatedAt
+
+**VolunteerAssignments**: AssignmentID, MemberID, RoleID, EventID, AssignmentDate, StartTime, EndTime, Status, Notes, CreatedAt, UpdatedAt
+
+**SupportRequests**: RequestID, MemberID, RequestType, RequestDate, Description, Priority, Status, AssignedTo, ResolutionDate, ResolutionNotes, CreatedAt, UpdatedAt
+
+**Staff**: StaffID, FirstName, LastName, Email, Phone, Position, Department, HireDate, Username, Password, IsActive, CreatedAt, UpdatedAt
+
+**StaffPermissions**: PermissionID, StaffID, Module, CanView, CanCreate, CanEdit, CanDelete, CanExport, CreatedAt, UpdatedAt
    - Description: String
 
    ### VolunteerAssignments
@@ -162,134 +157,134 @@ A comprehensive CRM for managing church members, families, events, donations, et
 
 ## Running the Application
 
-1. Start the backend server:
-   ```
-   cd backend
-   npm start
-   ```
-   The backend will run on http://localhost:3001
+## Running the Application
 
-2. Start the frontend development server:
-   ```
-   cd codes
-   npm run dev
-   ```
-   The frontend will run on http://localhost:8080
+Start backend and frontend servers in separate terminals:
 
-3. Open your browser and navigate to http://localhost:8080
+```bash
+# Terminal 1 - Backend (http://localhost:3001)
+cd codes/backend
+npm start
 
-## API Documentation
+# Terminal 2 - Frontend (http://localhost:5173)
+cd codes
+npm run dev
+```
 
-The backend provides the following API endpoints:
+Access the application at http://localhost:5173
+
+## API Endpoints
 
 ### Health Check
-- `GET /api/health` - Check if the backend is running
+- `GET /api/health` - Server status check
 
 ### Members
-- `GET /api/members` - Get all members (with pagination and search)
-- `GET /api/members/:id` - Get a specific member
-- `POST /api/members` - Create a new member
-- `PATCH /api/members/:id` - Update a member
+- `GET /api/members` - List all members (supports pagination and search)
+- `GET /api/members/:id` - Get member details
+- `POST /api/members` - Create member
+- `PATCH /api/members/:id` - Update member
 
 ### Families
-- `GET /api/families` - Get all families
-- `GET /api/families/:id` - Get a specific family
-- `POST /api/families` - Create a new family
+- `GET /api/families` - List all families
+- `GET /api/families/:id` - Get family details
+- `POST /api/families` - Create family
 
 ### Events
-- `GET /api/events` - Get all events
-- `GET /api/events/:id/attendance` - Get attendance for a specific event
-- `POST /api/events/:id/checkin` - Check in a member for an event
-- `POST /api/events/:id/finish` - Mark an event as finished
+- `GET /api/events` - List all events
+- `GET /api/events/:id/attendance` - Get event attendance
+- `POST /api/events/:id/checkin` - Check in member
+- `POST /api/events/:id/finish` - Mark event complete
 
 ### Attendance
-- `GET /api/attendance` - Get all attendance records
-- `POST /api/attendance` - Create a new attendance record
+- `GET /api/attendance` - List attendance records
+- `POST /api/attendance` - Record attendance
 
 ### Communications
-- `POST /api/communications/send` - Send a message
-- `POST /api/communications/schedule` - Schedule a message
+- `POST /api/communications/send` - Send message immediately
+- `POST /api/communications/schedule` - Schedule message
 
 ### Donations
-- `GET /api/donations` - Get all donations
-- `POST /api/donations/:id/verify` - Verify a donation
-- `PATCH /api/donations/:id` - Update a donation
+- `GET /api/donations` - List donations
+- `POST /api/donations/:id/verify` - Verify donation
+- `PATCH /api/donations/:id` - Update donation
 
 ### Volunteers
-- `GET /api/volunteers` - Get all volunteers
-- `POST /api/volunteers/assign` - Assign a volunteer
+- `GET /api/volunteers` - List volunteers
+- `POST /api/volunteers/assign` - Assign volunteer to role
 
 ### Staff
-- `GET /api/staff` - Get all staff
-- `GET /api/staff/:id/permissions` - Get permissions for a staff member
-- `PATCH /api/staff/:id/permissions` - Update staff permissions
+- `GET /api/staff` - List staff members
+- `GET /api/staff/:id/permissions` - Get staff permissions
+- `PATCH /api/staff/:id/permissions` - Update permissions
 
 ### Branches
-- `GET /api/branches` - Get all branches
-- `GET /api/branches/:id/members` - Get members for a specific branch
+- `GET /api/branches` - List all branches
+- `GET /api/branches/:id/members` - Get branch members
 
 ### Settings
-- `GET /api/settings` - Get system settings
-- `PATCH /api/settings` - Update system settings
+- `GET /api/settings` - Get system configuration
+- `PATCH /api/settings` - Update settings
 
 ### Analytics
-- `GET /api/analytics/attendance-summary` - Get attendance summary
-- `GET /api/analytics/donations-summary` - Get donations summary
+- `GET /api/analytics/attendance-summary` - Attendance metrics
+- `GET /api/analytics/donations-summary` - Donation metrics
 
 ### Schema
-- `GET /api/schema/members` - Get members schema
+- `GET /api/schema/members` - Get member field schema
 
 ### Guests
-- `GET /api/guests/:id/convert` - Check if guest can be converted
+- `GET /api/guests/:id/convert` - Check conversion eligibility
 - `POST /api/guests/:id/convert` - Convert guest to member
 
 ## Testing
 
-1. **CRUD Operations Testing:**
-   - Use tools like Postman or curl to test API endpoints
-   - Create, read, update, and delete records for members, families, etc.
-   - Verify that changes are reflected in the Google Sheet
+Test API endpoints using Postman or curl. Verify operations:
+- Create, read, update, delete records across all modules
+- Check Google Sheets reflects changes correctly
+- Test pagination, search, and filtering
+- Validate error handling and edge cases
 
-2. **Sheets Sync Verification:**
-   - After performing operations via the API, check the Google Sheet to ensure data is updated correctly
-   - Test with different data types and edge cases
-
-3. **Frontend Testing:**
-   - Navigate through different pages in the application
-   - Test form submissions and data display
-   - Verify that API calls are working correctly
+Frontend testing:
+- Navigate all pages and features
+- Submit forms and verify data persistence
+- Test offline mode and PWA functionality
+- Verify responsive design across devices
 
 ## Deployment
 
-1. **Backend Deployment:**
-   - Deploy the backend to a server (e.g., Heroku, AWS, DigitalOcean)
-   - Ensure environment variables are set correctly
-   - Update CORS settings for production domain
+**Backend:**
+1. Deploy to hosting service (Heroku, AWS, DigitalOcean, Azure)
+2. Set environment variables (GOOGLE_SHEET_ID, credentials)
+3. Configure CORS for production domain
+4. Ensure service account has sheet access
 
-2. **Frontend Deployment:**
-   - Build the frontend: `npm run build`
-   - Deploy the `dist` folder to a static hosting service (e.g., Netlify, Vercel, GitHub Pages)
-
-3. **Google Sheets Access:**
-   - Ensure the service account has access to the production Google Sheet
-   - Update the GOOGLE_SHEET_ID in production environment
+**Frontend:**
+1. Build production bundle: `npm run build`
+2. Deploy dist folder to static host (Netlify, Vercel, GitHub Pages)
+3. Update VITE_API_BASE_URL to production backend URL
+4. Configure PWA settings for production
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Make your changes and commit: `git commit -m 'Add some feature'`
-4. Push to the branch: `git push origin feature/your-feature-name`
-5. Open a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. Fork repository
+2. Create feature branch: `git checkout -b feature/your-feature`
+3. Commit changes: `git commit -m 'Add feature'`
+4. Push branch: `git push origin feature/your-feature`
+5. Open pull request
 
 ## Troubleshooting
 
-- **Backend not starting:** Check if port 3001 is available and credentials.json is in the backend directory
-- **Google Sheets not updating:** Verify that the service account email has editor access to the sheet and the sheet ID is correct
-- **Frontend not loading:** Ensure the backend is running and the API_BASE_URL is set correctly
-- **CORS errors:** Update the CORS configuration in the backend for your frontend domain
-- **Authentication issues:** Double-check the credentials.json file and ensure the Google Cloud project has Sheets API enabled
+**Backend issues:**
+- Port 3001 already in use: Change PORT in .env
+- Credentials error: Verify credentials.json exists and is valid
+- Google Sheets not updating: Check service account has Editor access and correct sheet ID
+
+**Frontend issues:**
+- Cannot connect to API: Verify backend is running and VITE_API_BASE_URL is correct
+- CORS errors: Update backend CORS configuration with frontend URL
+- Build fails: Clear node_modules and reinstall dependencies
+
+**Google Sheets issues:**
+- Permission denied: Share sheet with service account email from credentials.json
+- API not enabled: Enable Google Sheets API in Cloud Console project
+- Rate limits: Implement caching and reduce API calls
