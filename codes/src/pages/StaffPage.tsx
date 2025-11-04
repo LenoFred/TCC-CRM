@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { Users, Shield, Settings, UserPlus, Eye, Edit2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Shield, Settings, UserPlus, Eye, Edit2, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -14,65 +17,37 @@ import {
 } from "@/components/ui/table";
 import { AddEditStaffModal } from "@/components/AddEditStaffModal";
 import { StaffProfileModal } from "@/components/StaffProfileModal";
+import { useToast } from "@/hooks/use-toast";
 
 const StaffPage = () => {
+  const { toast } = useToast();
   const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [isEditStaffModalOpen, setIsEditStaffModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<any>(null);
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [isLoadingStaff, setIsLoadingStaff] = useState(true);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [staffError, setStaffError] = useState(null);
 
-  // Mock data
-  const [staffMembers, setStaffMembers] = useState([
-    {
-      id: 1,
-      name: "Pastor John Smith",
-      email: "pastor.john@unitychurch.com",
-      role: "Senior Pastor",
-      status: "Active",
-      lastLogin: "2024-08-30",
-      permissionCount: 12,
-      phone: "+1 234-567-8900",
-      jobTitle: "Senior Pastor",
-      appointmentDate: "2010-01-15"
-    },
-    {
-      id: 2,
-      name: "Sarah Johnson",
-      email: "sarah.j@unitychurch.com",
-      role: "Administrative Assistant",
-      status: "Active",
-      lastLogin: "2024-08-30",
-      permissionCount: 8,
-      phone: "+1 234-567-8901",
-      jobTitle: "Administrative Assistant",
-      appointmentDate: "2015-06-20"
-    },
-    {
-      id: 3,
-      name: "Michael Brown",
-      email: "michael.b@unitychurch.com",
-      role: "Youth Pastor",
-      status: "Active",
-      lastLogin: "2024-08-29",
-      permissionCount: 6,
-      phone: "+1 234-567-8902",
-      jobTitle: "Youth Pastor",
-      appointmentDate: "2018-03-10"
-    },
-    {
-      id: 4,
-      name: "Lisa Davis",
-      email: "lisa.d@unitychurch.com",
-      role: "Worship Leader",
-      status: "Active",
-      lastLogin: "2024-08-28",
-      permissionCount: 4,
-      phone: "+1 234-567-8903",
-      jobTitle: "Worship Leader",
-      appointmentDate: "2020-09-01"
+  const fetchStaff = async () => {
+    setIsLoadingStaff(true);
+    setStaffError(null);
+    try {
+      const data = await api.staff.getAll();
+      setStaffMembers(data);
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+      setStaffError(error.message || 'Failed to load staff members');
+    } finally {
+      setIsLoadingStaff(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    fetchStaff();
+  }, []);
 
   const availablePermissions = [
     { key: "can_view_members", label: "View Members", description: "Can view member profiles and information" },
@@ -89,14 +64,51 @@ const StaffPage = () => {
     { key: "can_manage_events", label: "Manage Events", description: "Can create and manage church events" }
   ];
 
-  const handleAddStaff = (staffData: any) => {
-    setStaffMembers([...staffMembers, staffData]);
+  const handleAddStaff = async (staffData: any) => {
+    setIsSavingStaff(true);
+    try {
+      const newStaff = await api.staff.create(staffData);
+      setStaffMembers([...staffMembers, newStaff]);
+      toast({
+        title: "Staff Member Added",
+        description: `${newStaff.name} has been successfully added`,
+      });
+      setIsAddStaffModalOpen(false);
+    } catch (error) {
+      console.error('Error adding staff:', error);
+      toast({
+        title: "Failed to Add Staff",
+        description: "Please try again or contact support if the issue persists",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingStaff(false);
+    }
   };
 
-  const handleEditStaff = (staffData: any) => {
-    setStaffMembers(staffMembers.map(staff => 
-      staff.id === staffData.id ? staffData : staff
-    ));
+  const handleEditStaff = async (staffData: any) => {
+    setIsSavingStaff(true);
+    try {
+      await api.staff.update(staffData.id, staffData);
+      setStaffMembers(staffMembers.map(staff =>
+        staff.id === staffData.id ? staffData : staff
+      ));
+      toast({
+        title: "Staff Member Updated",
+        description: `${staffData.name}'s profile has been successfully updated`,
+      });
+      setIsEditStaffModalOpen(false);
+      setEditingStaff(null);
+    } catch (error) {
+      console.error('Error updating staff:', error);
+      toast({
+        title: "Failed to Update Staff",
+        description: "Please try again or contact support if the issue persists",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingStaff(false);
+    }
   };
 
   const openProfileModal = (staff: any) => {
@@ -113,12 +125,12 @@ const StaffPage = () => {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Staff Management</h1>
-            <p className="text-muted-foreground">Manage staff accounts and permissions</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Staff Management</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Manage staff accounts and permissions</p>
           </div>
-          <Button className="gap-2" onClick={() => setIsAddStaffModalOpen(true)}>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setIsAddStaffModalOpen(true)} disabled={isLoadingStaff}>
             <UserPlus className="h-4 w-4" />
             Add Staff Member
           </Button>
@@ -131,7 +143,11 @@ const StaffPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Staff</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{staffMembers.length}</div>
+              {isLoadingStaff ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{staffMembers.length}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -139,7 +155,11 @@ const StaffPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Staff</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{staffMembers.filter(s => s.status === 'Active').length}</div>
+              {isLoadingStaff ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{staffMembers.filter(s => s.status === 'Active').length}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -147,7 +167,11 @@ const StaffPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Logged In Today</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">2</div>
+              {isLoadingStaff ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">2</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -169,59 +193,92 @@ const StaffPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
+                    <TableHead className="hidden md:table-cell">Email</TableHead>
+                    <TableHead className="hidden lg:table-cell">Role</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Last Login</TableHead>
-                    <TableHead>Permissions</TableHead>
+                    <TableHead className="hidden xl:table-cell">Last Login</TableHead>
+                    <TableHead className="hidden lg:table-cell">Permissions</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {staffMembers.map((staff) => (
-                    <TableRow key={staff.id}>
-                      <TableCell className="font-medium">{staff.name}</TableCell>
-                      <TableCell>{staff.email}</TableCell>
-                      <TableCell>{staff.role}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline"
-                          className="bg-green-100 text-green-800 border-green-200"
-                        >
-                          {staff.status}
-                        </Badge>
+                  {isLoadingStaff ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-48" /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-6 w-20" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-8 w-16" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : staffError ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Alert variant="destructive" className="max-w-md mx-auto">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Staff Error</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between">
+                            <span>{staffError}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={fetchStaff}
+                              disabled={isLoadingStaff}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Retry
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
                       </TableCell>
-                      <TableCell>{staff.lastLogin}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {staff.permissionCount} permissions
-                        </Badge>
+                    </TableRow>
+                  ) : staffMembers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        No staff members found
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-1 justify-end">
-                          <Button 
-                            variant="ghost" 
+                    </TableRow>
+                  ) : (
+                    staffMembers.map((staff) => (
+                      <TableRow key={staff.id}>
+                        <TableCell className="font-medium">{staff.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{staff.email}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{staff.role}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className="bg-green-100 text-green-800 border-green-200"
+                          >
+                            {staff.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">{staff.lastLogin}</TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <Badge variant="secondary">
+                            {staff.permissionCount}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => openProfileModal(staff)}
+                            disabled={isSavingStaff}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => openEditModal(staff)}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>

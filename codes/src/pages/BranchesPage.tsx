@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { Search, Plus, MapPin, Users, Activity, Eye, Edit2, Building2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Plus, MapPin, Users, Activity, Eye, Edit2, Building2, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -54,56 +57,28 @@ const BranchesPage = () => {
     email: "",
   });
 
-  const [branches, setBranches] = useState<Branch[]>([
-    {
-      id: 1,
-      name: "TCC - Main Campus",
-      location: "Downtown",
-      address: "123 Main Street, City Center",
-      pastor: "Pastor John Smith",
-      memberCount: 450,
-      status: "Active",
-      establishedDate: "1985-01-15",
-      phone: "+1 234-567-8900",
-      email: "main@tccchurch.com"
-    },
-    {
-      id: 2,
-      name: "TCC - North Branch",
-      location: "North District",
-      address: "456 North Avenue, North City",
-      pastor: "Pastor Sarah Johnson",
-      memberCount: 280,
-      status: "Active",
-      establishedDate: "2010-06-20",
-      phone: "+1 234-567-8901",
-      email: "north@tccchurch.com"
-    },
-    {
-      id: 3,
-      name: "TCC - South Branch",
-      location: "South District",
-      address: "789 South Road, South City",
-      pastor: "Pastor Michael Brown",
-      memberCount: 320,
-      status: "Active",
-      establishedDate: "2008-03-10",
-      phone: "+1 234-567-8902",
-      email: "south@tccchurch.com"
-    },
-    {
-      id: 4,
-      name: "TCC - East Campus",
-      location: "East District",
-      address: "321 East Street, East City",
-      pastor: "Pastor Lisa Davis",
-      memberCount: 180,
-      status: "Developing",
-      establishedDate: "2020-01-01",
-      phone: "+1 234-567-8903",
-      email: "east@unitychurch.com"
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [isLoadingBranches, setIsLoadingBranches] = useState(true);
+  const [isAddingBranch, setIsAddingBranch] = useState(false);
+  const [branchesError, setBranchesError] = useState(null);
+
+  const fetchBranches = async () => {
+    setIsLoadingBranches(true);
+    setBranchesError(null);
+    try {
+      const data = await api.branches.getAll();
+      setBranches(data);
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+      setBranchesError(error.message || 'Failed to load branches');
+    } finally {
+      setIsLoadingBranches(false);
     }
-  ]);
+  };
+
+  useEffect(() => {
+    fetchBranches();
+  }, []);
 
   const filteredBranches = branches.filter(branch =>
     branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -133,7 +108,7 @@ const BranchesPage = () => {
     });
   };
 
-  const handleAddBranch = () => {
+  const handleAddBranch = async () => {
     if (!newBranchData.name || !newBranchData.location || !newBranchData.pastor) {
       toast({
         title: "Validation Error",
@@ -143,30 +118,41 @@ const BranchesPage = () => {
       return;
     }
 
-    const newBranch: Branch = {
-      id: Date.now(),
-      ...newBranchData,
-      memberCount: 0,
-      status: "Developing",
-      establishedDate: new Date().toISOString().split('T')[0],
-    };
+    setIsAddingBranch(true);
+    try {
+      const newBranch = await api.branches.create({
+        ...newBranchData,
+        memberCount: 0,
+        status: "Developing",
+        establishedDate: new Date().toISOString().split('T')[0],
+      });
 
-    setBranches([...branches, newBranch]);
-    
-    toast({
-      title: "Branch Added",
-      description: `${newBranchData.name} has been added successfully.`,
-    });
+      setBranches([...branches, newBranch]);
 
-    setNewBranchData({
-      name: "",
-      location: "",
-      address: "",
-      pastor: "",
-      phone: "",
-      email: "",
-    });
-    setIsAddModalOpen(false);
+      toast({
+        title: "Branch Added",
+        description: `${newBranchData.name} has been added successfully.`,
+      });
+
+      setNewBranchData({
+        name: "",
+        location: "",
+        address: "",
+        pastor: "",
+        phone: "",
+        email: "",
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error('Error adding branch:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add branch",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingBranch(false);
+    }
   };
 
   const handleViewBranch = (branch: Branch) => {
@@ -178,19 +164,19 @@ const BranchesPage = () => {
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Branches</h1>
-            <p className="text-muted-foreground">Manage church branches and switch dashboard contexts</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Branches</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Manage church branches and switch dashboard contexts</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleViewAllBranches}>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={handleViewAllBranches} className="flex-1 sm:flex-none">
               <Activity className="h-4 w-4 mr-2" />
-              View All Branches
+              View All
             </Button>
-            <Button className="gap-2" onClick={() => setIsAddModalOpen(true)}>
+            <Button className="gap-2 flex-1 sm:flex-none" onClick={() => setIsAddModalOpen(true)} disabled={isLoadingBranches}>
               <Plus className="h-4 w-4" />
-              Add New Branch
+              Add Branch
             </Button>
           </div>
         </div>
@@ -202,7 +188,11 @@ const BranchesPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Branches</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{branches.length}</div>
+              {isLoadingBranches ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{branches.length}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -210,7 +200,11 @@ const BranchesPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Branches</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{activeBranches}</div>
+              {isLoadingBranches ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{activeBranches}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -218,7 +212,11 @@ const BranchesPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Members</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{totalMembers}</div>
+              {isLoadingBranches ? (
+                <Skeleton className="h-8 w-12" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{totalMembers}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -226,9 +224,13 @@ const BranchesPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Average per Branch</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {branches.length > 0 ? Math.round(totalMembers / branches.length) : 0}
-              </div>
+              {isLoadingBranches ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">
+                  {branches.length > 0 ? Math.round(totalMembers / branches.length) : 0}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -245,7 +247,7 @@ const BranchesPage = () => {
             <div className="flex items-center gap-4">
               <div className="flex-1">
                 <Label htmlFor="branch-select">Current Dashboard View</Label>
-                <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+                <Select value={selectedBranch} onValueChange={setSelectedBranch} disabled={isLoadingBranches}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select branch to view" />
                   </SelectTrigger>
@@ -283,68 +285,97 @@ const BranchesPage = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
+                  disabled={isLoadingBranches}
                 />
               </div>
             </div>
           </CardHeader>
           <CardContent>
             {/* Branches Table */}
-            <div className="rounded-md border">
+            <div className="rounded-md border overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Branch Name</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Pastor</TableHead>
+                    <TableHead className="hidden md:table-cell">Location</TableHead>
+                    <TableHead className="hidden lg:table-cell">Pastor</TableHead>
                     <TableHead>Members</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Established</TableHead>
+                    <TableHead className="hidden xl:table-cell">Established</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBranches.map((branch) => (
-                    <TableRow key={branch.id} className="cursor-pointer hover:bg-muted/50">
-                      <TableCell className="font-medium">{branch.name}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground" />
-                          {branch.location}
-                        </div>
+                  {isLoadingBranches ? (
+                    Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-8 w-16" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : branchesError ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Alert variant="destructive" className="max-w-md mx-auto">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertTitle>Branches Error</AlertTitle>
+                          <AlertDescription className="flex items-center justify-between">
+                            <span>{branchesError}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={fetchBranches}
+                              disabled={isLoadingBranches}
+                            >
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Retry
+                            </Button>
+                          </AlertDescription>
+                        </Alert>
                       </TableCell>
-                      <TableCell>{branch.pastor}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          <Users className="h-3 w-3 mr-1" />
-                          {branch.memberCount}
-                        </Badge>
+                    </TableRow>
+                  ) : filteredBranches.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        {searchTerm ? 'No branches found matching your search.' : 'No branches found.'}
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={branch.status === 'Active' ? 'default' : 'secondary'}>
-                          {branch.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{branch.establishedDate}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-1 justify-end">
-                          <Button 
-                            variant="ghost" 
+                    </TableRow>
+                  ) : (
+                    filteredBranches.map((branch) => (
+                      <TableRow key={branch.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableCell className="font-medium">{branch.name}</TableCell>
+                        <TableCell className="hidden md:table-cell">{branch.location}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{branch.pastor}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            <Users className="h-3 w-3 mr-1" />
+                            {branch.memberCount}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={branch.status === 'Active' ? 'default' : 'secondary'}>
+                            {branch.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">{branch.establishedDate}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => handleViewBranch(branch)}
+                            disabled={isAddingBranch}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleSwitchToBranch(branch.id)}
-                          >
-                            <Activity className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -426,8 +457,8 @@ const BranchesPage = () => {
             <Button variant="outline" onClick={() => setIsAddModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddBranch}>
-              Add Branch
+            <Button onClick={handleAddBranch} disabled={isAddingBranch}>
+              {isAddingBranch ? "Adding..." : "Add Branch"}
             </Button>
           </DialogFooter>
         </DialogContent>

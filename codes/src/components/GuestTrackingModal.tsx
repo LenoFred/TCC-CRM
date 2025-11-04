@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, Phone, Mail, Calendar, Clock, Send } from "lucide-react";
+import { Users, UserPlus, Phone, Mail, Calendar, Clock, Send, AlertCircle, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +10,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -20,9 +22,25 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Guest, GuestTrackingService } from "@/utils/guestTracking";
+import { useGuestRegistration, useGuests } from "@/hooks/useBusinessLogic";
 import { SendFollowUpModal } from "@/components/SendFollowUpModal";
 import { AddEditMemberModal } from "@/components/AddEditMemberModal";
+
+// Guest interface
+interface Guest {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  firstVisit: string;
+  lastVisit: string;
+  visitCount: number;
+  status: string;
+  source?: string;
+  followUpStatus: string;
+  assignedTo?: string;
+  notes?: string;
+}
 
 interface GuestTrackingModalProps {
   isOpen: boolean;
@@ -38,74 +56,91 @@ export const GuestTrackingModal = ({
   eventName 
 }: GuestTrackingModalProps) => {
   const { toast } = useToast();
+  
+  // Use business logic hooks
+  const { convertToMember, loading: convertLoading, error: convertError } = useGuestRegistration();
+  const { fetchGuests, fetchStats, guests: guestList, stats, loading, error } = useGuests();
+  
   const [guests, setGuests] = useState<Guest[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedGuest, setSelectedGuest] = useState<Guest | null>(null);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [activeTab, setActiveTab] = useState("guests");
 
-  // Mock data for demonstration
-  const mockGuests: Guest[] = [
-    {
-      id: "guest_1",
-      name: "Alice Johnson",
-      phone: "+1234567890",
-      email: "alice@example.com",
-      firstVisit: "2024-08-25T10:00:00Z",
-      lastVisit: "2024-08-31T10:00:00Z",
-      visitCount: 2,
-      status: "Returning",
-      source: "Invitation",
-      followUpStatus: "Pending",
-      assignedTo: "staff_1",
-      notes: "Interested in youth programs"
-    },
-    {
-      id: "guest_2", 
-      name: "Bob Smith",
-      phone: "+1234567891",
-      firstVisit: "2024-08-31T10:00:00Z",
-      lastVisit: "2024-08-31T10:00:00Z",
-      visitCount: 1,
-      status: "New",
-      source: "Walk-in",
-      followUpStatus: "Pending",
-      notes: "First time visitor, showed interest in community service"
-    },
-    {
-      id: "guest_3",
-      name: "Carol Davis",
-      phone: "+1234567892",
-      email: "carol@example.com",
-      firstVisit: "2024-08-10T10:00:00Z",
-      lastVisit: "2024-08-31T10:00:00Z",
-      visitCount: 4,
-      status: "Returning",
-      source: "Online",
-      followUpStatus: "Contacted",
-      assignedTo: "staff_2",
-      notes: "Regular attender, potential member"
-    }
-  ];
-
+  // Fetch guests when modal opens
   useEffect(() => {
     if (isOpen) {
-      setLoading(true);
-      // Simulate API call
-      setTimeout(() => {
-        setGuests(mockGuests);
-        const tasks = GuestTrackingService.generateFollowUpTasks(mockGuests);
-        setFollowUpTasks(tasks);
-        setLoading(false);
-      }, 1000);
+      loadGuests();
+      loadStats();
     }
-  }, [isOpen]);
+  }, [isOpen, eventId]);
 
-  const handleConvertToMember = (guest: Guest) => {
-    setSelectedGuest(guest);
-    setShowAddMemberModal(true);
+  const loadGuests = async () => {
+    try {
+      const data = await fetchGuests(false); // Don't include members
+      // Transform API data to match Guest interface
+      const transformedGuests: Guest[] = (data || []).map((g: any) => ({
+        id: g.id || g.guestID || `guest_${Date.now()}`,
+        name: `${g.firstName || ''} ${g.lastName || ''}`.trim(),
+        phone: g.phone || '',
+        email: g.email || '',
+        firstVisit: g.firstVisit || new Date().toISOString(),
+        lastVisit: g.lastVisit || new Date().toISOString(),
+        visitCount: g.visitCount || 1,
+        status: g.visitCount > 1 ? 'Returning' : 'New',
+        source: g.invitedBy || 'Walk-in',
+        followUpStatus: g.followUpStatus || 'Pending',
+        assignedTo: g.assignedTo,
+        notes: g.notes || g.interests || '',
+      }));
+      setGuests(transformedGuests);
+    } catch (err) {
+      console.error('Error fetching guests:', err);
+      toast({
+        title: "Error",
+        description: error || "Failed to load guests",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      await fetchStats(30); // Last 30 days
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+    }
+  };
+
+  const handleConvertToMember = async (guest: Guest) => {
+    try {
+      await convertToMember(guest.id, {
+        firstName: guest.name.split(' ')[0],
+        lastName: guest.name.split(' ').slice(1).join(' '),
+        email: guest.email || '',
+        phone: guest.phone || '',
+        notes: guest.notes || '',
+      });
+      
+      setSelectedGuest(guest);
+      setShowAddMemberModal(true);
+      
+      toast({
+        title: "Guest Converted",
+        description: `${guest.name} has been converted to a member`,
+      });
+      
+      // Refresh guest list
+      loadGuests();
+    } catch (err) {
+      console.error('Error converting guest:', err);
+      toast({
+        title: "Conversion Failed",
+        description: convertError || "Failed to convert guest to member",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleContact = (guest: Guest) => {
@@ -132,10 +167,8 @@ export const GuestTrackingModal = ({
       description: `Successfully converted ${member.firstName} to a member`,
     });
     setShowAddMemberModal(false);
-    // Update guest status or remove from guests list
-    if (selectedGuest) {
-      setGuests(prev => prev.filter(g => g.id !== selectedGuest.id));
-    }
+    // Refresh guest list to remove converted guest
+    loadGuests();
   };
 
   const getStatusColor = (status: string) => {
@@ -186,149 +219,236 @@ export const GuestTrackingModal = ({
           </TabsList>
 
           <TabsContent value="guests" className="space-y-4">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Visits</TableHead>
-                    <TableHead>Follow-up</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {guests.map((guest) => (
-                    <TableRow key={guest.id}>
-                      <TableCell className="font-medium">
-                        <div>
-                          <p>{guest.name}</p>
-                          {guest.notes && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {guest.notes}
-                            </p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1 text-sm">
-                            <Phone className="h-3 w-3" />
-                            {guest.phone}
-                          </div>
-                          {guest.email && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Mail className="h-3 w-3" />
-                              {guest.email}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(guest.status)}>
-                          {guest.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-center">
-                          <div className="font-medium">{guest.visitCount}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Last: {new Date(guest.lastVisit).toLocaleDateString()}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getFollowUpColor(guest.followUpStatus)}>
-                          {guest.followUpStatus}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          {guest.status !== 'Member' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleConvertToMember(guest)}
-                            >
-                              Convert to Member
-                            </Button>
-                          )}
-                          {guest.followUpStatus !== 'Contacted' ? (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => handleContact(guest)}
-                            >
-                              Contact
-                            </Button>
-                          ) : (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              disabled
-                            >
-                              Contacted
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
+            {loading ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Visits</TableHead>
+                      <TableHead>Follow-up</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-8" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-8 w-24" /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Guests</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{error}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadGuests}
+                    disabled={loading}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Contact</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Visits</TableHead>
+                      <TableHead>Follow-up</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {guests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No guests found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      guests.map((guest) => (
+                        <TableRow key={guest.id}>
+                          <TableCell className="font-medium">
+                            <div>
+                              <p>{guest.name}</p>
+                              {guest.notes && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {guest.notes}
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1 text-sm">
+                                <Phone className="h-3 w-3" />
+                                {guest.phone}
+                              </div>
+                              {guest.email && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Mail className="h-3 w-3" />
+                                  {guest.email}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(guest.status)}>
+                              {guest.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-center">
+                              <div className="font-medium">{guest.visitCount}</div>
+                              <div className="text-xs text-muted-foreground">
+                                Last: {new Date(guest.lastVisit).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getFollowUpColor(guest.followUpStatus)}>
+                              {guest.followUpStatus}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {guest.status !== 'Member' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleConvertToMember(guest)}
+                                  disabled={convertLoading}
+                                >
+                                  {convertLoading ? 'Converting...' : 'Convert to Member'}
+                                </Button>
+                              )}
+                              {guest.followUpStatus !== 'Contacted' ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleContact(guest)}
+                                >
+                                  Contact
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled
+                                >
+                                  Contacted
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Total Guests
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{guests.length}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    New Guests
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {guests.filter(g => g.status === 'New').length}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Returning Guests
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {guests.filter(g => g.status === 'Returning').length}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Pending Follow-ups
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-orange-600">
-                    {guests.filter(g => g.followUpStatus === 'Pending').length}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Card key={index}>
+                    <CardHeader className="pb-3">
+                      <Skeleton className="h-4 w-24" />
+                    </CardHeader>
+                    <CardContent>
+                      <Skeleton className="h-8 w-16" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : error ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Analytics</AlertTitle>
+                <AlertDescription className="flex items-center justify-between">
+                  <span>{error}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadStats}
+                    disabled={loading}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Guests
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats?.totalGuests || guests.length}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      New Guests
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {stats?.newGuests || guests.filter(g => g.status === 'New').length}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Returning Guests
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">
+                      {stats?.returningGuests || guests.filter(g => g.status === 'Returning').length}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Conversion Rate
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {stats?.conversionRate ? `${stats.conversionRate}%` : '0%'}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             <Card>
               <CardHeader>

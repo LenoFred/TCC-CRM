@@ -1,0 +1,204 @@
+/**
+ * TCC-CRM Backend Application
+ * Main entry point for the Express server
+ */
+
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
+const config = require('./config');
+const { logger, requestLogger } = require('./utils/logger');
+const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
+
+// Import routes
+const authRoutes = require('./api/routes/auth');
+const membersRoutes = require('./api/routes/members');
+const familiesRoutes = require('./api/routes/families');
+const groupsRoutes = require('./api/routes/groups');
+const groupMembersRoutes = require('./api/routes/groupMembers');
+const eventsRoutes = require('./api/routes/events');
+const gatheringsRoutes = require('./api/routes/gatherings');
+const attendanceRoutes = require('./api/routes/attendance');
+const donationsRoutes = require('./api/routes/donations');
+const volunteerRolesRoutes = require('./api/routes/volunteerRoles');
+const volunteerAssignmentsRoutes = require('./api/routes/volunteerAssignments');
+const supportRequestsRoutes = require('./api/routes/supportRequests');
+const staffRoutes = require('./api/routes/staff');
+const communicationsRoutes = require('./api/routes/communications');
+const businessLogicRoutes = require('./api/routes/businessLogic');
+
+// Create Express app
+const app = express();
+
+// ============================================
+// Security Middleware
+// ============================================
+
+// Helmet for security headers
+app.use(helmet({
+  contentSecurityPolicy: config.server.isProduction,
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS configuration
+app.use(cors({
+  origin: config.cors.origin,
+  credentials: config.cors.credentials,
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: config.security.rateLimit.windowMs,
+  max: config.security.rateLimit.maxRequests,
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', limiter);
+
+// ============================================
+// Body Parsing Middleware
+// ============================================
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+
+// ============================================
+// Request Logging
+// ============================================
+
+app.use(requestLogger);
+
+// ============================================
+// Health Check Endpoint
+// ============================================
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: config.server.env,
+    uptime: process.uptime(),
+  });
+});
+
+// API Information
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'TCC-CRM API',
+    version: '1.0.0',
+    description: 'Church CRM Backend API with Google Sheets integration',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      members: '/api/members',
+      families: '/api/families',
+      groups: '/api/groups',
+      events: '/api/events',
+      attendance: '/api/attendance',
+      donations: '/api/donations',
+      volunteers: '/api/volunteers',
+      staff: '/api/staff',
+      communications: '/api/communications',
+      business: '/api/business',
+      analytics: '/api/analytics',
+    },
+  });
+});
+
+// ============================================
+// API Routes
+// ============================================
+
+app.use('/api/auth', authRoutes);
+app.use('/api/members', membersRoutes);
+app.use('/api/families', familiesRoutes);
+app.use('/api/groups', groupsRoutes);
+app.use('/api/group-members', groupMembersRoutes);
+app.use('/api/events', eventsRoutes);
+app.use('/api/gatherings', gatheringsRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/donations', donationsRoutes);
+app.use('/api/volunteer-roles', volunteerRolesRoutes);
+app.use('/api/volunteer-assignments', volunteerAssignmentsRoutes);
+app.use('/api/support-requests', supportRequestsRoutes);
+app.use('/api/staff', staffRoutes);
+app.use('/api/communications', communicationsRoutes);
+app.use('/api/business', businessLogicRoutes);
+
+// ============================================
+// Serve Frontend (Production)
+// ============================================
+
+if (config.server.isProduction) {
+  const path = require('path');
+  const frontendPath = path.join(__dirname, '../../frontend/build');
+  
+  app.use(express.static(frontendPath));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
+
+// ============================================
+// Error Handling
+// ============================================
+
+// 404 handler (must be after all routes)
+app.use(notFoundHandler);
+
+// Global error handler (must be last)
+app.use(errorHandler);
+
+// ============================================
+// Start Server
+// ============================================
+
+const PORT = config.server.port;
+
+const server = app.listen(PORT, () => {
+  logger.info(`🚀 TCC-CRM Backend started successfully`);
+  logger.info(`📡 Server running on port ${PORT}`);
+  logger.info(`🌍 Environment: ${config.server.env}`);
+  logger.info(`📊 Google Sheet ID: ${config.googleSheets.spreadsheetId}`);
+  
+  if (config.server.isDevelopment) {
+    logger.info(`🔗 API Documentation: http://localhost:${PORT}/api`);
+    logger.info(`💚 Health Check: http://localhost:${PORT}/health`);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', { promise, reason });
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', { error: error.message, stack: error.stack });
+  process.exit(1);
+});
+
+module.exports = app;

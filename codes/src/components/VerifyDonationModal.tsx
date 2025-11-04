@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, User, UserPlus } from "lucide-react";
+import { X, User, UserPlus, Loader2, CheckCircle, XCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { useDonationVerification } from "@/hooks/useBusinessLogic";
 
 interface PendingDonation {
   id: number;
@@ -45,32 +48,73 @@ export const VerifyDonationModal = ({
   onCreateMember 
 }: VerifyDonationModalProps) => {
   const { toast } = useToast();
-  const [isVerifying, setIsVerifying] = useState(false);
+  
+  // Use business logic hook
+  const { verifyDonation, rejectDonation, loading, error } = useDonationVerification();
+  
+  const [notes, setNotes] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
 
   if (!donation) return null;
 
   const handleVerifyDonation = async () => {
-    setIsVerifying(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Get current staff ID (would come from auth context in real app)
+      const currentStaffID = 'staff_001'; // TODO: Get from auth context
       
+      await verifyDonation(donation.id.toString(), currentStaffID, notes);
+      
+      // Call parent callback
       onVerify(donation.id, 'verify');
       
       toast({
-        title: "Donation verified successfully",
-        description: `${donation.donorName}'s donation of ${donation.amount} has been recorded.`,
+        title: "Donation Verified",
+        description: `${donation.donorName}'s donation of ${donation.amount} has been verified and recorded.`,
       });
       
       onClose();
-    } catch (error) {
+      setNotes("");
+    } catch (err) {
+      console.error('Verification error:', err);
       toast({
-        title: "Error",
-        description: "Failed to verify donation. Please try again.",
+        title: "Verification Failed",
+        description: error || "Failed to verify donation. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      setIsVerifying(false);
+    }
+  };
+
+  const handleRejectDonation = async () => {
+    if (!rejectionReason.trim()) {
+      toast({
+        title: "Reason Required",
+        description: "Please provide a reason for rejection.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const currentStaffID = 'staff_001'; // TODO: Get from auth context
+      
+      await rejectDonation(donation.id.toString(), currentStaffID, rejectionReason);
+      
+      toast({
+        title: "Donation Rejected",
+        description: `Donation from ${donation.donorName} has been rejected.`,
+      });
+      
+      onClose();
+      setRejectionReason("");
+      setShowRejectDialog(false);
+    } catch (err) {
+      console.error('Rejection error:', err);
+      toast({
+        title: "Rejection Failed",
+        description: error || "Failed to reject donation. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -174,23 +218,98 @@ export const VerifyDonationModal = ({
             </CardContent>
           </Card>
 
+          {/* Verification Notes */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base sm:text-lg">Verification Notes (Optional)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Add any notes about this donation verification..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                disabled={loading}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Error Alert */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Rejection Dialog */}
+          {showRejectDialog && (
+            <Card className="border-destructive">
+              <CardHeader>
+                <CardTitle className="text-base text-destructive">Reject Donation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  placeholder="Please provide a reason for rejecting this donation..."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  rows={3}
+                  disabled={loading}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    onClick={handleRejectDonation}
+                    disabled={loading || !rejectionReason.trim()}
+                    size="sm"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                    Confirm Rejection
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowRejectDialog(false);
+                      setRejectionReason("");
+                    }}
+                    disabled={loading}
+                    size="sm"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Action Buttons */}
           <div className="fixed bottom-0 left-0 right-0 bg-background p-4 border-t sm:relative sm:bg-transparent sm:border-t-0 sm:p-0 sm:pt-4">
             <div className="flex flex-col sm:flex-row justify-end gap-3 max-w-3xl mx-auto">
             <Button
               variant="outline"
               onClick={onClose}
-              disabled={isVerifying}
+              disabled={loading}
               className="w-full sm:w-auto"
             >
               Cancel
             </Button>
+
+            {!showRejectDialog && (
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectDialog(true)}
+                disabled={loading}
+                className="gap-2 w-full sm:w-auto text-destructive hover:text-destructive"
+              >
+                <XCircle className="h-4 w-4" />
+                Reject
+              </Button>
+            )}
             
-            {!donation.isKnownMember && (
+            {!donation.isKnownMember && !showRejectDialog && (
               <Button
                 variant="secondary"
                 onClick={handleCreateMemberProfile}
-                disabled={isVerifying}
+                disabled={loading}
                 className="gap-2 w-full sm:w-auto"
               >
                 <UserPlus className="h-4 w-4" />
@@ -198,14 +317,25 @@ export const VerifyDonationModal = ({
               </Button>
             )}
             
-            <Button
-              onClick={handleVerifyDonation}
-              disabled={isVerifying}
-              className="gap-2 w-full sm:w-auto"
-            >
-              <User className="h-4 w-4" />
-              {isVerifying ? 'Verifying...' : 'Verify & Record Donation'}
-            </Button>
+            {!showRejectDialog && (
+              <Button
+                onClick={handleVerifyDonation}
+                disabled={loading}
+                className="gap-2 w-full sm:w-auto"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    Verify & Record
+                  </>
+                )}
+              </Button>
+            )}
             </div>
           </div>
         </div>

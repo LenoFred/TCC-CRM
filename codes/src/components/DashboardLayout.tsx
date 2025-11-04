@@ -15,26 +15,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         
         <div className="flex-1 flex flex-col">
           {/* Header */}
-          <header className="h-16 border-b border-border bg-card shadow-soft flex items-center px-6">
+          <header className="h-auto min-h-16 border-b border-border bg-card shadow-soft flex flex-wrap items-center px-4 sm:px-6 py-3">
             <SidebarTrigger className="mr-4" />
             
-            <div className="flex-1">
-              <h1 className="text-2xl font-semibold text-primary">TCC CRM</h1>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-semibold text-primary truncate">TCC CRM</h1>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <ThemeToggle />
-              <div className="text-sm text-muted-foreground">
+              <div className="hidden sm:block text-sm text-muted-foreground">
                 Welcome back, Pastor John
               </div>
-              <div className="w-8 h-8 bg-gradient-primary rounded-full flex items-center justify-center text-primary-foreground font-medium">
+              <div className="w-8 h-8 bg-gradient-primary rounded-full flex items-center justify-center text-primary-foreground font-medium text-xs sm:text-sm">
                 PJ
               </div>
             </div>
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 p-6 bg-background overflow-auto">
+          <main className="flex-1 p-4 sm:p-6 bg-background overflow-auto">
             {children}
           </main>
         </div>

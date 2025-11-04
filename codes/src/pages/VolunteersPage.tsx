@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { Users, Plus, Calendar, UserCheck, Settings } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Plus, Calendar, UserCheck, Settings, AlertCircle, RefreshCw } from "lucide-react";
+import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -21,53 +24,60 @@ import {
 import { AddEditRoleModal } from "@/components/AddEditRoleModal";
 import { VolunteerSchedulingModal } from "@/components/VolunteerSchedulingModal";
 import { ManageAssignmentModal } from "@/components/ManageAssignmentModal";
+import { useToast } from "@/hooks/use-toast";
 
 const VolunteersPage = () => {
+  const { toast } = useToast();
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
   const [isEditRoleModalOpen, setIsEditRoleModalOpen] = useState(false);
   const [isSchedulingModalOpen, setIsSchedulingModalOpen] = useState(false);
   const [isManageAssignmentModalOpen, setIsManageAssignmentModalOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<any>(null);
   const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
+  const [volunteerRoles, setVolunteerRoles] = useState([]);
+  const [upcomingAssignments, setUpcomingAssignments] = useState([]);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(true);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [rolesError, setRolesError] = useState(null);
+  const [assignmentsError, setAssignmentsError] = useState(null);
 
-  // Mock data
-  const [volunteerRoles, setVolunteerRoles] = useState([
-    { id: 1, name: "Usher", description: "Welcome guests and assist with seating", activeCount: 8 },
-    { id: 2, name: "Greeter", description: "Welcome people at the entrance", activeCount: 6 },
-    { id: 3, name: "Sound Tech", description: "Operate sound equipment", activeCount: 4 },
-    { id: 4, name: "Worship Team", description: "Lead congregational worship", activeCount: 12 },
-    { id: 5, name: "Children's Ministry", description: "Assist with children's programs", activeCount: 15 }
-  ]);
-
-  const upcomingAssignments = [
-    {
-      id: 1,
-      event: "Sunday Service",
-      date: "2024-09-01",
-      role: "Usher",
-      volunteers: ["John Smith", "Mary Johnson"],
-      needed: 4,
-      filled: 2
-    },
-    {
-      id: 2,
-      event: "Youth Service", 
-      date: "2024-09-01",
-      role: "Sound Tech",
-      volunteers: ["David Wilson"],
-      needed: 2,
-      filled: 1
-    },
-    {
-      id: 3,
-      event: "Easter Service",
-      date: "2024-09-08",
-      role: "Greeter",
-      volunteers: ["Sarah Brown", "Michael Davis", "Lisa Johnson"],
-      needed: 6,
-      filled: 3
+  const fetchRoles = async () => {
+    setIsLoadingRoles(true);
+    setRolesError(null);
+    try {
+      const roles = await api.volunteers.getRoles();
+      console.log('Volunteer roles data received:', roles);
+      console.log('Is roles data array?', Array.isArray(roles));
+      setVolunteerRoles(Array.isArray(roles) ? roles : []);
+    } catch (error) {
+      console.error('Error fetching volunteer roles:', error);
+      setRolesError(error.message || 'Failed to load volunteer roles');
+    } finally {
+      setIsLoadingRoles(false);
     }
-  ];
+  };
+
+  const fetchAssignments = async () => {
+    setIsLoadingAssignments(true);
+    setAssignmentsError(null);
+    try {
+      const assignments = await api.volunteers.getAll(new URLSearchParams({ status: 'uncompleted' }));
+      console.log('Assignments data received:', assignments);
+      console.log('Is assignments data array?', Array.isArray(assignments));
+      setUpcomingAssignments(Array.isArray(assignments) ? assignments : []);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+      setAssignmentsError(error.message || 'Failed to load assignments');
+    } finally {
+      setIsLoadingAssignments(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRoles();
+    fetchAssignments();
+  }, []);
 
   const handleEditRole = (role: any) => {
     setSelectedRole(role);
@@ -79,15 +89,40 @@ const VolunteersPage = () => {
     setIsManageAssignmentModalOpen(true);
   };
 
-  const handleSaveRole = (roleData: any) => {
-    if (selectedRole) {
-      // Update existing role
-      setVolunteerRoles(prev => prev.map(role => 
-        role.id === selectedRole.id ? { ...roleData, id: selectedRole.id } : role
-      ));
-    } else {
-      // Add new role
-      setVolunteerRoles(prev => [...prev, roleData]);
+  const handleSaveRole = async (roleData: any) => {
+    setIsSavingRole(true);
+    try {
+      if (selectedRole) {
+        // Update existing role
+        await api.volunteers.updateRole(selectedRole.id, roleData);
+        setVolunteerRoles(prev => prev.map(role =>
+          role.id === selectedRole.id ? { ...roleData, id: selectedRole.id } : role
+        ));
+        toast({
+          title: "Role Updated",
+          description: "Volunteer role has been successfully updated",
+        });
+      } else {
+        // Add new role
+        const newRole = await api.volunteers.createRole(roleData);
+        setVolunteerRoles(prev => [...prev, newRole]);
+        toast({
+          title: "Role Created",
+          description: "New volunteer role has been successfully created",
+        });
+      }
+      setIsAddRoleModalOpen(false);
+      setIsEditRoleModalOpen(false);
+      setSelectedRole(null);
+    } catch (error) {
+      console.error('Error saving role:', error);
+      toast({
+        title: "Failed to Save Role",
+        description: "Please try again or contact support if the issue persists",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingRole(false);
     }
   };
 
@@ -113,7 +148,11 @@ const VolunteersPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Volunteers</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">45</div>
+              {isLoadingRoles ? (
+                <Skeleton className="h-8 w-16" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">45</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -121,7 +160,11 @@ const VolunteersPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Volunteer Roles</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{volunteerRoles.length}</div>
+              {isLoadingRoles ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">{volunteerRoles.length}</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -129,7 +172,11 @@ const VolunteersPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">This Week Scheduled</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">18</div>
+              {isLoadingAssignments ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">18</div>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -137,7 +184,11 @@ const VolunteersPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Open Positions</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">7</div>
+              {isLoadingRoles ? (
+                <Skeleton className="h-8 w-8" />
+              ) : (
+                <div className="text-2xl font-bold text-foreground">7</div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -157,31 +208,72 @@ const VolunteersPage = () => {
                     <Settings className="h-5 w-5" />
                     Volunteer Roles
                   </CardTitle>
-                  <Button variant="outline" className="gap-2" onClick={() => setIsAddRoleModalOpen(true)}>
+                  <Button variant="outline" className="gap-2" onClick={() => setIsAddRoleModalOpen(true)} disabled={isLoadingRoles}>
                     <Plus className="h-4 w-4" />
                     Add Role
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid gap-4">
-                  {volunteerRoles.map((role) => (
-                    <div key={role.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h3 className="font-semibold">{role.name}</h3>
-                        <p className="text-sm text-muted-foreground">{role.description}</p>
+                {isLoadingRoles ? (
+                  <div className="grid gap-4">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-5 w-32" />
+                          <Skeleton className="h-4 w-48" />
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Skeleton className="h-6 w-20" />
+                          <Skeleton className="h-8 w-12" />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <Badge variant="secondary">
-                          {role.activeCount} volunteers
-                        </Badge>
-                        <Button variant="ghost" size="sm" onClick={() => handleEditRole(role)}>
-                          Edit
-                        </Button>
+                    ))}
+                  </div>
+                ) : rolesError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Roles Error</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>{rolesError}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchRoles}
+                        disabled={isLoadingRoles}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="grid gap-4">
+                    {volunteerRoles.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                        <p>No volunteer roles found</p>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ) : (
+                      volunteerRoles.map((role) => (
+                        <div key={role.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{role.name}</h3>
+                            <p className="text-sm text-muted-foreground">{role.description}</p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Badge variant="secondary">
+                              {role.activeCount} volunteers
+                            </Badge>
+                            <Button variant="ghost" size="sm" onClick={() => handleEditRole(role)} disabled={isSavingRole}>
+                              Edit
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -226,35 +318,75 @@ const VolunteersPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {upcomingAssignments.map((assignment) => (
-                        <TableRow key={assignment.id}>
-                          <TableCell className="font-medium">{assignment.event}</TableCell>
-                          <TableCell>{assignment.date}</TableCell>
-                          <TableCell>{assignment.role}</TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {assignment.volunteers.map((volunteer, index) => (
-                                <Badge key={index} variant="outline" className="text-xs">
-                                  {volunteer}
-                                </Badge>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant={assignment.filled >= assignment.needed ? 'default' : 'destructive'}
-                              className={assignment.filled >= assignment.needed ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
-                            >
-                              {assignment.filled}/{assignment.needed} filled
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => handleManageAssignment(assignment)}>
-                              Manage
-                            </Button>
+                      {isLoadingAssignments ? (
+                        Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={index}>
+                            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                            <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                            <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                            <TableCell className="text-right"><Skeleton className="h-8 w-16" /></TableCell>
+                          </TableRow>
+                        ))
+                      ) : assignmentsError ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8">
+                            <Alert variant="destructive" className="max-w-md mx-auto">
+                              <AlertCircle className="h-4 w-4" />
+                              <AlertTitle>Assignments Error</AlertTitle>
+                              <AlertDescription className="flex items-center justify-between">
+                                <span>{assignmentsError}</span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={fetchAssignments}
+                                  disabled={isLoadingAssignments}
+                                >
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                  Retry
+                                </Button>
+                              </AlertDescription>
+                            </Alert>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : upcomingAssignments.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            No upcoming assignments found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        upcomingAssignments.map((assignment) => (
+                          <TableRow key={assignment.id}>
+                            <TableCell className="font-medium">{assignment.event}</TableCell>
+                            <TableCell>{assignment.date}</TableCell>
+                            <TableCell>{assignment.role}</TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {assignment.volunteers.map((volunteer, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {volunteer}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={assignment.filled >= assignment.needed ? 'default' : 'destructive'}
+                                className={assignment.filled >= assignment.needed ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
+                              >
+                                {assignment.filled}/{assignment.needed} filled
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" onClick={() => handleManageAssignment(assignment)} disabled={isSavingRole}>
+                                Manage
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
