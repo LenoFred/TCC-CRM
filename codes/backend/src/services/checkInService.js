@@ -16,85 +16,52 @@ class CheckInService {
     try {
       logger.info('Processing check-in', { memberID, gatheringID, options });
 
-      // Validate member exists
-      const members = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.MEMBERS
-      );
-      const member = members.find((m) => m.memberID === memberID);
+      // Fetch all required data in parallel for speed
+      const [members, gatherings, attendanceData] = await Promise.all([
+        sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS),
+        sheetsService.getSheetObjects(sheetsService.SHEETS.GATHERINGS),
+        sheetsService.getSheetObjects(sheetsService.SHEETS.ATTENDANCE),
+      ]);
 
+      // Validate member exists
+      const member = members.find((m) => m.memberID === memberID);
       if (!member) {
         throw new ApiError('Member not found', 404);
       }
 
       // Validate gathering exists
-      const gatherings = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.GATHERINGS
-      );
       const gathering = gatherings.find((g) => g.gatheringID === gatheringID);
-
       if (!gathering) {
         throw new ApiError('Gathering not found', 404);
       }
 
       // Check if already checked in
-      const attendanceData = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.ATTENDANCE
-      );
       const existingCheckIn = attendanceData.find(
         (a) =>
           a.memberID === memberID &&
-          a.gatheringID === gatheringID &&
-          !a.checkOutTime
+          a.gatheringID === gatheringID
       );
 
       if (existingCheckIn) {
         throw new ApiError('Member already checked in', 400);
       }
 
-      // Create attendance record
+      // Create attendance record (only 3 fields as per schema)
       const attendance = {
-        attendanceID: generateId('ATT'),
-        gatheringID,
+        attendanceID: generateId('ATTENDANCE'),
         memberID,
-        checkInTime: new Date().toISOString(),
-        checkOutTime: '',
-        status: 'Present',
-        checkInMethod: options.method || 'Manual',
-        notes: options.notes || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        gatheringID,
       };
 
-      attendanceData.push(attendance);
-
-      const headers = [
-        'AttendanceID',
-        'GatheringID',
-        'MemberID',
-        'CheckInTime',
-        'CheckOutTime',
-        'Status',
-        'CheckInMethod',
-        'Notes',
-        'CreatedAt',
-        'UpdatedAt',
+      // Append single row instead of rewriting entire sheet (MUCH faster)
+      const newRow = [
+        attendance.attendanceID,
+        attendance.memberID,
+        attendance.gatheringID,
       ];
 
-      const rows = [
-        headers,
-        ...attendanceData.map((a) =>
-          headers.map((h) => {
-            const key = h.charAt(0).toLowerCase() + h.slice(1);
-            return a[key] || '';
-          })
-        ),
-      ];
-
-      await sheetsService.updateSheetData(sheetsService.SHEETS.ATTENDANCE, rows);
+      await sheetsService.appendSheetData(sheetsService.SHEETS.ATTENDANCE, [newRow]);
       sheetsService.invalidateCache(sheetsService.SHEETS.ATTENDANCE);
-
-      // Update gathering actual attendance count
-      await this.updateGatheringAttendance(gatheringID);
 
       logger.info('Check-in successful', { attendanceID: attendance.attendanceID });
 
@@ -108,7 +75,7 @@ class CheckInService {
         gathering: {
           gatheringID: gathering.gatheringID,
           gatheringName: gathering.gatheringName,
-          date: gathering.date,
+          gatheringDate: gathering.gatheringDate,
         },
       };
     } catch (error) {
@@ -276,27 +243,16 @@ class CheckInService {
           a.status?.toLowerCase() === 'present'
       ).length;
 
-      gatherings[gatheringIndex] = {
-        ...gatherings[gatheringIndex],
-        actualAttendance: count.toString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // Don't update actualAttendance - gatherings sheet only has 6 fields
+      // Just keep the original gathering data unchanged
 
       const headers = [
         'GatheringID',
-        'EventID',
         'GatheringName',
         'GatheringType',
-        'Date',
-        'StartTime',
-        'EndTime',
-        'Location',
-        'ExpectedAttendance',
-        'ActualAttendance',
-        'Status',
-        'Notes',
-        'CreatedAt',
-        'UpdatedAt',
+        'ParentID',
+        'GatheringDate',
+        'GatheringTime',
       ];
 
       const rows = [

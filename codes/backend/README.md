@@ -1,24 +1,25 @@
-# TCC-CRM Backend
+# TCC CRM Backend
 
-Backend API for TCC Church CRM system with Google Sheets integration.
+Backend API for TCC Church CRM system with Google Sheets database integration.
 
 ## Features
 
-- 🔐 **JWT Authentication** - Secure token-based authentication
-- 🛡️ **Role-Based Access Control** - Granular permissions system
-- 📊 **Google Sheets Integration** - Using Sheets as database
-- ⚡ **Caching Layer** - In-memory caching for performance
-- 🔄 **Retry Logic** - Automatic retry for failed operations
-- 📝 **Structured Logging** - Winston-based production logging
-- ✅ **Input Validation** - Zod schemas for all endpoints
-- 🚦 **Rate Limiting** - Protection against abuse
-- 🔒 **Security Hardening** - Helmet.js, CORS, secure cookies
+- JWT authentication with refresh tokens
+- Role-based access control with granular permissions
+- Google Sheets API integration for data storage
+- In-memory caching layer for performance
+- Automatic retry logic for failed operations
+- Structured logging with Winston
+- Input validation using Zod schemas
+- Rate limiting for API protection
+- Security hardening with Helmet.js, CORS, and secure cookies
 
 ## Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 18 or higher
+- npm package manager
 - Google Cloud Service Account with Sheets API enabled
-- Google Sheet ID for your database
+- Google Sheet configured as database
 
 ## Installation
 
@@ -33,52 +34,55 @@ cp .env.example .env
 # Edit .env with your configuration
 ```
 
-3. Place Google Service Account credentials:
+3. Add Google Service Account credentials:
 ```bash
-# Copy your credentials.json to the backend directory
 cp /path/to/credentials.json ./credentials.json
 ```
 
 ## Configuration
 
-See `.env.example` for all available configuration options.
-
 ### Required Environment Variables
 
-- `GOOGLE_SHEET_ID` - Your Google Sheet ID
+- `GOOGLE_SHEET_ID` - Google Sheet ID for database
 - `JWT_SECRET` - Secure random string for JWT signing
-- `CORS_ORIGIN` - Frontend URL
+- `CORS_ORIGIN` - Frontend URL for CORS
 
 ### Optional Variables
 
-- `TWILIO_ACCOUNT_SID` - For SMS/WhatsApp (placeholder ready)
-- `EMAIL_USER` - For email notifications (placeholder ready)
+- `TWILIO_ACCOUNT_SID` - SMS/WhatsApp integration
+- `EMAIL_USER` - Email notification service
+
+See `.env.example` for complete configuration options.
 
 ## Running the Server
 
-### Development Mode
+Development mode with auto-reload:
 ```bash
 npm run dev
 ```
 
-### Production Mode
+Production mode:
 ```bash
 npm start
 ```
 
+Server runs on http://localhost:3001 by default.
+
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/login` - Login with email/password
-- `POST /api/auth/logout` - Logout current user
+- `POST /api/auth/login` - Login with email and password
+- `POST /api/auth/logout` - Logout current session
 - `POST /api/auth/refresh` - Refresh access token
-- `GET /api/auth/me` - Get current user
-- `POST /api/auth/change-password` - Change password
-- `POST /api/auth/register` - Register staff (admin only)
+- `GET /api/auth/me` - Get current user information
+- `POST /api/auth/change-password` - Change user password
+- `POST /api/auth/register` - Register new staff member (admin only)
 
 ### Health Check
 - `GET /health` - Server health status
 - `GET /api` - API information
+
+See main project README for complete endpoint documentation.
 
 ## Project Structure
 
@@ -104,6 +108,16 @@ backend/
 │   └── index.js            # Entry point
 ├── tests/                  # Test files
 ├── logs/                   # Log files
+├── credentials.json        # Google service account credentials
+├── package.json
+└── .env                    # Environment variables
+```
+│   │   └── logger.js
+│   ├── config/             # Configuration
+│   │   └── index.js
+│   └── index.js            # Entry point
+├── tests/                  # Test files
+├── logs/                   # Log files
 ├── old_code/              # Archived old code
 ├── package.json
 └── .env.example
@@ -112,27 +126,26 @@ backend/
 
 ## Authentication Flow
 
-1. **Login**: User submits email/password
-2. **Verification**: Password checked against hashed value in Staff sheet
-3. **Token Generation**: JWT access token (24h) + refresh token (7d)
-4. **Token Storage**: Access token in localStorage, refresh token in httpOnly cookie
-5. **Protected Routes**: Middleware validates token on each request
-6. **Token Refresh**: Use refresh endpoint before access token expires
+1. User submits email and password
+2. System verifies password against hashed value in Staff sheet
+3. Generate JWT access token (24h expiry) and refresh token (7d expiry)
+4. Store access token in localStorage, refresh token in httpOnly cookie
+5. Middleware validates token on each protected route request
+6. Use refresh endpoint to obtain new access token before expiration
 
 ## Permission System
 
-Permissions are stored in the `StaffPermissions` sheet:
+Permissions are defined in the `StaffPermissions` sheet with boolean flags:
 
 - `can_view_members` - View member data
 - `can_add_members` - Add new members
-- `can_edit_members` - Edit member data
-- `can_delete_members` - Delete members
-- `can_manage_staff` - Manage staff accounts
-- `can_view_donations` - View donation data
-- `can_verify_donations` - Verify donations
-- etc.
+- `can_edit_members` - Edit member information
+- `can_delete_members` - Delete member records
+- `can_manage_staff` - Manage staff accounts and permissions
+- `can_view_donations` - View donation records
+- `can_verify_donations` - Verify and approve donations
 
-### Using Permissions in Routes
+### Permission Middleware Usage
 
 ```javascript
 // Require specific permission
@@ -152,74 +165,63 @@ router.get('/analytics',
 
 ## Logging
 
-Logs are written to:
-- `logs/error.log` - Error level logs only
-- `logs/combined.log` - All logs
-- Console - Development mode
+Winston logger writes to:
+- `logs/error.log` - Error level messages only
+- `logs/combined.log` - All log levels
+- Console output in development mode
 
 ## Security Features
 
-- **Bcrypt Password Hashing** - 12 rounds
-- **JWT Tokens** - Signed with secret, auto-expiring
-- **Helmet.js** - Security headers
-- **Rate Limiting** - 100 requests per 15 minutes per IP
-- **CORS** - Restricted to frontend origin
-- **Input Validation** - All inputs validated with Zod
-- **HttpOnly Cookies** - Refresh tokens not accessible via JS
+- Bcrypt password hashing with 12 salt rounds
+- JWT tokens with automatic expiration
+- Helmet.js for security headers
+- Rate limiting: 100 requests per 15 minutes per IP
+- CORS restricted to configured frontend origin
+- Zod schema validation for all inputs
+- HttpOnly cookies for refresh tokens (not accessible via JavaScript)
 
 ## Testing
 
+Run tests:
 ```bash
-# Run all tests
 npm test
+```
 
-# Run tests in watch mode
+Watch mode:
+```bash
 npm run test:watch
+```
 
-# Run with coverage
+With coverage:
+```bash
 npm test -- --coverage
 ```
 
 ## Troubleshooting
 
-### Google Sheets API Errors
+**Google Sheets API Errors:**
+- Verify credentials.json exists in backend directory
+- Ensure service account has Editor access to the sheet
+- Confirm Sheet ID in .env matches your Google Sheet
 
-1. Verify credentials.json is in the correct location
-2. Ensure service account has Editor access to the sheet
-3. Check that Sheet ID in .env is correct
+**Authentication Issues:**
+- Check JWT_SECRET is set in environment
+- Verify Staff sheet has PasswordHash column
+- Ensure passwords are properly hashed (use register endpoint)
 
-### Authentication Issues
-
-1. Verify JWT_SECRET is set
-2. Check that Staff sheet has PasswordHash column
-3. Ensure passwords are hashed (use register endpoint)
-
-### CORS Errors
-
-1. Verify CORS_ORIGIN matches frontend URL exactly
-2. Include credentials: true in frontend requests
+**CORS Errors:**
+- Confirm CORS_ORIGIN exactly matches frontend URL (including protocol and port)
+- Include `credentials: true` in frontend fetch/axios requests
 
 ## Development Guidelines
 
-1. **Always use asyncHandler** for async route handlers
-2. **Use validation middleware** for all input
-3. **Log important events** using logger utilities
-4. **Handle errors properly** - throw ApiError for known errors
-5. **Invalidate cache** after write operations
-6. **Document new endpoints** in this README
-
-## Next Steps
-
-- [ ] Add remaining CRUD endpoints
-- [ ] Implement communications service
-- [ ] Add comprehensive tests
-- [ ] Set up CI/CD pipeline
-- [ ] Add API documentation (Swagger)
+1. Always use asyncHandler wrapper for async route handlers
+2. Validate all inputs with Zod schemas via validation middleware
+3. Log important events and errors using logger utilities
+4. Throw ApiError for known error conditions
+5. Invalidate cache after write operations to maintain consistency
+6. Document new endpoints in project README
 
 ## License
 
 Proprietary - TCC Church
-
-## Support
-
-For issues or questions, contact the development team.

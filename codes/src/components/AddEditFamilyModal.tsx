@@ -201,6 +201,16 @@ export function AddEditFamilyModal({ isOpen, onClose, onSave, family, mode }: Ad
       return;
     }
 
+    // Validate that at least one member is added (only for new family creation)
+    if (mode === 'add' && selectedMembers.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please add at least one member to the family before creating it.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSaving(true);
     
     try {
@@ -277,6 +287,11 @@ export function AddEditFamilyModal({ isOpen, onClose, onSave, family, mode }: Ad
           <DialogTitle>
             {mode === 'add' ? 'Add New Family' : `Edit Family: ${family?.familyName}`}
           </DialogTitle>
+          {mode === 'add' && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Note: You must add at least one member (who is not already in another family) to create a new family.
+            </p>
+          )}
         </DialogHeader>
         
         <div className="space-y-6">
@@ -334,6 +349,18 @@ export function AddEditFamilyModal({ isOpen, onClose, onSave, family, mode }: Ad
                     </div>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Warning when no members are selected in add mode */}
+          {mode === 'add' && selectedMembers.length === 0 && (
+            <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+              <CardContent className="pt-6">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  No members added yet. Please add at least one member to create this family.
+                </p>
               </CardContent>
             </Card>
           )}

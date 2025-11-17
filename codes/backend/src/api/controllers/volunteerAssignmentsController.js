@@ -25,14 +25,9 @@ class VolunteerAssignmentsController extends BaseController {
     return [
       'AssignmentID',
       'MemberID',
+      'GroupID',
       'RoleID',
-      'StartDate',
-      'EndDate',
-      'Status',
-      'Frequency',
-      'Notes',
-      'CreatedAt',
-      'UpdatedAt',
+      'AssignmentStatus',
     ];
   }
 
@@ -59,50 +54,58 @@ class VolunteerAssignmentsController extends BaseController {
       throw new ApiError(404, 'Volunteer role not found');
     }
 
-    // Validate dates
-    const startDate = new Date(data.startDate);
-    const endDate = data.endDate ? new Date(data.endDate) : null;
-
-    if (isNaN(startDate.getTime())) {
-      throw new ApiError(400, 'Invalid start date');
-    }
-
-    if (endDate && isNaN(endDate.getTime())) {
-      throw new ApiError(400, 'Invalid end date');
-    }
-
-    if (endDate && endDate < startDate) {
-      throw new ApiError(400, 'End date cannot be before start date');
-    }
-
-    // Check for existing active assignment for same member and role
-    const assignments = await sheetsService.getSheetObjects(this.sheetName);
-    const existingAssignment = assignments.find(
-      (a) =>
-        a.memberID === data.memberID &&
-        a.roleID === data.roleID &&
-        a.status?.toLowerCase() === 'active'
+    // Validate group exists
+    const groups = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GROUPS
     );
-
-    if (existingAssignment) {
-      throw new ApiError(
-        400,
-        'Member already has an active assignment for this role'
-      );
+    const group = groups.find((g) => g.groupID === data.groupID);
+    if (!group) {
+      throw new ApiError(404, 'Group/Event not found');
     }
 
     return {
       assignmentID: generateId('VAS'),
       memberID: data.memberID,
+      groupID: data.groupID,
       roleID: data.roleID,
-      startDate: data.startDate,
-      endDate: data.endDate || '',
-      status: data.status || 'Active',
-      frequency: data.frequency || 'Weekly',
-      notes: data.notes || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      assignmentStatus: data.assignmentStatus || data.status || 'Scheduled',
     };
+  }
+
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get all assignments
+    let data = await this.sheetsService.getSheetObjects(this.sheetName);
+    
+    // Get related data for enrichment
+    const members = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.MEMBERS);
+    const roles = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.VOLUNTEER_ROLES);
+    const groups = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUPS);
+    
+    // Enrich assignments with member, role, and group/event details
+    const enrichedData = data.map(assignment => {
+      const member = members.find(m => m.memberID === assignment.memberID);
+      const role = roles.find(r => r.roleID === assignment.roleID);
+      const group = groups.find(g => g.groupID === assignment.groupID);
+      
+      return {
+        ...assignment,
+        memberName: member ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : null,
+        roleName: role?.roleName || null,
+        groupName: group?.groupName || null,
+        groupType: group?.groupType || null,
+      };
+    });
+
+    // Apply filters
+    let filteredData = this.applyFilters(enrichedData, filters);
+
+    res.json({
+      success: true,
+      data: filteredData,
+      total: filteredData.length,
+    });
   }
 
   applyFilters(data, filters) {
@@ -118,16 +121,16 @@ class VolunteerAssignmentsController extends BaseController {
       filteredData = filteredData.filter((item) => item.roleID === filters.roleID);
     }
 
-    if (filters.status) {
+    if (filters.groupID) {
       filteredData = filteredData.filter(
-        (item) => item.status?.toLowerCase() === filters.status.toLowerCase()
+        (item) => item.groupID === filters.groupID
       );
     }
 
-    if (filters.frequency) {
+    if (filters.assignmentStatus || filters.status) {
+      const status = filters.assignmentStatus || filters.status;
       filteredData = filteredData.filter(
-        (item) =>
-          item.frequency?.toLowerCase() === filters.frequency.toLowerCase()
+        (item) => item.assignmentStatus?.toLowerCase() === status.toLowerCase()
       );
     }
 

@@ -26,6 +26,7 @@ const ID_PREFIXES = {
   STAFF_PERMISSION: 'PRM',
   BRANCH: 'BRN',
   COMMUNICATION: 'COM',
+  GUEST: 'GST',
 };
 
 /**

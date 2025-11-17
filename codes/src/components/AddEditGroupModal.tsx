@@ -1,22 +1,13 @@
 import { useState, useEffect } from "react";
-import { X, Search, Check, Plus } from "lucide-react";
+import { X, Search, Check, Plus, Loader2, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import {
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,14 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/config/api";
 
 interface Group {
-  id?: number;
+  id?: string;
   name: string;
-  type: 'Department' | 'Ministry' | 'Committee' | 'Small Group';
+  type: 'Department' | 'Ministry' | 'Committee' | 'Small Group' | 'General';
   description?: string;
-  leader?: string;
+  leader?: string; // This will be leaderMemberID from backend
   leaderContact?: string;
   members: string[];
   location?: string;
@@ -47,19 +40,25 @@ interface AddEditGroupModalProps {
   group?: Group | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (group: Omit<Group, 'id'>) => void;
+  onSave: (group: any) => void;
   isEdit?: boolean;
 }
 
-// Mock data for members - In real app, this would come from API
-const mockMembers = [
-  { id: 1, name: "John Smith", email: "john@example.com" },
-  { id: 2, name: "Sarah Johnson", email: "sarah@example.com" },
-  { id: 3, name: "Michael Brown", email: "michael@example.com" },
-  { id: 4, name: "Emily Davis", email: "emily@example.com" },
-  { id: 5, name: "David Wilson", email: "david@example.com" },
-  { id: 6, name: "Lisa Anderson", email: "lisa@example.com" },
-];
+interface Member {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+}
+
+interface GroupMember {
+  memberID: string;
+  groupMemberID?: string; // ID of the GroupMembers record (for deletion)
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phoneNumber?: string;
+}
 
 export const AddEditGroupModal = ({ 
   group, 
@@ -70,47 +69,129 @@ export const AddEditGroupModal = ({
 }: AddEditGroupModalProps) => {
   const { toast } = useToast();
   const [searchLeader, setSearchLeader] = useState("");
-  const [searchMembers, setSearchMembers] = useState("");
-  const [selectedLeader, setSelectedLeader] = useState<typeof mockMembers[0] | null>(null);
-  const [selectedMembers, setSelectedMembers] = useState<typeof mockMembers[0][]>([]);
+  const [searchMember, setSearchMember] = useState("");
+  const [selectedLeader, setSelectedLeader] = useState<Member | null>(null);
+  const [selectedMembers, setSelectedMembers] = useState<GroupMember[]>([]);
+  const [existingMemberIDs, setExistingMemberIDs] = useState<string[]>([]); // Track original member IDs
+  const [originalMembers, setOriginalMembers] = useState<GroupMember[]>([]); // Track original members with groupMemberID
+  const [availableMembers, setAvailableMembers] = useState<Member[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [formData, setFormData] = useState<Omit<Group, 'id'>>({
     name: "",
     type: "Department",
     description: "",
-    leader: "",
+    leader: "", // This will store leaderMemberID
     leaderContact: "",
     members: [],
     location: "",
     status: "Active",
     createdDate: new Date().toISOString().split('T')[0]
   });
-
-  // Mock members data - in real app, this would come from API
-  const [availableMembers] = useState<Array<{id: string, name: string, phone: string}>>([
-    { id: "1", name: "John Smith", phone: "+234 803 123 4567" },
-    { id: "2", name: "Mary Johnson", phone: "+234 805 987 6543" },
-    { id: "3", name: "David Wilson", phone: "+234 807 456 1234" },
-    { id: "4", name: "Sarah Adams", phone: "+234 809 321 7890" },
-    { id: "5", name: "Michael Brown", phone: "+234 806 654 3210" },
-    { id: "6", name: "Emily Davis", phone: "+234 808 987 1234" }
-  ]);
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Fetch members from backend
+  useEffect(() => {
+    if (isOpen) {
+      fetchMembers();
+    }
+  }, [isOpen]);
+
+  const fetchMembers = async () => {
+    setIsLoadingMembers(true);
+    try {
+      const response = await api.members.getAll();
+      const membersData = response.data || [];
+      
+      const transformedMembers: Member[] = membersData.map((member: any) => ({
+        id: member.memberID || member.id,
+        name: `${member.firstName || ''} ${member.lastName || ''}`.trim(),
+        email: member.email || '',
+        phone: member.phoneNumber || member.phone || '',
+      }));
+      
+      setAvailableMembers(transformedMembers);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load members list",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  const fetchExistingGroupMembers = async (groupId: string) => {
+    try {
+      console.log('🔍 Fetching existing members for group:', groupId);
+      // Use groupMembers.getByGroup to get groupMemberID for deletion
+      const response = await api.groupMembers.getByGroup(groupId);
+      console.log('📥 Raw response from getByGroup:', response);
+      
+      const membersData = response.members || [];
+      console.log('👥 Members data:', membersData);
+      
+      const transformedMembers: GroupMember[] = membersData.map((gm: any) => ({
+        memberID: gm.member?.memberID || gm.memberID,
+        groupMemberID: gm.groupMemberID, // Store for deletion
+        firstName: gm.member?.firstName || '',
+        lastName: gm.member?.lastName || '',
+        email: gm.member?.email || '',
+        phoneNumber: gm.member?.phoneNumber || '',
+      }));
+      
+      console.log('✅ Transformed members:', transformedMembers);
+      
+      // Store both the members and their IDs
+      setSelectedMembers(transformedMembers);
+      setOriginalMembers(transformedMembers); // Keep a copy with groupMemberIDs
+      setExistingMemberIDs(transformedMembers.map(m => m.memberID));
+      console.log('✅ Set selectedMembers count:', transformedMembers.length);
+    } catch (error) {
+      console.error('❌ Error fetching group members:', error);
+      toast({
+        title: "Error Loading Members",
+        description: "Could not load existing group members. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   useEffect(() => {
     if (isEdit && group) {
+      console.log('📝 EDIT MODE: Setting up form with group:', group);
+      
       setFormData({
         name: group.name,
         type: group.type,
         description: group.description || "",
-        leader: group.leader || "",
+        leader: group.leader || "", // This is leaderMemberID from backend
         leaderContact: group.leaderContact || "",
         members: group.members || [],
         location: group.location || "",
         status: group.status,
         createdDate: group.createdDate
       });
+      
+      // Find and set the selected leader if available
+      if (group.leader && availableMembers.length > 0) {
+        const leader = availableMembers.find(m => m.id === group.leader);
+        if (leader) {
+          setSelectedLeader(leader);
+          console.log('✅ Found and set leader:', leader.name);
+        }
+      }
+      
+      // Fetch existing group members with their groupMemberIDs
+      if (group.id) {
+        console.log('🔄 Calling fetchExistingGroupMembers with ID:', group.id);
+        fetchExistingGroupMembers(group.id);
+      } else {
+        console.warn('⚠️ No group.id found for fetching members');
+      }
     } else if (!isEdit) {
       setFormData({
         name: "",
@@ -123,9 +204,57 @@ export const AddEditGroupModal = ({
         status: "Active",
         createdDate: new Date().toISOString().split('T')[0]
       });
+      setSelectedLeader(null);
+      setSelectedMembers([]);
+      setExistingMemberIDs([]); // Reset for new group
     }
     setErrors({});
-  }, [group, isEdit, isOpen]);
+  }, [group, isEdit, isOpen, availableMembers]);
+  
+  // Debug: Log when selectedMembers changes
+  useEffect(() => {
+    console.log('👥 selectedMembers updated, count:', selectedMembers.length, selectedMembers);
+  }, [selectedMembers]);
+  
+  // Filter available members for member selection (exclude leader and already selected members)
+  const availableMembersForGroup = availableMembers.filter(member => {
+    const isNotLeader = member.id !== selectedLeader?.id;
+    const isNotSelected = !selectedMembers.some(selected => selected.memberID === member.id);
+    const matchesSearch = searchMember ? (
+      member.name.toLowerCase().includes(searchMember.toLowerCase()) ||
+      member.email.toLowerCase().includes(searchMember.toLowerCase())
+    ) : false;
+    return isNotLeader && isNotSelected && matchesSearch;
+  });
+  
+  const addMemberToGroup = (member: Member) => {
+    // Check if member is already in the group
+    const isDuplicate = selectedMembers.some(selected => selected.memberID === member.id);
+    
+    if (isDuplicate) {
+      toast({
+        title: "Member Already in Group",
+        description: `${member.name} is already a member of this group.`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const [firstName, ...lastNameParts] = member.name.split(' ');
+    const newGroupMember: GroupMember = {
+      memberID: member.id,
+      firstName: firstName || '',
+      lastName: lastNameParts.join(' ') || '',
+      email: member.email || '',
+      phoneNumber: member.phone || '',
+    };
+    setSelectedMembers([...selectedMembers, newGroupMember]);
+    setSearchMember("");
+  };
+  
+  const removeMemberFromGroup = (memberID: string) => {
+    setSelectedMembers(selectedMembers.filter(member => member.memberID !== memberID));
+  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -148,13 +277,62 @@ export const AddEditGroupModal = ({
     if (!validateForm()) {
       return;
     }
+    
+    // Validate that a leader is selected
+    if (!selectedLeader) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a group leader.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate that at least one member is added (only for new group creation)
+    if (!isEdit && selectedMembers.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please add at least one member to the group.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsSubmitting(true);
     
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // For edit mode, identify members to add and remove
+      let membersToAdd: GroupMember[] = [];
+      let membersToRemove: GroupMember[] = [];
       
-      onSave(formData);
+      if (isEdit) {
+        // Members to add: in selectedMembers but not in existingMemberIDs
+        membersToAdd = selectedMembers.filter(member => !existingMemberIDs.includes(member.memberID));
+        
+        // Members to remove: in originalMembers but not in current selectedMembers
+        const currentMemberIDs = selectedMembers.map(m => m.memberID);
+        membersToRemove = originalMembers.filter(member => !currentMemberIDs.includes(member.memberID));
+      } else {
+        membersToAdd = selectedMembers;
+      }
+      
+      console.log('=== FORM SUBMIT ===');
+      console.log('Is Edit Mode:', isEdit);
+      console.log('Original Members:', originalMembers.map(m => `${m.memberID} (${m.groupMemberID})`));
+      console.log('Selected Members:', selectedMembers.map(m => m.memberID));
+      console.log('Members to Add:', membersToAdd.map(m => m.memberID));
+      console.log('Members to Remove:', membersToRemove.map(m => `${m.memberID} (${m.groupMemberID})`));
+      
+      // Prepare group data with members
+      const groupData = {
+        ...formData,
+        members: membersToAdd,
+        removedMembers: membersToRemove,
+        memberCount: selectedMembers.length, // Total count includes existing + new
+      };
+      
+      // Pass data directly to parent - parent will handle API call and member associations
+      onSave(groupData);
       onClose();
     } catch (error) {
       toast({
@@ -174,21 +352,13 @@ export const AddEditGroupModal = ({
     }
   };
 
-  const handleMemberToggle = (memberName: string) => {
-    setFormData(prev => ({
-      ...prev,
-      members: prev.members.includes(memberName)
-        ? prev.members.filter(m => m !== memberName)
-        : [...prev.members, memberName]
-    }));
-  };
-
   const handleLeaderChange = (leaderId: string) => {
     const selectedMember = availableMembers.find(m => m.id === leaderId);
     if (selectedMember) {
+      setSelectedLeader(selectedMember);
       setFormData(prev => ({
         ...prev,
-        leader: selectedMember.name,
+        leader: selectedMember.id, // Store member ID, not name
         leaderContact: selectedMember.phone
       }));
     }
@@ -203,9 +373,9 @@ export const AddEditGroupModal = ({
               <DialogTitle className="text-xl font-bold">
                 {isEdit ? 'Edit Group' : 'Add New Group'}
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Configure your group details, leadership, and members
-              </p>
+              <DialogDescription className="text-sm text-muted-foreground mt-1">
+                Configure your group details and leadership
+              </DialogDescription>
             </div>
             <Button
               onClick={onClose}
@@ -293,7 +463,7 @@ export const AddEditGroupModal = ({
           </div>
 
           {/* Leadership Information */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
                 2
@@ -301,130 +471,220 @@ export const AddEditGroupModal = ({
               <h3 className="text-lg font-semibold">Leadership</h3>
             </div>
             
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="leader" className="text-sm font-medium">Group Leader</Label>
-                <Command className="border rounded-lg">
-                  <CommandInput 
-                    placeholder="Search for a leader..."
-                    value={searchLeader}
-                    onValueChange={setSearchLeader}
-                  />
-                  <CommandList className="max-h-40">
-                    <CommandEmpty>No members found.</CommandEmpty>
-                    <CommandGroup>
-                      {mockMembers
+            {/* Selected Leader Display */}
+            {selectedLeader && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-5 w-5" />
+                    Group Leader
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex-1">
+                      <p className="font-medium">{selectedLeader.name}</p>
+                      <p className="text-sm text-muted-foreground">{selectedLeader.email || 'No email'}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedLeader(null);
+                        setFormData(prev => ({ ...prev, leader: '', leaderContact: '' }));
+                      }}
+                      title="Remove leader"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Warning when no leader selected */}
+            {!selectedLeader && (
+              <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    No leader selected. Please add a group leader.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Add Leader Card - Only show if no leader selected */}
+            {!selectedLeader && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Plus className="h-5 w-5" />
+                    Select Group Leader
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label htmlFor="leaderSearch">Search Members</Label>
+                    <Input
+                      id="leaderSearch"
+                      value={searchLeader}
+                      onChange={(e) => setSearchLeader(e.target.value)}
+                      placeholder="Search by name or email..."
+                      disabled={isLoadingMembers}
+                    />
+                  </div>
+
+                  {isLoadingMembers && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Loading members...
+                    </p>
+                  )}
+
+                  {searchLeader && !isLoadingMembers && (
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {availableMembers
                         .filter(member => 
                           member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
                           member.email.toLowerCase().includes(searchLeader.toLowerCase())
                         )
-                        .map(member => (
-                          <CommandItem
-                            key={member.id}
-                            onSelect={() => {
-                              setSelectedLeader(member);
-                              handleInputChange('leader', member.name);
-                            }}
-                            className="flex items-center justify-between"
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">{member.name}</span>
-                              <span className="text-sm text-muted-foreground">{member.email}</span>
+                        .length > 0 ? (
+                        availableMembers
+                          .filter(member => 
+                            member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
+                            member.email.toLowerCase().includes(searchLeader.toLowerCase())
+                          )
+                          .map(member => (
+                            <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                              <div>
+                                <p className="font-medium">{member.name}</p>
+                                <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleLeaderChange(member.id)}
+                              >
+                                Add
+                              </Button>
                             </div>
-                            {selectedLeader?.id === member.id && <Check className="w-4 h-4" />}
-                          </CommandItem>
-                        ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </div>
-            </div>
+                          ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No members found matching "{searchLeader}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
-          {/* Members Selection */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
-                  3
-                </div>
-                <h3 className="text-lg font-semibold">Members</h3>
+          {/* Group Members */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
+                3
               </div>
-              <Badge variant="secondary" className="text-sm">
-                {selectedMembers.length} selected
-              </Badge>
+              <h3 className="text-lg font-semibold">Group Members</h3>
             </div>
             
-            <div className="space-y-4">
-              <Command className="border rounded-lg shadow-sm">
-                <CommandInput 
-                  placeholder="Search for members..."
-                  value={searchMembers}
-                  onValueChange={setSearchMembers}
-                  className="h-9"
-                />
-                <CommandList className="max-h-[200px]">
-                  <CommandEmpty>No members found.</CommandEmpty>
-                  <CommandGroup>
-                    {mockMembers
-                      .filter(member => 
-                        member.name.toLowerCase().includes(searchMembers.toLowerCase()) ||
-                        member.email.toLowerCase().includes(searchMembers.toLowerCase())
-                      )
-                      .map(member => (
-                        <CommandItem
-                          key={member.id}
-                          onSelect={() => {
-                            const isSelected = selectedMembers.some(m => m.id === member.id);
-                            if (isSelected) {
-                              setSelectedMembers(prev => prev.filter(m => m.id !== member.id));
-                              handleInputChange('members', selectedMembers.filter(m => m.id !== member.id).map(m => m.name));
-                            } else {
-                              setSelectedMembers(prev => [...prev, member]);
-                              handleInputChange('members', [...selectedMembers, member].map(m => m.name));
-                            }
-                          }}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <div className="flex flex-col flex-1">
-                            <span className="font-medium">{member.name}</span>
-                            <span className="text-sm text-muted-foreground">{member.email}</span>
-                          </div>
-                          {selectedMembers.some(m => m.id === member.id) ? (
-                            <Check className="w-4 h-4 text-primary shrink-0" />
-                          ) : (
-                            <Plus className="w-4 h-4 opacity-50 shrink-0" />
-                          )}
-                        </CommandItem>
-                      ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
+            {/* Warning when no members selected */}
+            {!isEdit && selectedMembers.length === 0 && (
+              <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    No members added yet. Please add at least one member to create this group.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Add Members Card - At the top */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Plus className="h-5 w-5" />
+                  Add Group Members
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label htmlFor="memberSearch">Search Members</Label>
+                  <Input
+                    id="memberSearch"
+                    value={searchMember}
+                    onChange={(e) => setSearchMember(e.target.value)}
+                    placeholder="Search by name or email..."
+                    disabled={isLoadingMembers}
+                  />
+                </div>
 
-              {selectedMembers.length > 0 && (
-                <div className="border rounded-lg divide-y">
-                  {selectedMembers.map(member => (
-                    <div key={member.id} className="flex items-center justify-between py-3 px-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex flex-col">
-                        <span className="font-medium">{member.name}</span>
-                        <span className="text-sm text-muted-foreground">{member.email}</span>
+                {isLoadingMembers && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Loading members...
+                  </p>
+                )}
+
+                {searchMember && !isLoadingMembers && (
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {availableMembersForGroup.length > 0 ? (
+                      availableMembersForGroup.map((member) => (
+                        <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                          <div>
+                            <p className="font-medium">{member.name}</p>
+                            <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => addMemberToGroup(member)}
+                          >
+                            Add
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No members found matching "{searchMember}"
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Selected Members Display - Below search */}
+            {selectedMembers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Users className="h-5 w-5" />
+                    Selected Members ({selectedMembers.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {selectedMembers.map((member) => (
+                    <div key={member.memberID} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium">{member.firstName} {member.lastName}</p>
+                        <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
                       </div>
                       <Button
+                        size="sm"
                         variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedMembers(prev => prev.filter(m => m.id !== member.id));
-                          handleInputChange('members', selectedMembers.filter(m => m.id !== member.id).map(m => m.name));
-                        }}
-                        className="opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => removeMemberFromGroup(member.memberID)}
+                        title="Remove from group"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
-                </div>
-              )}
-            </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Form Actions */}
@@ -441,7 +701,14 @@ export const AddEditGroupModal = ({
               type="submit"
               disabled={isSubmitting}
             >
-              {isSubmitting ? (isEdit ? 'Updating...' : 'Adding...') : (isEdit ? 'Update Group' : 'Add Group')}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {isEdit ? 'Updating...' : 'Adding...'}
+                </>
+              ) : (
+                isEdit ? 'Update Group' : 'Add Group'
+              )}
             </Button>
           </div>
         </form>

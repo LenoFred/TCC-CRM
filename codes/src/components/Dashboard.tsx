@@ -218,9 +218,8 @@ export function Dashboard() {
             {/* Pending Donations */}
             <MetricCard
               title="Pending Donations"
-              value={pendingDonations?.length || 0}
-              description={pendingDonations?.length > 0 ? "Needs review" : "All clear"}
-              trend={pendingDonations?.length > 0 ? { value: pendingDonations.length, isPositive: false } : { value: 0, isPositive: true }}
+              value="Coming Soon"
+              description="Feature in development"
               icon={DollarSign}
             />
             
@@ -286,59 +285,34 @@ export function Dashboard() {
         </Card>
 
         {/* Donation Statistics */}
-        <Card className="shadow-soft">
+        <Card className="shadow-soft opacity-60">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Heart className="w-5 h-5 text-primary" />
                 Donation Status
               </span>
-              {donationsLoading && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {donationsLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-5/6" />
+            <div className="space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Coming Soon</span>
+                {/* <Badge variant="secondary" className="text-muted-foreground">Coming Soon</Badge> */}
               </div>
-            ) : donationsError ? (
-              <Alert variant="destructive">
-                <AlertDescription className="text-sm">{donationsError}</AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-3">
-                {(() => {
-                  console.log('=== DASHBOARD DONATION STATS ===');
-                  console.log('donationStats object:', donationStats);
-                  console.log('verifiedCount:', donationStats?.verifiedCount);
-                  console.log('totalAmount:', donationStats?.totalAmount);
-                  console.log('averageAmount:', donationStats?.averageAmount);
-                  return null;
-                })()}
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Pending Review</span>
-                  <Badge variant="destructive">{pendingDonations?.length || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Verified (30d)</span>
-                  <Badge variant="default">{donationStats?.verifiedCount || 0}</Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Total Amount</span>
-                  <Badge className="bg-green-100 text-green-800">
-                    ₦{donationStats?.totalAmount?.toLocaleString() || 0}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Avg. Donation</span>
-                  <Badge variant="outline">
-                    ₦{donationStats?.averageAmount?.toFixed(2) || 0}
-                  </Badge>
-                </div>
+              {/* <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Verified (30d)</span>
+                <Badge variant="secondary" className="text-muted-foreground">Coming Soon</Badge>
               </div>
-            )}
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Total Amount</span>
+                <Badge variant="secondary" className="text-muted-foreground">Coming Soon</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">Avg. Donation</span>
+                <Badge variant="secondary" className="text-muted-foreground">Coming Soon</Badge>
+              </div> */}
+            </div>
           </CardContent>
         </Card>
 

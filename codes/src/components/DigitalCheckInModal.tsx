@@ -10,24 +10,25 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { useCheckIn } from "@/hooks/useBusinessLogic";
-import { useGuestRegistration } from "@/hooks/useBusinessLogic";
+import { api } from "@/config/api";
 
 interface Member {
-  id: number;
-  name: string;
+  memberID: string;
+  firstName: string;
+  lastName: string;
   email: string;
   phone: string;
-  status: string;
+  memberStatus: string;
 }
 
 interface Gathering {
-  id: number;
-  name: string;
-  date: string;
-  type: string;
+  gatheringID: string;
+  gatheringName: string;
+  gatheringDate: string;
+  gatheringType: string;
 }
 
 interface DigitalCheckInModalProps {
@@ -39,31 +40,26 @@ interface DigitalCheckInModalProps {
 export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheckInModalProps) => {
   const { toast } = useToast();
   
-  // Use business logic hooks
-  const { checkIn, fetchCurrentAttendees, currentAttendees, loading, error } = useCheckIn();
-  const { registerGuest, loading: guestLoading, error: guestError } = useGuestRegistration();
-  
   const [searchQuery, setSearchQuery] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
-  const [checkedInMembers, setCheckedInMembers] = useState<number[]>([]);
+  const [checkedInMemberIDs, setCheckedInMemberIDs] = useState<string[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [isLoadingAttendees, setIsLoadingAttendees] = useState(false);
+  const [checkingInMemberID, setCheckingInMemberID] = useState<string | null>(null);
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false);
-  const [guestName, setGuestName] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
+  const [guestData, setGuestData] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+  });
+  const [isAddingGuest, setIsAddingGuest] = useState(false);
 
-  // Mock data - would be fetched from API
-  const mockMembers: Member[] = [
-    { id: 1, name: "John Smith", email: "john@example.com", phone: "+1234567890", status: "Active" },
-    { id: 2, name: "Sarah Johnson", email: "sarah@example.com", phone: "+1234567891", status: "Active" },
-    { id: 3, name: "Michael Brown", email: "michael@example.com", phone: "+1234567892", status: "Active" },
-    { id: 4, name: "Emily Davis", email: "emily@example.com", phone: "+1234567893", status: "Active" },
-    { id: 5, name: "David Wilson", email: "david@example.com", phone: "+1234567894", status: "Active" },
-  ];
-
+  // Fetch members from the Members sheet
   useEffect(() => {
     if (isOpen && gathering) {
-      // Reset state and fetch current attendees
-      setMembers(mockMembers);
       setSearchQuery("");
+      fetchMembers();
       loadCurrentAttendees();
       
       // Poll for attendees every 30 seconds
@@ -75,62 +71,118 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
     }
   }, [isOpen, gathering]);
 
-  const loadCurrentAttendees = async () => {
-    if (!gathering) return;
-    
+  const fetchMembers = async () => {
+    setIsLoadingMembers(true);
     try {
-      const attendees = await fetchCurrentAttendees(gathering.id.toString());
-      // Extract member IDs from attendees
-      const attendeeIds = (attendees || []).map((a: any) => parseInt(a.memberID));
-      setCheckedInMembers(attendeeIds);
-    } catch (err) {
-      console.error('Error fetching attendees:', err);
+      console.log('=== Fetching members for check-in ===');
+      const response = await api.members.getAll();
+      console.log('Members response:', response);
+      
+      const membersData = Array.isArray(response) ? response : (response.data || []);
+      console.log('Members data:', membersData);
+      setMembers(membersData);
+    } catch (error) {
+      console.error('Error fetching members:', error);
+      toast({
+        title: "Error Loading Members",
+        description: "Failed to load members list. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMembers(false);
     }
   };
 
-  const filteredMembers = members.filter(member => 
-    !checkedInMembers.includes(member.id) &&
-    (member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     member.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     member.phone.includes(searchQuery))
-  );
-
-  const handleCheckIn = async (memberId: number) => {
+  const loadCurrentAttendees = async () => {
     if (!gathering) return;
     
+    setIsLoadingAttendees(true);
     try {
-      await checkIn({
-        memberID: memberId.toString(),
-        gatheringID: gathering.id.toString(),
-        checkInMethod: 'Manual',
+      console.log('=== Fetching attendees for gathering:', gathering.gatheringID);
+      const response = await api.checkIn.getAttendees(gathering.gatheringID);
+      console.log('Attendees response:', response);
+      
+      const attendeesData = Array.isArray(response) ? response : (response.data || []);
+      // Extract member IDs from attendees
+      const attendeeIds = attendeesData.map((a: any) => a.memberID).filter((id: string) => id);
+      console.log('Checked-in member IDs:', attendeeIds);
+      setCheckedInMemberIDs(attendeeIds);
+    } catch (err) {
+      console.error('Error fetching attendees:', err);
+    } finally {
+      setIsLoadingAttendees(false);
+    }
+  };
+
+  const filteredMembers = members.filter(member => {
+    // Exclude members who are already checked in
+    if (checkedInMemberIDs.includes(member.memberID)) {
+      return false;
+    }
+    
+    // Filter by search query
+    if (!searchQuery) return true;
+    
+    const query = searchQuery.toLowerCase();
+    const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
+    return (
+      fullName.includes(query) ||
+      member.email?.toLowerCase().includes(query) ||
+      member.phone?.includes(searchQuery)
+    );
+  });
+
+  const handleCheckIn = async (memberID: string) => {
+    if (!gathering) return;
+    
+    setCheckingInMemberID(memberID);
+    try {
+      console.log('=== Checking in member:', memberID, 'to gathering:', gathering.gatheringID);
+      
+      await api.checkIn.checkInMember({
+        memberID,
+        gatheringID: gathering.gatheringID,
+        method: 'Manual',
       });
       
-      // Optimistically update UI
-      setCheckedInMembers(prev => [...prev, memberId]);
-      const member = members.find(m => m.id === memberId);
+      // Immediately update UI - no delay needed
+      setCheckedInMemberIDs(prev => [...prev, memberID]);
+      const member = members.find(m => m.memberID === memberID);
+      const memberName = member ? `${member.firstName} ${member.lastName}` : 'Member';
       
       toast({
         title: "Check-in Successful",
-        description: `${member?.name} has been checked in.`,
+        description: `${memberName} has been checked in.`,
       });
       
-      // Refresh attendee list
-      loadCurrentAttendees();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Check-in error:', err);
       toast({
         title: "Check-in Failed",
-        description: error || "Failed to check in member. Please try again.",
+        description: err.message || "Failed to check in member. Please try again.",
         variant: "destructive",
       });
+      // Remove from optimistic update if failed
+      setCheckedInMemberIDs(prev => prev.filter(id => id !== memberID));
+    } finally {
+      setCheckingInMemberID(null);
     }
   };
 
   const handleAddGuest = async () => {
-    if (!guestName.trim() || !guestPhone.trim()) {
+    if (!guestData.firstName.trim()) {
       toast({
         title: "Missing Information",
-        description: "Please provide both name and phone number for the guest.",
+        description: "First name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!guestData.phone.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Phone number is required.",
         variant: "destructive",
       });
       return;
@@ -138,38 +190,50 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
 
     if (!gathering) return;
 
+    setIsAddingGuest(true);
     try {
-      // Register guest using business logic
-      const nameParts = guestName.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.slice(1).join(' ') || '';
+      console.log('=== Registering guest:', guestData);
       
-      const result = await registerGuest({
-        firstName,
-        lastName,
-        phone: guestPhone,
-        email: '',
-      }, gathering.id.toString());
-
-      toast({
-        title: "Guest Added & Checked In",
-        description: `${guestName} has been registered and checked in.`,
+      // Register guest and check them in
+      const result = await api.guestManagement.registerGuest({
+        firstName: guestData.firstName,
+        lastName: guestData.lastName || '',
+        phone: guestData.phone,
+        email: guestData.email || '',
+        gatheringID: gathering.gatheringID,
       });
 
+      console.log('Guest registration result:', result);
+
+      // Check if guest phone already exists
+      if (result.isNew === false && result.message) {
+        toast({
+          title: "Guest Phone Number Already Exists",
+          description: result.message,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Guest Added & Checked In",
+          description: `${guestData.firstName} ${guestData.lastName} has been registered and checked in.`,
+        });
+      }
+
       // Reset form
-      setGuestName("");
-      setGuestPhone("");
+      setGuestData({ firstName: "", lastName: "", phone: "", email: "" });
       setIsAddGuestOpen(false);
       
       // Refresh attendee list
       loadCurrentAttendees();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Guest registration error:', err);
       toast({
         title: "Failed to Add Guest",
-        description: guestError || "Could not register guest. Please try again.",
+        description: err.message || "Could not register guest. Please try again.",
         variant: "destructive",
       });
+    } finally {
+      setIsAddingGuest(false);
     }
   };
 
@@ -181,10 +245,10 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5" />
-            Digital Check-in: {gathering.name}
+            Digital Check-in: {gathering.gatheringName}
           </DialogTitle>
           <DialogDescription>
-            Search and check in members for {gathering.name} on {new Date(gathering.date).toLocaleDateString()}
+            Search and check in members for {gathering.gatheringName} on {gathering.gatheringDate}
           </DialogDescription>
         </DialogHeader>
 
@@ -198,24 +262,25 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 text-lg h-12"
               autoFocus
+              disabled={isLoadingMembers}
             />
           </div>
 
-          {/* Add Guest Button */}
+          {/* Stats and Actions */}
           <div className="flex justify-between items-center">
             <div className="text-sm text-muted-foreground flex items-center gap-2">
-              <span>{checkedInMembers.length} members checked in • {filteredMembers.length} available</span>
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              <span>{checkedInMemberIDs.length} members checked in • {filteredMembers.length} available</span>
+              {(isLoadingAttendees || isLoadingMembers) && <Loader2 className="h-4 w-4 animate-spin" />}
             </div>
             <div className="flex gap-2">
               <Button 
                 variant="ghost"
                 size="icon"
                 onClick={loadCurrentAttendees}
-                disabled={loading}
+                disabled={isLoadingAttendees}
                 title="Refresh attendees"
               >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`h-4 w-4 ${isLoadingAttendees ? 'animate-spin' : ''}`} />
               </Button>
               <Button 
                 variant="outline" 
@@ -228,36 +293,56 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
             </div>
           </div>
 
-          {/* Error Alert */}
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
           {/* Add Guest Form */}
           {isAddGuestOpen && (
             <div className="border rounded-lg p-4 bg-muted/20">
               <h3 className="font-medium mb-3">Add New Guest</h3>
               <div className="grid grid-cols-2 gap-3">
-                <Input
-                  placeholder="Guest Name"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                />
-                <Input
-                  placeholder="Phone Number"
-                  value={guestPhone}
-                  onChange={(e) => setGuestPhone(e.target.value)}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="guest-firstName">First Name *</Label>
+                  <Input
+                    id="guest-firstName"
+                    placeholder="First Name"
+                    value={guestData.firstName}
+                    onChange={(e) => setGuestData(prev => ({ ...prev, firstName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="guest-lastName">Last Name</Label>
+                  <Input
+                    id="guest-lastName"
+                    placeholder="Last Name"
+                    value={guestData.lastName}
+                    onChange={(e) => setGuestData(prev => ({ ...prev, lastName: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="guest-phone">Phone Number *</Label>
+                  <Input
+                    id="guest-phone"
+                    placeholder="Phone Number"
+                    value={guestData.phone}
+                    onChange={(e) => setGuestData(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="guest-email">Email</Label>
+                  <Input
+                    id="guest-email"
+                    placeholder="Email Address"
+                    type="email"
+                    value={guestData.email}
+                    onChange={(e) => setGuestData(prev => ({ ...prev, email: e.target.value }))}
+                  />
+                </div>
               </div>
               <div className="flex gap-2 mt-3">
                 <Button 
                   onClick={handleAddGuest} 
                   size="sm"
-                  disabled={guestLoading}
+                  disabled={isAddingGuest}
                 >
-                  {guestLoading ? (
+                  {isAddingGuest ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Adding...
@@ -271,10 +356,9 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
                   size="sm"
                   onClick={() => {
                     setIsAddGuestOpen(false);
-                    setGuestName("");
-                    setGuestPhone("");
+                    setGuestData({ firstName: "", lastName: "", phone: "", email: "" });
                   }}
-                  disabled={guestLoading}
+                  disabled={isAddingGuest}
                 >
                   Cancel
                 </Button>
@@ -284,55 +368,63 @@ export const DigitalCheckInModal = ({ isOpen, onClose, gathering }: DigitalCheck
 
           {/* Members List */}
           <div className="flex-1 overflow-y-auto border rounded-lg">
-            {filteredMembers.length === 0 ? (
+            {isLoadingMembers ? (
+              <div className="p-8 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mt-2">Loading members...</p>
+              </div>
+            ) : filteredMembers.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 {searchQuery ? "No members found matching your search." : "All members have been checked in!"}
               </div>
             ) : (
               <div className="grid gap-2 p-4">
-                {filteredMembers.map((member) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{member.name}</h3>
-                        <Badge variant={member.status === "Guest" ? "secondary" : "outline"}>
-                          {member.status}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground mt-1">
-                        {member.email && <span>{member.email} • </span>}
-                        <span>{member.phone}</span>
-                      </div>
-                    </div>
-                    <Button 
-                      onClick={() => handleCheckIn(member.id)}
-                      className="gap-2"
-                      disabled={loading}
+                {filteredMembers.map((member) => {
+                  const fullName = `${member.firstName} ${member.lastName}`;
+                  return (
+                    <div
+                      key={member.memberID}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                     >
-                      {loading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle className="h-4 w-4" />
-                          Check In
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-medium">{fullName}</h3>
+                          <Badge variant={member.memberStatus === "Guest" ? "secondary" : "outline"}>
+                            {member.memberStatus || 'Active'}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {member.email && <span>{member.email} • </span>}
+                          <span>{member.phone}</span>
+                        </div>
+                      </div>
+                      <Button 
+                        onClick={() => handleCheckIn(member.memberID)}
+                        className="gap-2"
+                        disabled={checkingInMemberID === member.memberID}
+                      >
+                        {checkingInMemberID === member.memberID ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Check In
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
 
           {/* Summary */}
-          {checkedInMembers.length > 0 && (
+          {checkedInMemberIDs.length > 0 && (
             <div className="border-t pt-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">
-                  Total Checked In: {checkedInMembers.length}
+                  Total Checked In: {checkedInMemberIDs.length}
                 </span>
                 <Button variant="outline" onClick={onClose}>
                   Close Check-in

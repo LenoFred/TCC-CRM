@@ -55,7 +55,7 @@ router.post(
   '/',
   // authenticate,
   // requirePermission('can_add_families'),
-  // validate(schemas.family.create),
+  validate(schemas.family.create),
   asyncHandler(familiesController.create.bind(familiesController))
 );
 

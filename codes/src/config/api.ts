@@ -146,7 +146,7 @@ export const api = {
 
     verify: (id: string, data: any) =>
       apiRequest<any>(`/donations/${id}/verify`, {
-        method: 'POST',
+        method: 'PATCH',
         body: JSON.stringify(data),
       }),
 
@@ -155,6 +155,11 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
+
+    delete: (id: string) =>
+      apiRequest<any>(`/donations/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   // Attendance
@@ -162,7 +167,7 @@ export const api = {
     getAll: (params?: URLSearchParams) => {
       const timestamp = Date.now();
       const separator = params ? '&' : '?';
-      return apiRequest<any[]>(`/attendance${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
+      return apiRequest<{ success: boolean; data: any[]; total: number }>(`/attendance${params ? `?${params}` : ''}${separator}_t=${timestamp}`);
     },
 
     getByMember: (memberID: string) => {
@@ -186,8 +191,31 @@ export const api = {
 
     getByGroup: (groupID: string) => {
       const timestamp = Date.now();
-      return apiRequest<{success: boolean; data: any[]}>(`/group-members/group/${groupID}?_t=${timestamp}`);
+      return apiRequest<{success: boolean; groupID: string; total: number; members: any[]}>(`/group-members/group/${groupID}?_t=${timestamp}`);
     },
+    
+    create: (data: any) =>
+      apiRequest<{success: boolean; data: any}>('/group-members', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    batchCreate: (membersData: any[]) =>
+      apiRequest<{success: boolean; message: string; addedCount: number; data: any[]}>('/group-members/batch-create', {
+        method: 'POST',
+        body: JSON.stringify(membersData),
+      }),
+    
+    delete: (groupMemberID: string) =>
+      apiRequest<{success: boolean; message: string}>(`/group-members/${groupMemberID}`, {
+        method: 'DELETE',
+      }),
+
+    batchDelete: (groupMemberIDs: string[]) =>
+      apiRequest<{success: boolean; message: string; deletedCount: number}>('/group-members/batch-delete', {
+        method: 'POST',
+        body: JSON.stringify({ groupMemberIDs }),
+      }),
   },
 
   // Groups
@@ -197,6 +225,9 @@ export const api = {
 
     getById: (id: string) =>
       apiRequest<{success: boolean; data: any}>(`/groups/${id}`),
+
+    getWithMembers: (id: string) =>
+      apiRequest<{success: boolean; data: any}>(`/groups/${id}/members`),
 
     create: (data: any) =>
       apiRequest<any>('/groups', {
@@ -260,6 +291,39 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+  },
+
+  // Gatherings
+  gatherings: {
+    getAll: (params?: URLSearchParams) =>
+      apiRequest<{success: boolean; data: any[]}>(`/gatherings${params ? `?${params}` : ''}`),
+
+    getById: (id: string) =>
+      apiRequest<{success: boolean; data: any}>(`/gatherings/${id}`),
+
+    getByParent: (parentID: string) =>
+      apiRequest<{success: boolean; parentID: string; total: number; data: any[]}>(`/gatherings/parent/${parentID}`),
+
+    getByGroup: (groupID: string) =>
+      apiRequest<{success: boolean; groupID: string; total: number; data: any[]}>(`/gatherings/group/${groupID}`),
+
+    create: (data: any) =>
+      apiRequest<{success: boolean; data: any}>('/gatherings', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    update: (id: string, data: any) =>
+      apiRequest<{success: boolean; data: any}>(`/gatherings/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      apiRequest<void>(`/gatherings/${id}`, { method: 'DELETE' }),
+
+    getStats: () =>
+      apiRequest<{success: boolean; data: any}>('/gatherings/stats'),
   },
 
   // Staff Management
@@ -486,9 +550,10 @@ export const api = {
       apiRequest<any[]>('/volunteer-assignments'),
 
     createAssignment: (data: {
-      memberId: string;
-      gatheringId: string;
-      roleId: string;
+      memberID: string;
+      groupID: string;
+      roleID: string;
+      assignmentStatus?: string;
     }) =>
       apiRequest<any>('/volunteer-assignments', {
         method: 'POST',
@@ -527,6 +592,30 @@ export const api = {
 
     delete: (id: string) =>
       apiRequest<void>(`/branches/${id}`, { method: 'DELETE' }),
+  },
+
+  // Check-in & Attendance
+  checkIn: {
+    checkInMember: (data: { memberID: string; gatheringID: string; method?: string; notes?: string }) =>
+      apiRequest<{ success: boolean; data: any }>('/business/check-in', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    getAttendees: (gatheringID: string) =>
+      apiRequest<{ success: boolean; data: any[] }>(`/attendance?gatheringID=${gatheringID}`),
+  },
+
+  // Guest Management
+  guestManagement: {
+    registerGuest: (data: { firstName: string; lastName: string; phone: string; email?: string; gatheringID?: string }) =>
+      apiRequest<{ success: boolean; data: any }>('/business/guest-register', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    
+    getAllGuests: () =>
+      apiRequest<{ success: boolean; data: any[]; count: number }>('/business/guests'),
   },
 };
 

@@ -178,8 +178,8 @@ class AttendanceController extends BaseController {
               gatheringID: gathering.gatheringID,
               gatheringName: gathering.gatheringName,
               gatheringType: gathering.gatheringType,
-              date: gathering.date,
-              startTime: gathering.startTime,
+              gatheringDate: gathering.gatheringDate,
+              gatheringTime: gathering.gatheringTime,
             }
           : null,
       };

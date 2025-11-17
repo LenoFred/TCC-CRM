@@ -109,10 +109,12 @@ class BaseController {
     // Append to sheet
     await this.sheetsService.appendSheetData(this.sheetName, [row]);
 
-    // Log audit
-    logAudit('CREATE', req.user?.userId, this.entityName, createData.id, {
-      data: createData,
-    });
+    // Log audit (handle missing user when auth is disabled)
+    if (req.user?.userId) {
+      logAudit('CREATE', req.user.userId, this.entityName, createData.id, {
+        data: createData,
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -141,10 +143,12 @@ class BaseController {
       throw new ApiError(`${this.entityName} not found`, 404);
     }
 
-    // Log audit
-    logAudit('UPDATE', req.user?.userId, this.entityName, id, {
-      updates,
-    });
+    // Log audit (handle missing user when auth is disabled)
+    if (req.user?.userId) {
+      logAudit('UPDATE', req.user.userId, this.entityName, id, {
+        updates,
+      });
+    }
 
     res.json({
       success: true,
@@ -159,37 +163,29 @@ class BaseController {
   async delete(req, res) {
     const { id } = req.params;
 
-    const sheetData = await this.sheetsService.getSheetData(this.sheetName);
-    
-    if (sheetData.length === 0) {
+    // Verify the record exists
+    const data = await this.sheetsService.getSheetObjects(this.sheetName);
+    const record = data.find(item => this.matchId(item, id));
+
+    if (!record) {
       throw new ApiError(`${this.entityName} not found`, 404);
     }
 
-    const headers = sheetData[0];
-    const rows = sheetData.slice(1);
-    const idColumn = this.getIdColumn();
-    const idIndex = headers.findIndex(h => 
-      h.toLowerCase() === idColumn.toLowerCase()
+    // Use the deleteRow method which properly clears and rewrites the sheet
+    const deleted = await this.sheetsService.deleteRow(
+      this.sheetName,
+      this.getIdColumn(),
+      id
     );
 
-    if (idIndex === -1) {
-      throw new ApiError('ID column not found', 500);
+    if (!deleted) {
+      throw new ApiError(`Failed to delete ${this.entityName}`, 500);
     }
 
-    const rowIndex = rows.findIndex(row => row[idIndex] === id);
-
-    if (rowIndex === -1) {
-      throw new ApiError(`${this.entityName} not found`, 404);
+    // Log audit (handle missing user when auth is disabled)
+    if (req.user?.userId) {
+      logAudit('DELETE', req.user.userId, this.entityName, id);
     }
-
-    // Remove the row
-    rows.splice(rowIndex, 1);
-
-    // Update sheet
-    await this.sheetsService.updateSheetData(this.sheetName, [headers, ...rows]);
-
-    // Log audit
-    logAudit('DELETE', req.user?.userId, this.entityName, id);
 
     res.json({
       success: true,

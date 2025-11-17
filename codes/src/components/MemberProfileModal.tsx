@@ -382,8 +382,9 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                             </p>
                             <p className="text-sm text-muted-foreground">
                               {record.checkInTime ? new Date(record.checkInTime).toLocaleDateString() : 
-                                record.gathering?.date ? new Date(record.gathering.date).toLocaleDateString() : 'No date'} 
-                              {record.checkInTime && ` at ${new Date(record.checkInTime).toLocaleTimeString()}`}
+                                record.gathering?.gatheringDate ? new Date(record.gathering.gatheringDate).toLocaleDateString() : 'No date'} 
+                              {record.checkInTime ? ` at ${new Date(record.checkInTime).toLocaleTimeString()}` : 
+                                record.gathering?.gatheringTime ? ` at ${record.gathering.gatheringTime}` : ''}
                             </p>
                             {record.checkInMethod && (
                               <p className="text-xs text-muted-foreground mt-1">Method: {record.checkInMethod}</p>

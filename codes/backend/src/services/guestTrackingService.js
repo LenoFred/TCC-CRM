@@ -21,85 +21,76 @@ class GuestTrackingService {
         throw new ApiError('First name and last name are required', 400);
       }
 
-      // Check if guest already exists (by phone or email)
+      if (!guestData.phone || !guestData.phone.trim()) {
+        throw new ApiError('Phone number is required', 400);
+      }
+
+      // Check if guest already exists (by phone only - email is optional)
       const existingGuests = await this.findExistingGuest(
-        guestData.phone,
-        guestData.email
+        guestData.phone
       );
 
+      logger.info('Checking for existing guest', { 
+        phone: guestData.phone, 
+        foundCount: existingGuests.length 
+      });
+
       if (existingGuests.length > 0) {
-        // Update existing guest with new visit
-        return await this.recordVisit(existingGuests[0].memberID, {
-          gatheringID: guestData.gatheringID,
-          invitedBy: guestData.invitedBy,
+        // Guest already exists, just record attendance
+        const existingGuest = existingGuests[0];
+        
+        logger.info('Guest already exists - recording attendance only', { 
+          existingGuestID: existingGuest.guestID,
+          existingGuestName: existingGuest.name,
+          newGuestName: `${guestData.firstName} ${guestData.lastName}`
         });
+        
+        if (guestData.gatheringID) {
+          await this.recordAttendance(existingGuest.guestID, guestData.gatheringID);
+        }
+        
+        logger.info('Existing guest attendance recorded', { guestID: existingGuest.guestID });
+        return { 
+          guest: existingGuest, 
+          isNew: false,
+          message: 'Guest phone number already exists. Attendance recorded for existing guest.'
+        };
       }
 
       // Create new guest
       const guestID = generateId('GUEST');
+      const fullName = `${guestData.firstName} ${guestData.lastName}`;
       const guest = {
         guestID,
-        firstName: guestData.firstName,
-        lastName: guestData.lastName,
+        name: fullName,
         phone: guestData.phone || '',
         email: guestData.email || '',
-        address: guestData.address || '',
-        invitedBy: guestData.invitedBy || '',
-        firstVisitDate: new Date().toISOString().split('T')[0],
-        lastVisitDate: new Date().toISOString().split('T')[0],
-        visitCount: '1',
-        status: 'Active',
-        interests: guestData.interests || '',
-        notes: guestData.notes || '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       };
 
-      // Add to Members sheet with special status
-      const membersData = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.MEMBERS
-      );
-      const memberHeaders = [
-        'MemberID',
-        'FirstName',
-        'LastName',
-        'Phone',
-        'Email',
-        'Address',
-        'MemberStatus',
-        'JoinDate',
-        'Notes',
-        'CreatedAt',
-        'UpdatedAt',
-      ];
-
-      const guestAsMember = {
-        memberID: guestID,
-        firstName: guest.firstName,
-        lastName: guest.lastName,
+      logger.info('Creating new guest', { 
+        guestID, 
+        name: fullName, 
         phone: guest.phone,
-        email: guest.email,
-        address: guest.address,
-        memberStatus: 'Guest',
-        joinDate: guest.firstVisitDate,
-        notes: `Guest - Invited by: ${guest.invitedBy}. ${guest.notes}`,
-        createdAt: guest.createdAt,
-        updatedAt: guest.updatedAt,
-      };
+        email: guest.email 
+      });
 
-      membersData.push(guestAsMember);
-      const rows = [
-        memberHeaders,
-        ...membersData.map((m) =>
-          memberHeaders.map((h) => {
-            const key = h.charAt(0).toLowerCase() + h.slice(1);
-            return m[key] || '';
-          })
-        ),
+      // Add to Guest sheet (GuestID, Name, Phone, Email)
+      const newGuestRow = [
+        guest.guestID,
+        guest.name,
+        guest.phone,
+        guest.email,
       ];
 
-      await sheetsService.updateSheetData(sheetsService.SHEETS.MEMBERS, rows);
-      sheetsService.invalidateCache(sheetsService.SHEETS.MEMBERS);
+      logger.info('Appending guest to Guest sheet', { 
+        row: newGuestRow,
+        sheet: sheetsService.SHEETS.GUEST 
+      });
+
+      await sheetsService.appendSheetData(sheetsService.SHEETS.GUEST, [newGuestRow]);
+      sheetsService.invalidateCache(sheetsService.SHEETS.GUEST);
+
+      logger.info('Guest saved to sheet successfully', { guestID });
 
       // Record attendance if gathering provided
       if (guestData.gatheringID) {
@@ -107,7 +98,7 @@ class GuestTrackingService {
       }
 
       logger.info('Guest registered successfully', { guestID });
-      return { guest: guestAsMember, isNew: true };
+      return { guest, isNew: true };
     } catch (error) {
       logger.error('Error registering guest', { error: error.message });
       throw error;
@@ -115,84 +106,43 @@ class GuestTrackingService {
   }
 
   /**
-   * Find existing guest by phone or email
+   * Find existing guest by phone number only
    */
-  async findExistingGuest(phone, email) {
-    const members = await sheetsService.getSheetObjects(
-      sheetsService.SHEETS.MEMBERS
+  async findExistingGuest(phone) {
+    const guests = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GUEST
     );
 
-    return members.filter(
-      (m) =>
-        m.memberStatus?.toLowerCase() === 'guest' &&
-        ((phone && m.phone === phone) || (email && m.email === email))
+    // Only match by phone number (required field)
+    return guests.filter(
+      (g) => phone && g.phone && g.phone.trim() === phone.trim()
     );
   }
 
   /**
-   * Record a return visit for existing guest
+   * Record a return visit for existing guest (simplified for Guest sheet)
    */
   async recordVisit(guestID, visitData = {}) {
     try {
       logger.info('Recording guest visit', { guestID, visitData });
 
-      const members = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.MEMBERS
-      );
-      const guestIndex = members.findIndex((m) => m.memberID === guestID);
-
-      if (guestIndex === -1) {
-        throw new ApiError('Guest not found', 404);
-      }
-
-      const guest = members[guestIndex];
-
-      // Update visit count and last visit date
-      const currentCount = parseInt(guest.notes?.match(/Visits: (\d+)/)?.[1] || '1');
-      const updatedNotes = guest.notes
-        ? guest.notes.replace(/Visits: \d+/, `Visits: ${currentCount + 1}`)
-        : `${guest.notes} Visits: ${currentCount + 1}`;
-
-      members[guestIndex] = {
-        ...guest,
-        notes: updatedNotes,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const memberHeaders = [
-        'MemberID',
-        'FirstName',
-        'LastName',
-        'Phone',
-        'Email',
-        'Address',
-        'MemberStatus',
-        'JoinDate',
-        'Notes',
-        'CreatedAt',
-        'UpdatedAt',
-      ];
-
-      const rows = [
-        memberHeaders,
-        ...members.map((m) =>
-          memberHeaders.map((h) => {
-            const key = h.charAt(0).toLowerCase() + h.slice(1);
-            return m[key] || '';
-          })
-        ),
-      ];
-
-      await sheetsService.updateSheetData(sheetsService.SHEETS.MEMBERS, rows);
-      sheetsService.invalidateCache(sheetsService.SHEETS.MEMBERS);
-
-      // Record attendance if gathering provided
+      // Simply record attendance for the existing guest
       if (visitData.gatheringID) {
         await this.recordAttendance(guestID, visitData.gatheringID);
       }
 
+      // Get guest info from Guest sheet
+      const guests = await sheetsService.getSheetObjects(
+        sheetsService.SHEETS.GUEST
+      );
+      const guest = guests.find((g) => g.guestID === guestID);
+
+      if (!guest) {
+        throw new ApiError('Guest not found', 404);
+      }
+
       logger.info('Guest visit recorded successfully', { guestID });
-      return { guest: members[guestIndex], isNew: false };
+      return { guest, isNew: false };
     } catch (error) {
       logger.error('Error recording guest visit', { error: error.message });
       throw error;
@@ -220,48 +170,18 @@ class GuestTrackingService {
         return existingAttendance;
       }
 
-      const attendance = {
-        attendanceID: generateId('ATT'),
+      // Attendance sheet has only 3 columns: AttendanceID, MemberID, GatheringID
+      const attendanceID = generateId('ATTENDANCE');
+      const newAttendanceRow = [
+        attendanceID,
+        guestID, // GuestID goes in the MemberID column
         gatheringID,
-        memberID: guestID,
-        checkInTime: new Date().toISOString(),
-        checkOutTime: '',
-        status: 'Present',
-        checkInMethod: 'Guest Registration',
-        notes: 'Guest attendance',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      attendanceData.push(attendance);
-
-      const headers = [
-        'AttendanceID',
-        'GatheringID',
-        'MemberID',
-        'CheckInTime',
-        'CheckOutTime',
-        'Status',
-        'CheckInMethod',
-        'Notes',
-        'CreatedAt',
-        'UpdatedAt',
       ];
 
-      const rows = [
-        headers,
-        ...attendanceData.map((a) =>
-          headers.map((h) => {
-            const key = h.charAt(0).toLowerCase() + h.slice(1);
-            return a[key] || '';
-          })
-        ),
-      ];
-
-      await sheetsService.updateSheetData(sheetsService.SHEETS.ATTENDANCE, rows);
+      await sheetsService.appendSheetData(sheetsService.SHEETS.ATTENDANCE, [newAttendanceRow]);
       sheetsService.invalidateCache(sheetsService.SHEETS.ATTENDANCE);
 
-      return attendance;
+      return { attendanceID, memberID: guestID, gatheringID };
     } catch (error) {
       logger.error('Error recording attendance', { error: error.message });
       throw error;
@@ -418,11 +338,20 @@ class GuestTrackingService {
    * Get all guests
    */
   async getAllGuests() {
-    const members = await sheetsService.getSheetObjects(
-      sheetsService.SHEETS.MEMBERS
+    console.log('=== FETCHING GUESTS FROM SHEET ===');
+    console.log('Sheet name:', sheetsService.SHEETS.GUEST);
+    
+    const guests = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GUEST
     );
+    
+    console.log('Guests fetched:', guests.length);
+    if (guests.length > 0) {
+      console.log('First guest:', guests[0]);
+      console.log('Guest keys:', Object.keys(guests[0]));
+    }
 
-    return members.filter((m) => m.memberStatus?.toLowerCase() === 'guest');
+    return guests;
   }
 
   /**
