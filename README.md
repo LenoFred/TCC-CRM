@@ -98,32 +98,51 @@ Create a Google Sheet and share it with your service account email (found in cre
 
 Create tabs with these exact column headers:
 
-**Members**: MemberID, FirstName, MiddleName, LastName, Email, Phone, DateOfBirth, Gender, MaritalStatus, Address, City, State, Country, PostalCode, JoinDate, BaptismDate, MembershipStatus, FamilyID, EmergencyContactName, EmergencyContactPhone, Notes, CustomField1-5, CreatedAt, UpdatedAt
+Members:
+MemberID, FirstName, LastName, PhoneNumber, Email, DOB, Gender, State, LGA, Address, FamilyID, Status, JoinDate, MemberType, EmergencyContact, FamilyRole
 
-**Families**: FamilyID, FamilyName, Address, City, State, Country, PostalCode, HomePhone, Notes, CreatedAt, UpdatedAt
+Families:
+FamilyID, FamilyName, CreatedDate
 
-**Groups**: GroupID, GroupName, GroupType, Description, LeaderID, MeetingDay, MeetingTime, Location, IsActive, CreatedAt, UpdatedAt
+Groups:
+GroupID, GroupName, GroupType, LeaderMemberID, Status, MeetingLocation, Description
 
-**GroupMembers**: GroupMemberID, MemberID, GroupID, JoinDate, Role, IsActive, CreatedAt, UpdatedAt
+GroupMembers:
+GroupMemberID, MemberID, GroupID
 
-**Events**: EventID, EventName, EventType, EventDate, StartTime, EndTime, Location, Description, IsRecurring, RecurrencePattern, CreatedBy, CreatedAt, UpdatedAt
+Gatherings:
+GatheringID, GatheringName, GatheringType, ParentID, GatheringDate, GatheringTime
 
-**Gatherings**: GatheringID, EventID, GatheringDate, StartTime, EndTime, Location, ActualAttendance, Notes, CreatedAt, UpdatedAt
+Attendance:
+AttendanceID, MemberID, GatheringID
 
-**Attendance**: AttendanceID, GatheringID, MemberID, AttendanceStatus, AttendanceMethod, CheckInTime, Notes, CreatedAt
+Donations:
+DonationID, MemberID, Amount, DonationDate, Fund, PayDate, Status
 
-**Donations**: DonationID, MemberID, DonationDate, Amount, Currency, DonationType, PaymentMethod, ReferenceNumber, Notes, VerifiedBy, VerificationDate, VerificationStatus, CreatedAt, UpdatedAt
+Guest
+GuestID, Name, Email, Phone 																					
 
-**VolunteerRoles**: RoleID, RoleName, Department, Description, RequiredSkills, IsActive, CreatedAt, UpdatedAt
+VolunteerRoles:
+RoleID, RoleName, Description
 
-**VolunteerAssignments**: AssignmentID, MemberID, RoleID, EventID, AssignmentDate, StartTime, EndTime, Status, Notes, CreatedAt, UpdatedAt
+VolunteerAssignments:
+AssignmentID, MemberID, GatheringID, RoleID, AssignmentStatus
 
-**SupportRequests**: RequestID, MemberID, RequestType, RequestDate, Description, Priority, Status, AssignedTo, ResolutionDate, ResolutionNotes, CreatedAt, UpdatedAt
+SupportRequests:
+RequestID, MemberID, RequestorName, RequestorContact, RequestCategory, RequestDetails, RequestStatus, AssignedTo
 
-**Staff**: StaffID, FirstName, LastName, Email, Phone, Position, Department, HireDate, Username, Password, IsActive, CreatedAt, UpdatedAt
+Staff:
+StaffID, MemberID, JobTitle, AppointmentDate, SalaryInfo
 
-**StaffPermissions**: PermissionID, StaffID, Module, CanView, CanCreate, CanEdit, CanDelete, CanExport, CreatedAt, UpdatedAt
-   - Description: String
+StaffPermissions:
+PermissionID, StaffMemberID, PermissionKey, HasAccess
+
+Logs:This sheet will record creation and update timestamps for every record in all other sheets using their Primary Key as the reference.
+LogID — (Primary Key) Unique ID for each log entry.
+TableName — (String, Required) The name of the table/sheet where the record belongs (e.g., “Members”, “Families”).
+RecordID — (String, Required) The unique identifier of the record in that table (the corresponding Primary Key, e.g., “MemberID”, “FamilyID”).
+CreatedAt — (DateTime) The date and time the record was created.
+UpdatedAt — (DateTime) The date and time the record was last updated.
 
    ### VolunteerAssignments
    - AssignmentID (PK): String, Required, Unique

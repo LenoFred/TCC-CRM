@@ -14,10 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
 interface Role {
-  id?: number;
-  name: string;
+  roleID?: string;
+  roleName: string;
   description: string;
-  activeCount?: number;
 }
 
 interface AddEditRoleModalProps {
@@ -31,26 +30,26 @@ interface AddEditRoleModalProps {
 export const AddEditRoleModal = ({ isOpen, onClose, onSave, role, isEdit = false }: AddEditRoleModalProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    name: "",
+    roleName: "",
     description: "",
   });
 
   useEffect(() => {
     if (role && isEdit) {
       setFormData({
-        name: role.name,
-        description: role.description,
+        roleName: role.roleName || "",
+        description: role.description || "",
       });
     } else {
       setFormData({
-        name: "",
+        roleName: "",
         description: "",
       });
     }
   }, [role, isEdit, isOpen]);
 
   const handleSubmit = () => {
-    if (!formData.name.trim() || !formData.description.trim()) {
+    if (!formData.roleName.trim() || !formData.description.trim()) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
@@ -60,21 +59,15 @@ export const AddEditRoleModal = ({ isOpen, onClose, onSave, role, isEdit = false
     }
 
     const roleData: Role = {
-      ...formData,
-      id: isEdit && role ? role.id : Date.now(),
-      activeCount: isEdit && role ? role.activeCount : 0,
+      roleName: formData.roleName,
+      description: formData.description,
     };
 
     onSave(roleData);
 
-    toast({
-      title: isEdit ? "Role Updated" : "Role Created",
-      description: `${formData.name} has been ${isEdit ? "updated" : "created"} successfully.`,
-    });
-
     if (!isEdit) {
       setFormData({
-        name: "",
+        roleName: "",
         description: "",
       });
     }
@@ -98,8 +91,8 @@ export const AddEditRoleModal = ({ isOpen, onClose, onSave, role, isEdit = false
             <Input
               id="roleName"
               placeholder="e.g., Usher, Greeter, Sound Tech"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              value={formData.roleName}
+              onChange={(e) => setFormData({ ...formData, roleName: e.target.value })}
             />
           </div>
 

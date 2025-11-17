@@ -11,14 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 interface Group {
-  id: number;
+  id: string;
   name: string;
   type: string;
   status: string;
 }
 
 interface Activity {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   date: string;
@@ -35,19 +35,19 @@ interface Member {
   checkInTime: string;
 }
 
-interface GroupActivityAttendanceModalProps {
+interface GroupGatheringAttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   group: Group;
   activity: Activity | null;
 }
 
-export const GroupActivityAttendanceModal = ({ 
+export const GroupGatheringAttendanceModal = ({ 
   isOpen, 
   onClose, 
   group,
   activity 
-}: GroupActivityAttendanceModalProps) => {
+}: GroupGatheringAttendanceModalProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [attendees, setAttendees] = useState<Member[]>([]);
 

@@ -59,6 +59,10 @@ const familySchemas = {
   create: z.object({
     familyName: z.string().min(1, 'Family name is required'),
     branchId: z.string().optional(),
+    members: z.array(z.object({
+      memberID: z.string(),
+      familyRole: z.string().optional(),
+    })).min(1, 'At least one member must be added to the family'),
   }),
   
   update: z.object({
@@ -73,15 +77,19 @@ const familySchemas = {
 const groupSchemas = {
   create: z.object({
     groupName: z.string().min(1, 'Group name is required'),
-    groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee']),
-    leaderId: z.string().optional(),
+    groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee', 'Small Group']),
+    leaderMemberID: z.string().optional(),
+    status: z.string().optional(),
+    meetingLocation: z.string().optional(),
     description: z.string().optional(),
   }),
   
   update: z.object({
     groupName: z.string().min(1).optional(),
-    groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee']).optional(),
-    leaderId: z.string().optional(),
+    groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee', 'Small Group']).optional(),
+    leaderMemberID: z.string().optional(),
+    status: z.string().optional(),
+    meetingLocation: z.string().optional(),
     description: z.string().optional(),
   }),
 };
@@ -111,18 +119,18 @@ const eventSchemas = {
 const gatheringSchemas = {
   create: z.object({
     gatheringName: z.string().min(1, 'Gathering name is required'),
-    gatheringType: z.enum(['EVENT', 'GROUP']),
-    parentId: z.string().min(1, 'Parent ID (Event or Group) is required'),
-    gatheringDate: commonSchemas.dateTime,
-    location: z.string().optional(),
+    gatheringType: z.string().optional(),
+    parentID: z.string().min(1, 'Parent ID (Event or Group) is required'),
+    gatheringDate: z.string().min(1, 'Gathering date is required'),
+    gatheringTime: z.string().optional(),
   }),
   
   update: z.object({
     gatheringName: z.string().min(1).optional(),
-    gatheringType: z.enum(['EVENT', 'GROUP']).optional(),
-    parentId: z.string().optional(),
-    gatheringDate: commonSchemas.dateTime.optional(),
-    location: z.string().optional(),
+    gatheringType: z.string().optional(),
+    parentID: z.string().optional(),
+    gatheringDate: z.string().optional(),
+    gatheringTime: z.string().optional(),
   }),
 };
 

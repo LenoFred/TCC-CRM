@@ -34,6 +34,7 @@ class SheetsService {
       GATHERINGS: 'Gatherings',
       ATTENDANCE: 'Attendance',
       DONATIONS: 'Donations',
+      GUEST: 'Guest',
       VOLUNTEER_ROLES: 'VolunteerRoles',
       VOLUNTEER_ASSIGNMENTS: 'VolunteerAssignments',
       SUPPORT_REQUESTS: 'SupportRequests',
@@ -210,6 +211,34 @@ class SheetsService {
   }
 
   /**
+   * Append multiple objects as rows (batch append)
+   * @param {string} sheetName - Name of the sheet
+   * @param {Array<object>} objects - Array of objects to append
+   * @returns {Promise<number>} Number of rows appended
+   */
+  async appendRows(sheetName, objects) {
+    if (!Array.isArray(objects) || objects.length === 0) {
+      return 0;
+    }
+
+    // Get sheet headers to know the column order
+    const data = await this.getSheetData(sheetName);
+    if (data.length === 0) {
+      throw new Error(`Sheet ${sheetName} has no headers`);
+    }
+
+    const headers = data[0];
+    
+    // Convert objects to rows matching header order
+    const rows = objects.map(obj => objectToSheetRow(obj, headers));
+    
+    // Append all rows in a single operation
+    await this.appendSheetData(sheetName, rows);
+    
+    return rows.length;
+  }
+
+  /**
    * Batch get multiple ranges
    * @param {Array<string>} ranges - Array of ranges in format "SheetName!A1:Z100"
    * @returns {Promise<Array>} Array of range data
@@ -328,6 +357,118 @@ class SheetsService {
     // Write back to sheet
     await this.updateSheetData(sheetName, [headers, ...rows]);
     return true;
+  }
+
+  /**
+   * Delete a specific row by matching a column value (hard delete)
+   * @param {string} sheetName - Name of the sheet
+   * @param {string} matchColumn - Column to match
+   * @param {*} matchValue - Value to match
+   * @returns {Promise<boolean>} True if deleted, false if not found
+   */
+  async deleteRow(sheetName, matchColumn, matchValue) {
+    const data = await this.getSheetData(sheetName);
+    
+    if (data.length === 0) {
+      return false;
+    }
+
+    const headers = data[0];
+    const rows = data.slice(1);
+    const matchIndex = headers.indexOf(matchColumn);
+
+    if (matchIndex === -1) {
+      throw new Error(`Column ${matchColumn} not found in ${sheetName}`);
+    }
+
+    const rowIndex = rows.findIndex(row => row[matchIndex] === matchValue);
+
+    if (rowIndex === -1) {
+      return false;
+    }
+
+    // Remove the row
+    rows.splice(rowIndex, 1);
+
+    // CRITICAL: Clear the sheet first to remove old data, then write new data
+    // Using update() alone doesn't clear rows beyond the new data range
+    await this.clearSheet(sheetName);
+    await this.updateSheetData(sheetName, [headers, ...rows]);
+    
+    // Clear cache for this sheet
+    this.invalidateCache(sheetName);
+    
+    return true;
+  }
+
+  /**
+   * Delete multiple rows by matching column values (hard delete, batch operation)
+   * More efficient than calling deleteRow multiple times - reads once, writes once
+   * @param {string} sheetName - Name of the sheet
+   * @param {string} matchColumn - Column to match
+   * @param {Array} matchValues - Array of values to match
+   * @returns {Promise<number>} Number of rows deleted
+   */
+  async deleteRows(sheetName, matchColumn, matchValues) {
+    const data = await this.getSheetData(sheetName);
+    
+    if (data.length === 0) {
+      return 0;
+    }
+
+    const headers = data[0];
+    const rows = data.slice(1);
+    const matchIndex = headers.indexOf(matchColumn);
+
+    if (matchIndex === -1) {
+      throw new Error(`Column ${matchColumn} not found in ${sheetName}`);
+    }
+
+    // Create a Set for faster lookup
+    const valuesToDelete = new Set(matchValues);
+    
+    // Filter out rows that match any of the values to delete
+    const initialCount = rows.length;
+    const remainingRows = rows.filter(row => !valuesToDelete.has(row[matchIndex]));
+    const deletedCount = initialCount - remainingRows.length;
+
+    if (deletedCount === 0) {
+      return 0; // No rows matched
+    }
+
+    // Clear the sheet and write back remaining rows
+    await this.clearSheet(sheetName);
+    await this.updateSheetData(sheetName, [headers, ...remainingRows]);
+    
+    // Clear cache for this sheet
+    this.invalidateCache(sheetName);
+    
+    return deletedCount;
+  }
+
+  /**
+   * Clear all data from a sheet (keeps the sheet, removes content)
+   * @param {string} sheetName - Name of the sheet to clear
+   * @returns {Promise<void>}
+   */
+  async clearSheet(sheetName) {
+    const clearData = async () => {
+      if (!this.sheets) await this.initializeAuth();
+
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.spreadsheetId,
+        range: `${sheetName}!A:Z`,
+      });
+    };
+
+    try {
+      await retry(clearData, 3, 1000);
+      this.invalidateCache(sheetName);
+      logSheetsOperation('CLEAR', sheetName, {});
+    } catch (error) {
+      logger.error(`Error clearing ${sheetName}`, { error: error.message });
+      throw new Error(`Failed to clear ${sheetName}: ${error.message}`);
+    }
   }
 
   // ============================================

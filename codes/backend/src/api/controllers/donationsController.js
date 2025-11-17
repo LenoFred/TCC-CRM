@@ -14,7 +14,7 @@ class DonationsController extends BaseController {
   }
 
   getSearchFields() {
-    return ['donationType', 'paymentMethod', 'category', 'status'];
+    return ['fund', 'status'];
   }
 
   getDefaultHeaders() {
@@ -22,17 +22,10 @@ class DonationsController extends BaseController {
       'DonationID',
       'MemberID',
       'Amount',
-      'Currency',
-      'DonationType',
-      'Category',
-      'PaymentMethod',
-      'TransactionReference',
-      'Date',
+      'DonationDate',
+      'Fund',
+      'PayDate',
       'Status',
-      'VerifiedBy',
-      'Notes',
-      'CreatedAt',
-      'UpdatedAt',
     ];
   }
 
@@ -47,32 +40,44 @@ class DonationsController extends BaseController {
       throw new ApiError(400, 'Valid donation amount is required');
     }
 
-    // If memberID is provided, validate member exists
+    // MemberID can be either a Member ID (MEM-) or Guest ID (GST-)
+    // Validate that the ID exists in either Members or Guest sheet
     if (data.memberID) {
-      const members = await sheetsService.getSheetObjects(
-        sheetsService.SHEETS.MEMBERS
-      );
-      const member = members.find((m) => m.memberID === data.memberID);
-      if (!member) {
-        throw new ApiError(404, 'Member not found');
+      const idPrefix = data.memberID.substring(0, 3);
+      
+      if (idPrefix === 'MEM') {
+        // Check Members sheet
+        const members = await sheetsService.getSheetObjects(
+          sheetsService.SHEETS.MEMBERS
+        );
+        const member = members.find((m) => m.memberID === data.memberID);
+        if (!member) {
+          throw new ApiError(404, 'Member not found');
+        }
+      } else if (idPrefix === 'GST') {
+        // Check Guest sheet
+        const guests = await sheetsService.getSheetObjects(
+          sheetsService.SHEETS.GUEST
+        );
+        const guest = guests.find((g) => g.guestID === data.memberID);
+        if (!guest) {
+          throw new ApiError(404, 'Guest not found');
+        }
+      } else {
+        throw new ApiError(400, 'Invalid MemberID format. Must start with MEM- or GST-');
       }
+    } else {
+      throw new ApiError(400, 'MemberID is required');
     }
 
     return {
-      donationID: generateId('DON'),
-      memberID: data.memberID || 'Anonymous',
+      donationID: generateId('DONATION'),
+      memberID: data.memberID,
       amount: amount.toString(),
-      currency: data.currency || 'NGN',
-      donationType: data.donationType || 'General',
-      category: data.category || 'Offering',
-      paymentMethod: data.paymentMethod || 'Cash',
-      transactionReference: data.transactionReference || '',
-      date: data.date || new Date().toISOString().split('T')[0],
-      status: data.status || 'Pending',
-      verifiedBy: data.verifiedBy || '',
-      notes: data.notes || '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      donationDate: data.donationDate || new Date().toISOString().split('T')[0],
+      fund: data.fund || 'General',
+      payDate: data.payDate || '',
+      status: data.status || 'Unpaid',
     };
   }
 
@@ -85,15 +90,9 @@ class DonationsController extends BaseController {
       );
     }
 
-    if (filters.type) {
+    if (filters.fund) {
       filteredData = filteredData.filter(
-        (item) => item.donationType?.toLowerCase() === filters.type.toLowerCase()
-      );
-    }
-
-    if (filters.category) {
-      filteredData = filteredData.filter(
-        (item) => item.category?.toLowerCase() === filters.category.toLowerCase()
+        (item) => item.fund?.toLowerCase() === filters.fund.toLowerCase()
       );
     }
 
@@ -103,20 +102,13 @@ class DonationsController extends BaseController {
       );
     }
 
-    if (filters.paymentMethod) {
-      filteredData = filteredData.filter(
-        (item) =>
-          item.paymentMethod?.toLowerCase() === filters.paymentMethod.toLowerCase()
-      );
-    }
-
     // Date range filters
     if (filters.startDate) {
-      filteredData = filteredData.filter((item) => item.date >= filters.startDate);
+      filteredData = filteredData.filter((item) => item.donationDate >= filters.startDate);
     }
 
     if (filters.endDate) {
-      filteredData = filteredData.filter((item) => item.date <= filters.endDate);
+      filteredData = filteredData.filter((item) => item.donationDate <= filters.endDate);
     }
 
     // Amount range filters
@@ -135,6 +127,76 @@ class DonationsController extends BaseController {
     }
 
     return filteredData;
+  }
+
+  /**
+   * Get donor details from Members or Guest sheet
+   */
+  async getDonorDetails(memberID) {
+    if (!memberID) {
+      return null;
+    }
+
+    const idPrefix = memberID.substring(0, 3);
+
+    try {
+      if (idPrefix === 'MEM') {
+        // Fetch from Members sheet
+        const members = await sheetsService.getSheetObjects(
+          sheetsService.SHEETS.MEMBERS
+        );
+        const member = members.find((m) => m.memberID === memberID);
+        
+        if (member) {
+          return {
+            name: `${member.firstName || ''} ${member.lastName || ''}`.trim(),
+            email: member.email || '',
+            phone: member.phoneNumber || '',
+            type: 'Member',
+          };
+        }
+      } else if (idPrefix === 'GST') {
+        // Fetch from Guest sheet
+        const guests = await sheetsService.getSheetObjects(
+          sheetsService.SHEETS.GUEST
+        );
+        const guest = guests.find((g) => g.guestID === memberID);
+        
+        if (guest) {
+          return {
+            name: guest.name || 'Unknown Guest',
+            email: guest.email || '',
+            phone: guest.phone || '',
+            type: 'Guest',
+          };
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching donor details for ${memberID}:`, error);
+    }
+
+    return null;
+  }
+
+  /**
+   * Override getAll to include donor details
+   */
+  async getAll(req, res) {
+    const data = await sheetsService.getSheetObjects(this.sheetName);
+    const filtered = this.applyFilters(data, req.query);
+
+    // Add donor details to each donation
+    const donationsWithDetails = await Promise.all(
+      filtered.map(async (donation) => {
+        const donorDetails = await this.getDonorDetails(donation.memberID);
+        return {
+          ...donation,
+          donorDetails,
+        };
+      })
+    );
+
+    res.json(donationsWithDetails);
   }
 
   /**
@@ -160,7 +222,7 @@ class DonationsController extends BaseController {
   }
 
   /**
-   * Verify donation
+   * Verify donation - changes status from Unpaid to Paid
    */
   async verify(req, res) {
     const { id } = req.params;
@@ -172,15 +234,13 @@ class DonationsController extends BaseController {
       throw new ApiError(404, 'Donation not found');
     }
 
-    if (donation.status?.toLowerCase() === 'verified') {
+    if (donation.status?.toLowerCase() === 'paid') {
       throw new ApiError(400, 'Donation already verified');
     }
 
     const updated = {
       ...donation,
-      status: 'Verified',
-      verifiedBy: req.user?.memberID || '',
-      updatedAt: new Date().toISOString(),
+      status: 'Paid',
     };
 
     await this.updateInSheet(donation, updated, data, req.user);
@@ -201,18 +261,18 @@ class DonationsController extends BaseController {
 
     // Apply date filters if provided
     if (startDate) {
-      data = data.filter((d) => d.date >= startDate);
+      data = data.filter((d) => d.donationDate >= startDate);
     }
     if (endDate) {
-      data = data.filter((d) => d.date <= endDate);
+      data = data.filter((d) => d.donationDate <= endDate);
     }
 
     const totalDonations = data.length;
-    const verifiedDonations = data.filter(
-      (d) => d.status?.toLowerCase() === 'verified'
+    const paidDonations = data.filter(
+      (d) => d.status?.toLowerCase() === 'paid'
     ).length;
-    const pendingDonations = data.filter(
-      (d) => d.status?.toLowerCase() === 'pending'
+    const unpaidDonations = data.filter(
+      (d) => d.status?.toLowerCase() === 'unpaid'
     ).length;
 
     // Calculate total amounts
@@ -220,44 +280,25 @@ class DonationsController extends BaseController {
       (sum, d) => sum + parseFloat(d.amount || 0),
       0
     );
-    const verifiedAmount = data
-      .filter((d) => d.status?.toLowerCase() === 'verified')
+    const paidAmount = data
+      .filter((d) => d.status?.toLowerCase() === 'paid')
       .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
 
-    // Category distribution
-    const categoryDistribution = {};
+    // Fund distribution
+    const fundDistribution = {};
     data.forEach((d) => {
-      const category = d.category || 'Unknown';
-      if (!categoryDistribution[category]) {
-        categoryDistribution[category] = { count: 0, amount: 0 };
+      const fund = d.fund || 'Unknown';
+      if (!fundDistribution[fund]) {
+        fundDistribution[fund] = { count: 0, amount: 0 };
       }
-      categoryDistribution[category].count++;
-      categoryDistribution[category].amount += parseFloat(d.amount || 0);
-    });
-
-    // Payment method distribution
-    const paymentMethodDistribution = {};
-    data.forEach((d) => {
-      const method = d.paymentMethod || 'Unknown';
-      paymentMethodDistribution[method] =
-        (paymentMethodDistribution[method] || 0) + 1;
-    });
-
-    // Type distribution
-    const typeDistribution = {};
-    data.forEach((d) => {
-      const type = d.donationType || 'Unknown';
-      if (!typeDistribution[type]) {
-        typeDistribution[type] = { count: 0, amount: 0 };
-      }
-      typeDistribution[type].count++;
-      typeDistribution[type].amount += parseFloat(d.amount || 0);
+      fundDistribution[fund].count++;
+      fundDistribution[fund].amount += parseFloat(d.amount || 0);
     });
 
     // Top donors
     const donorTotals = {};
     data
-      .filter((d) => d.memberID && d.memberID !== 'Anonymous')
+      .filter((d) => d.memberID)
       .forEach((d) => {
         donorTotals[d.memberID] =
           (donorTotals[d.memberID] || 0) + parseFloat(d.amount || 0);
@@ -271,17 +312,15 @@ class DonationsController extends BaseController {
     res.json({
       dateRange: { startDate, endDate },
       totalDonations,
-      verifiedDonations,
-      pendingDonations,
+      paidDonations,
+      unpaidDonations,
       totalAmount: Math.round(totalAmount * 100) / 100,
-      verifiedAmount: Math.round(verifiedAmount * 100) / 100,
+      paidAmount: Math.round(paidAmount * 100) / 100,
       avgDonation:
         totalDonations > 0
           ? Math.round((totalAmount / totalDonations) * 100) / 100
           : 0,
-      categoryDistribution,
-      paymentMethodDistribution,
-      typeDistribution,
+      fundDistribution,
       topDonors,
     });
   }

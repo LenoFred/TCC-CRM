@@ -46,10 +46,10 @@ const VolunteersPage = () => {
     setIsLoadingRoles(true);
     setRolesError(null);
     try {
-      const roles = await api.volunteers.getRoles();
-      console.log('Volunteer roles data received:', roles);
-      console.log('Is roles data array?', Array.isArray(roles));
-      setVolunteerRoles(Array.isArray(roles) ? roles : []);
+      const rolesResponse: any = await api.volunteers.getRoles();
+      console.log('Volunteer roles data received:', rolesResponse);
+      const rolesData = rolesResponse?.data || rolesResponse || [];
+      setVolunteerRoles(Array.isArray(rolesData) ? rolesData : []);
     } catch (error) {
       console.error('Error fetching volunteer roles:', error);
       setRolesError(error.message || 'Failed to load volunteer roles');
@@ -62,10 +62,16 @@ const VolunteersPage = () => {
     setIsLoadingAssignments(true);
     setAssignmentsError(null);
     try {
-      const assignments = await api.volunteers.getAll(new URLSearchParams({ status: 'uncompleted' }));
-      console.log('Assignments data received:', assignments);
-      console.log('Is assignments data array?', Array.isArray(assignments));
-      setUpcomingAssignments(Array.isArray(assignments) ? assignments : []);
+      const assignmentsResponse: any = await api.volunteers.getAssignments();
+      console.log('Assignments data received:', assignmentsResponse);
+      const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
+      
+      // Show all scheduled assignments
+      const scheduledAssignments = assignmentsData.filter((a: any) => 
+        a.assignmentStatus === 'Scheduled'
+      );
+      
+      setUpcomingAssignments(Array.isArray(scheduledAssignments) ? scheduledAssignments : []);
     } catch (error) {
       console.error('Error fetching assignments:', error);
       setAssignmentsError(error.message || 'Failed to load assignments');
@@ -94,18 +100,14 @@ const VolunteersPage = () => {
     try {
       if (selectedRole) {
         // Update existing role
-        await api.volunteers.updateRole(selectedRole.id, roleData);
-        setVolunteerRoles(prev => prev.map(role =>
-          role.id === selectedRole.id ? { ...roleData, id: selectedRole.id } : role
-        ));
+        await api.volunteers.updateRole(selectedRole.roleID || selectedRole.id, roleData);
         toast({
           title: "Role Updated",
           description: "Volunteer role has been successfully updated",
         });
       } else {
         // Add new role
-        const newRole = await api.volunteers.createRole(roleData);
-        setVolunteerRoles(prev => [...prev, newRole]);
+        await api.volunteers.createRole(roleData);
         toast({
           title: "Role Created",
           description: "New volunteer role has been successfully created",
@@ -114,6 +116,8 @@ const VolunteersPage = () => {
       setIsAddRoleModalOpen(false);
       setIsEditRoleModalOpen(false);
       setSelectedRole(null);
+      // Refresh roles list
+      await fetchRoles();
     } catch (error) {
       console.error('Error saving role:', error);
       toast({
@@ -148,10 +152,12 @@ const VolunteersPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Active Volunteers</CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoadingRoles ? (
+              {isLoadingAssignments ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
-                <div className="text-2xl font-bold text-foreground">45</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {new Set(upcomingAssignments.map((a: any) => a.memberID)).size}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -169,25 +175,25 @@ const VolunteersPage = () => {
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">This Week Scheduled</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Upcoming Assignments</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingAssignments ? (
                 <Skeleton className="h-8 w-8" />
               ) : (
-                <div className="text-2xl font-bold text-foreground">18</div>
+                <div className="text-2xl font-bold text-foreground">{upcomingAssignments.length}</div>
               )}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Open Positions</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Roles</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingRoles ? (
                 <Skeleton className="h-8 w-8" />
               ) : (
-                <div className="text-2xl font-bold text-foreground">7</div>
+                <div className="text-2xl font-bold text-foreground">{volunteerRoles.length}</div>
               )}
             </CardContent>
           </Card>
@@ -253,24 +259,36 @@ const VolunteersPage = () => {
                       <div className="text-center py-8 text-muted-foreground">
                         <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
                         <p>No volunteer roles found</p>
+                        <Button className="mt-4" onClick={() => setIsAddRoleModalOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create First Role
+                        </Button>
                       </div>
                     ) : (
-                      volunteerRoles.map((role) => (
-                        <div key={role.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      volunteerRoles.map((role: any) => {
+                        const assignmentCount = upcomingAssignments.filter((a: any) => a.roleID === role.roleID).length;
+                        return (
+                        <div key={role.roleID} className="flex items-center justify-between p-4 border rounded-lg">
                           <div className="flex-1">
-                            <h3 className="font-semibold">{role.name}</h3>
-                            <p className="text-sm text-muted-foreground">{role.description}</p>
+                            <h3 className="font-semibold">{role.roleName || 'Unnamed Role'}</h3>
+                            <p className="text-sm text-muted-foreground">{role.description || 'No description'}</p>
+                            {role.groupID && (
+                              <Badge variant="outline" className="mt-2 text-xs">
+                                {role.groupName || role.groupID}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-4">
                             <Badge variant="secondary">
-                              {role.activeCount} volunteers
+                              {assignmentCount} scheduled
                             </Badge>
                             <Button variant="ghost" size="sm" onClick={() => handleEditRole(role)} disabled={isSavingRole}>
                               Edit
                             </Button>
                           </div>
                         </div>
-                      ))
+                      );
+                      })
                     )}
                   </div>
                 )}
@@ -310,7 +328,7 @@ const VolunteersPage = () => {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Event</TableHead>
-                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
                         <TableHead>Role</TableHead>
                         <TableHead>Assigned</TableHead>
                         <TableHead>Status</TableHead>
@@ -357,26 +375,26 @@ const VolunteersPage = () => {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        upcomingAssignments.map((assignment) => (
-                          <TableRow key={assignment.id}>
-                            <TableCell className="font-medium">{assignment.event}</TableCell>
-                            <TableCell>{assignment.date}</TableCell>
-                            <TableCell>{assignment.role}</TableCell>
+                        upcomingAssignments.map((assignment: any) => (
+                          <TableRow key={assignment.assignmentID}>
+                            <TableCell className="font-medium">
+                              {assignment.groupName || assignment.groupID || 'N/A'}
+                            </TableCell>
                             <TableCell>
-                              <div className="space-y-1">
-                                {assignment.volunteers.map((volunteer, index) => (
-                                  <Badge key={index} variant="outline" className="text-xs">
-                                    {volunteer}
-                                  </Badge>
-                                ))}
-                              </div>
+                              {assignment.groupType || 'N/A'}
+                            </TableCell>
+                            <TableCell>{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">
+                                {assignment.memberName || assignment.memberID || 'Unassigned'}
+                              </Badge>
                             </TableCell>
                             <TableCell>
                               <Badge
-                                variant={assignment.filled >= assignment.needed ? 'default' : 'destructive'}
-                                className={assignment.filled >= assignment.needed ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
+                                variant={assignment.status === 'Completed' ? 'default' : 'secondary'}
+                                className={assignment.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : ''}
                               >
-                                {assignment.filled}/{assignment.needed} filled
+                                {assignment.status || 'Pending'}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
@@ -416,8 +434,14 @@ const VolunteersPage = () => {
         <VolunteerSchedulingModal
           isOpen={isSchedulingModalOpen}
           onClose={() => setIsSchedulingModalOpen(false)}
-          onSave={(scheduleData) => {
+          onSave={async (scheduleData) => {
             console.log("Schedule created:", scheduleData);
+            setIsSchedulingModalOpen(false);
+            await fetchAssignments();
+            toast({
+              title: "Schedule Created",
+              description: "Volunteer schedule has been successfully created",
+            });
           }}
         />
 
@@ -427,8 +451,15 @@ const VolunteersPage = () => {
             setIsManageAssignmentModalOpen(false);
             setSelectedAssignment(null);
           }}
-          onSave={(assignmentData) => {
+          onSave={async (assignmentData) => {
             console.log("Assignment updated:", assignmentData);
+            setIsManageAssignmentModalOpen(false);
+            setSelectedAssignment(null);
+            await fetchAssignments();
+            toast({
+              title: "Assignment Updated",
+              description: "Volunteer assignment has been successfully updated",
+            });
           }}
           assignment={selectedAssignment}
         />

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Send, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,18 +14,36 @@ interface Member {
   lastAttended: string;
 }
 
+interface Guest {
+  guestID: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
 interface SendFollowUpModalProps {
   isOpen: boolean;
   onClose: () => void;
-  absentMembers: Member[];
+  absentMembers?: Member[];
+  guests?: Guest[];
   eventName: string;
 }
 
-export function SendFollowUpModal({ isOpen, onClose, absentMembers, eventName }: SendFollowUpModalProps) {
+export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests = [], eventName }: SendFollowUpModalProps) {
+  const [recipientType, setRecipientType] = useState<'absent' | 'guests'>('absent');
   const [message, setMessage] = useState(`Hi [Name],\n\nWe missed you at ${eventName}. We hope you're doing well and look forward to seeing you soon.\n\nBlessings,\nTCC Team`);
-  const [selectedMembers, setSelectedMembers] = useState<number[]>(absentMembers.map(m => m.id));
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
+
+  // Update selected recipients when recipient type or data changes
+  useEffect(() => {
+    if (recipientType === 'absent') {
+      setSelectedMembers(absentMembers.map(m => String(m.id)));
+    } else {
+      setSelectedMembers(guests.map(g => g.guestID));
+    }
+  }, [recipientType, absentMembers, guests]);
 
   const handleSend = async () => {
     setIsSending(true);
@@ -46,13 +66,15 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers, eventName }:
     }
   };
 
-  const toggleMember = (memberId: number) => {
+  const toggleRecipient = (id: string) => {
     setSelectedMembers(prev =>
-      prev.includes(memberId)
-        ? prev.filter(id => id !== memberId)
-        : [...prev, memberId]
+      prev.includes(id)
+        ? prev.filter(recipientId => recipientId !== id)
+        : [...prev, id]
     );
   };
+
+  const currentRecipients = recipientType === 'absent' ? absentMembers : guests;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -65,31 +87,72 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers, eventName }:
         </DialogHeader>
         
         <div className="space-y-6">
+          {/* Recipient Type Selection */}
+          <div className="space-y-2">
+            <Label>Send To</Label>
+            <Select value={recipientType} onValueChange={(value: 'absent' | 'guests') => setRecipientType(value)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="absent">Absent Members ({absentMembers.length})</SelectItem>
+                <SelectItem value="guests">Guests ({guests.length})</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Recipients Section */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Users className="h-4 w-4" />
-              <h3 className="font-medium">Recipients ({selectedMembers.length})</h3>
+              <h3 className="font-medium">
+                Select Recipients ({selectedMembers.length} of {currentRecipients.length})
+              </h3>
             </div>
             <div className="border rounded-lg p-4 max-h-40 overflow-y-auto">
               <div className="space-y-2">
-                {absentMembers.map((member) => (
-                  <label
-                    key={member.id}
-                    className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-2 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedMembers.includes(member.id)}
-                      onChange={() => toggleMember(member.id)}
-                      className="rounded"
-                    />
-                    <span className="flex-1">{member.name}</span>
-                    <Badge variant="outline" className="text-xs">
-                      Last: {member.lastAttended}
-                    </Badge>
-                  </label>
-                ))}
+                {recipientType === 'absent' ? (
+                  absentMembers.map((member) => (
+                    <label
+                      key={member.id}
+                      className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-2 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMembers.includes(String(member.id))}
+                        onChange={() => toggleRecipient(String(member.id))}
+                        className="rounded"
+                      />
+                      <span className="flex-1">{member.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        Last: {member.lastAttended}
+                      </Badge>
+                    </label>
+                  ))
+                ) : (
+                  guests.map((guest) => (
+                    <label
+                      key={guest.guestID}
+                      className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-2 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMembers.includes(guest.guestID)}
+                        onChange={() => toggleRecipient(guest.guestID)}
+                        className="rounded"
+                      />
+                      <span className="flex-1">{guest.name}</span>
+                      <Badge variant="secondary" className="text-xs">
+                        Guest
+                      </Badge>
+                    </label>
+                  ))
+                )}
+                {currentRecipients.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No {recipientType === 'absent' ? 'absent members' : 'guests'} to show
+                  </p>
+                )}
               </div>
             </div>
           </div>

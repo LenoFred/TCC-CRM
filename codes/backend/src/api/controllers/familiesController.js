@@ -26,11 +26,34 @@ class FamiliesController extends BaseController {
   }
 
   async prepareCreateData(data, user) {
+    // Validate that members array exists and has at least one member
+    if (!data.members || data.members.length === 0) {
+      throw new ApiError('At least one member must be added to the family', 400);
+    }
+
+    // Get all members to verify they exist and don't belong to another family
+    const allMembers = await sheetsService.getMembers();
+    
+    for (const member of data.members) {
+      const existingMember = allMembers.find(m => m.memberID === member.memberID);
+      
+      if (!existingMember) {
+        throw new ApiError(`Member with ID ${member.memberID} does not exist`, 404);
+      }
+      
+      if (existingMember.familyID && existingMember.familyID.trim() !== '') {
+        throw new ApiError(
+          `Member ${existingMember.firstName} ${existingMember.lastName} is already in another family`,
+          400
+        );
+      }
+    }
+
     return {
       familyID: generateId('FAMILY'),
       familyName: data.familyName || '',
       createdDate: new Date().toISOString().split('T')[0],
-      memberCount: data.memberCount || 0,
+      memberCount: data.members.length,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

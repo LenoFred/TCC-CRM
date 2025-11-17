@@ -21,13 +21,7 @@ class VolunteerRolesController extends BaseController {
     return [
       'RoleID',
       'RoleName',
-      'Department',
       'Description',
-      'Requirements',
-      'ResponsibilitiesCount',
-      'Status',
-      'CreatedAt',
-      'UpdatedAt',
     ];
   }
 
@@ -38,14 +32,8 @@ class VolunteerRolesController extends BaseController {
   async prepareCreateData(data, user) {
     return {
       roleID: generateId('VRL'),
-      roleName: data.roleName,
-      department: data.department || 'General',
+      roleName: data.roleName || data.name || '',
       description: data.description || '',
-      requirements: data.requirements || '',
-      responsibilitiesCount: data.responsibilitiesCount || '0',
-      status: data.status || 'Active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
   }
 

@@ -22,14 +22,10 @@ class GroupsController extends BaseController {
       'GroupID',
       'GroupName',
       'GroupType',
-      'Description',
-      'LeaderID',
-      'MeetingSchedule',
-      'MeetingLocation',
-      'Capacity',
+      'LeaderMemberID',
       'Status',
-      'CreatedAt',
-      'UpdatedAt',
+      'MeetingLocation',
+      'Description',
     ];
   }
 
@@ -39,17 +35,13 @@ class GroupsController extends BaseController {
 
   async prepareCreateData(data, user) {
     return {
-      groupID: generateId('GRP'),
+      groupID: generateId('GROUP'),
       groupName: data.groupName,
       groupType: data.groupType || 'General',
-      description: data.description || '',
-      leaderID: data.leaderID || '',
-      meetingSchedule: data.meetingSchedule || '',
-      meetingLocation: data.meetingLocation || '',
-      capacity: data.capacity || '',
+      leaderMemberID: data.leaderMemberID || '',
       status: data.status || 'Active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      meetingLocation: data.meetingLocation || '',
+      description: data.description || '',
     };
   }
 
@@ -68,13 +60,77 @@ class GroupsController extends BaseController {
       );
     }
 
-    if (filters.leaderID) {
+    if (filters.leaderMemberID) {
       filteredData = filteredData.filter(
-        (item) => item.leaderID === filters.leaderID
+        (item) => item.leaderMemberID === filters.leaderMemberID
       );
     }
 
     return filteredData;
+  }
+
+  /**
+   * Override getAll to include member counts
+   */
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get groups data
+    let groupsData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Get group members data
+    const groupMembersData = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GROUP_MEMBERS
+    );
+
+    // Create a map of group member counts (all members since we're hard deleting)
+    const memberCounts = {};
+    groupMembersData.forEach((gm) => {
+      memberCounts[gm.groupID] = (memberCounts[gm.groupID] || 0) + 1;
+    });
+
+    // Add member count to each group
+    groupsData = groupsData.map((group) => ({
+      ...group,
+      memberCount: memberCounts[group.groupID] || 0,
+    }));
+
+    // Apply search if provided
+    if (search) {
+      const searchFields = this.getSearchFields();
+      const searchLower = search.toLowerCase();
+      groupsData = groupsData.filter((group) =>
+        searchFields.some((field) =>
+          group[field]?.toString().toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply custom filters
+    groupsData = this.applyFilters(groupsData, filters);
+
+    // Apply pagination if requested
+    if (page || limit) {
+      const pageNum = parseInt(page) || 1;
+      const pageSize = parseInt(limit) || 10;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      
+      return res.json({
+        success: true,
+        data: groupsData.slice(startIndex, endIndex),
+        total: groupsData.length,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(groupsData.length / pageSize),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: groupsData,
+      total: groupsData.length,
+    });
   }
 
   /**
@@ -91,7 +147,7 @@ class GroupsController extends BaseController {
       throw new ApiError(404, 'Group not found');
     }
 
-    // Get group members
+    // Get group members (all members since we're hard deleting)
     const groupMembersData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.GROUP_MEMBERS
     );
@@ -112,10 +168,29 @@ class GroupsController extends BaseController {
       };
     });
 
+    // Get leader details separately (in case leader is not in GroupMembers yet)
+    let leaderDetails = null;
+    if (group.leaderMemberID) {
+      const leader = membersData.find((m) => m.memberID === group.leaderMemberID);
+      if (leader) {
+        leaderDetails = {
+          memberID: leader.memberID,
+          firstName: leader.firstName,
+          lastName: leader.lastName,
+          phoneNumber: leader.phoneNumber,
+          email: leader.email,
+        };
+      }
+    }
+
     res.json({
-      ...group,
-      members,
-      memberCount: members.length,
+      success: true,
+      data: {
+        ...group,
+        members,
+        memberCount: members.length,
+        leaderDetails,
+      },
     });
   }
 
@@ -123,14 +198,15 @@ class GroupsController extends BaseController {
    * Get groups by leader
    */
   async getGroupsByLeader(req, res) {
-    const { leaderID } = req.params;
+    const { leaderMemberID } = req.params;
 
     const data = await sheetsService.getSheetObjects(this.sheetName);
-    const groups = data.filter((g) => g.leaderID === leaderID);
+    const groups = data.filter((g) => g.leaderMemberID === leaderMemberID);
 
     res.json({
+      success: true,
       total: groups.length,
-      groups,
+      data: groups,
     });
   }
 
@@ -169,12 +245,15 @@ class GroupsController extends BaseController {
         : 0;
 
     res.json({
-      totalGroups,
-      activeGroups,
-      inactiveGroups: totalGroups - activeGroups,
-      typeDistribution,
-      avgMembersPerGroup: Math.round(avgMembersPerGroup * 10) / 10,
-      largestGroup: Math.max(...Object.values(groupMemberCounts), 0),
+      success: true,
+      data: {
+        totalGroups,
+        activeGroups,
+        inactiveGroups: totalGroups - activeGroups,
+        typeDistribution,
+        avgMembersPerGroup: Math.round(avgMembersPerGroup * 10) / 10,
+        largestGroup: Math.max(...Object.values(groupMemberCounts), 0),
+      },
     });
   }
 }

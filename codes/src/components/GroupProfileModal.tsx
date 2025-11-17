@@ -1,24 +1,29 @@
-import { useState } from "react";
-import { X, Plus, Users, Calendar, MapPin, Phone, Mail, UserCheck, Eye, Search } from "lucide-react";
-import { CreateActivityModal } from "./CreateActivityModal";
+import { useState, useEffect } from "react";
+import { X, Plus, Users, Calendar, MapPin, Phone, Mail, UserCheck, Eye, Search, Loader2, AlertCircle, Edit } from "lucide-react";
+import { CreateGatheringModal } from "./CreateGatheringModal";
 import { MemberAttendanceModal } from "./MemberAttendanceModal";
-import { GroupActivityAttendanceModal } from "./GroupActivityAttendanceModal";
+import { GroupGatheringAttendanceModal } from "./GroupGatheringAttendanceModal";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/config/api";
 
 interface Group {
-  id: number;
+  id: string;
   name: string;
-  type: 'Department' | 'Ministry' | 'Committee' | 'Small Group';
+  type: 'Department' | 'Ministry' | 'Committee' | 'Small Group' | 'General';
   description?: string;
   leader?: string;
   leaderContact?: string;
@@ -28,8 +33,17 @@ interface Group {
   createdDate: string;
 }
 
+interface Member {
+  memberID: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+  email?: string;
+  status?: string;
+}
+
 interface Activity {
-  id: number;
+  id: string;
   name: string;
   description?: string;
   date: string;
@@ -40,17 +54,29 @@ interface Activity {
   attendanceCount?: number;
 }
 
+interface Gathering {
+  gatheringID: string;
+  gatheringName: string;
+  gatheringType?: string;
+  parentID: string;
+  gatheringDate: string;
+  gatheringTime?: string;
+}
+
 interface GroupProfileModalProps {
   group: Group | null;
   isOpen: boolean;
   onClose: () => void;
+  onEdit?: (group: Group) => void;
 }
 
 export const GroupProfileModal = ({ 
   group, 
   isOpen, 
-  onClose
+  onClose,
+  onEdit
 }: GroupProfileModalProps) => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'activities'>('overview');
   const [isCreateActivityOpen, setIsCreateActivityOpen] = useState(false);
   const [selectedMemberName, setSelectedMemberName] = useState<string>("");
@@ -59,42 +85,118 @@ export const GroupProfileModal = ({
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   
-  // Mock activities data
-  const [activities] = useState<Activity[]>([
-    {
-      id: 1,
-      name: "Sunday Service",
-      description: "Weekly worship service",
-      date: "2024-08-25",
-      time: "10:00",
-      location: "Main Sanctuary",
-      type: "Worship",
-      status: "Completed",
-      attendanceCount: 45
-    },
-    {
-      id: 2,
-      name: "Bible Study",
-      description: "Weekly Bible study session",
-      date: "2024-08-22",
-      time: "19:00",
-      location: "Conference Room",
-      type: "Study",
-      status: "Completed",
-      attendanceCount: 32
-    },
-    {
-      id: 3,
-      name: "Youth Fellowship",
-      description: "Monthly youth gathering",
-      date: "2024-09-01",
-      time: "15:00",
-      location: "Youth Hall",
-      type: "Fellowship",
-      status: "Planned",
-      attendanceCount: 0
+  // Members state
+  const [members, setMembers] = useState<Member[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
+  
+  // Leader state
+  const [leaderName, setLeaderName] = useState<string>('');
+  const [leaderContact, setLeaderContact] = useState<string>('');
+  
+  // Gatherings state
+  const [gatherings, setGatherings] = useState<Activity[]>([]);
+  const [isLoadingGatherings, setIsLoadingGatherings] = useState(false);
+  const [gatheringsError, setGatheringsError] = useState<string | null>(null);
+
+  // Fetch members when modal opens or group changes
+  useEffect(() => {
+    if (isOpen && group) {
+      fetchMembers();
+      fetchGatherings();
     }
-  ]);
+  }, [isOpen, group]);
+
+  const fetchMembers = async () => {
+    if (!group) return;
+    
+    setIsLoadingMembers(true);
+    setMembersError(null);
+    
+    try {
+      const response = await api.groups.getWithMembers(group.id.toString());
+      const groupData = response.data || {};
+      const membersData = groupData.members || [];
+      
+      // Transform members data
+      const transformedMembers: Member[] = membersData.map((member: any) => ({
+        memberID: member.memberID,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        phoneNumber: member.phoneNumber,
+        email: member.email,
+        status: member.status,
+      }));
+      
+      setMembers(transformedMembers);
+      
+      // Set leader info from leaderDetails or find in members
+      if (groupData.leaderDetails) {
+        const leader = groupData.leaderDetails;
+        setLeaderName(`${leader.firstName} ${leader.lastName}`);
+        setLeaderContact(leader.phoneNumber || leader.email || '');
+      } else if (group.leader) {
+        // Fallback: try to find leader in members array
+        const leader = membersData.find((m: any) => m.memberID === group.leader);
+        if (leader) {
+          setLeaderName(`${leader.firstName} ${leader.lastName}`);
+          setLeaderContact(leader.phoneNumber || leader.email || '');
+        }
+      }
+    } catch (error: any) {
+      console.error('Error fetching members:', error);
+      setMembersError(error.message || 'Failed to load members');
+      toast({
+        title: "Error",
+        description: "Failed to load group members",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMembers(false);
+    }
+  };
+
+  const fetchGatherings = async () => {
+    if (!group) return;
+    
+    setIsLoadingGatherings(true);
+    setGatheringsError(null);
+    
+    try {
+      const response = await api.gatherings.getByGroup(group.id.toString());
+      const gatheringsData = response.data || [];
+      
+      // Transform gatherings to match Activity interface
+      const transformedGatherings: Activity[] = gatheringsData.map((gathering: Gathering) => ({
+        id: gathering.gatheringID,
+        name: gathering.gatheringName,
+        description: '',
+        date: gathering.gatheringDate,
+        time: gathering.gatheringTime || '',
+        location: group.location || '',
+        type: gathering.gatheringType || group.type,
+        status: new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned',
+        attendanceCount: 0 // TODO: Get actual attendance count
+      }));
+      
+      setGatherings(transformedGatherings);
+    } catch (error: any) {
+      console.error('Error fetching gatherings:', error);
+      setGatheringsError(error.message || 'Failed to load gatherings');
+      toast({
+        title: "Error",
+        description: "Failed to load gatherings",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingGatherings(false);
+    }
+  };
+
+  const handleGatheringSaved = () => {
+    // Refresh gatherings list after creating a new one
+    fetchGatherings();
+  };
 
   if (!group) return null;
 
@@ -115,47 +217,51 @@ export const GroupProfileModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
-        <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <DialogTitle className="text-2xl font-bold">{group.name}</DialogTitle>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge className={getTypeColor(group.type)}>
-                  {group.type}
-                </Badge>
-                <Badge className={getStatusColor(group.status)}>
-                  {group.status}
-                </Badge>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
+          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div className="flex items-center gap-4">
+              <div>
+                <DialogTitle className="text-2xl font-bold">{group.name}</DialogTitle>
+                <DialogDescription className="sr-only">
+                  View and manage group details, members, and gatherings
+                </DialogDescription>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className={getTypeColor(group.type)}>
+                    {group.type}
+                  </Badge>
+                  <Badge className={getStatusColor(group.status)}>
+                    {group.status}
+                  </Badge>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setIsCreateActivityOpen(true)}
-              variant="outline"
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Activity
-            </Button>
-            <Button
-              onClick={onClose}
-              variant="ghost"
-              size="sm"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </DialogHeader>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => setIsCreateActivityOpen(true)}
+                variant="outline"
+                size="sm"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Gathering
+              </Button>
+              <Button
+                onClick={onClose}
+                variant="ghost"
+                size="sm"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
 
         {/* Navigation Tabs */}
         <div className="flex space-x-4 border-b">
           {[
             { id: 'overview', label: 'Overview', icon: Users },
             { id: 'members', label: 'Members', icon: UserCheck },
-            { id: 'activities', label: 'Activities', icon: Calendar }
+            { id: 'activities', label: 'Gatherings', icon: Calendar }
           ].map(tab => {
             const Icon = tab.icon;
             return (
@@ -203,7 +309,9 @@ export const GroupProfileModal = ({
                       <h4 className="font-semibold text-sm text-muted-foreground mb-2">TOTAL MEMBERS</h4>
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-foreground font-medium">{group.members.length}</span>
+                        <span className="text-foreground font-medium">
+                          {isLoadingMembers ? '...' : members.length}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -217,21 +325,33 @@ export const GroupProfileModal = ({
                     <CardTitle className="text-lg">Leadership</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                        <UserCheck className="w-6 h-6 text-primary" />
+                    {isLoadingMembers ? (
+                      <div className="flex items-start gap-4">
+                        <Skeleton className="w-12 h-12 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-foreground">{group.leader}</h4>
-                        <p className="text-sm text-muted-foreground mb-2">Group Leader</p>
-                        {group.leaderContact && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Phone className="w-4 h-4" />
-                            {group.leaderContact}
-                          </div>
-                        )}
+                    ) : (
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                          <UserCheck className="w-6 h-6 text-primary" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-foreground">
+                            {leaderName || group.leader}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mb-2">Group Leader</p>
+                          {leaderContact && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Phone className="w-4 h-4" />
+                              {leaderContact}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
@@ -257,9 +377,12 @@ export const GroupProfileModal = ({
             <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
-                  <CardTitle className="text-lg">Group Members ({group.members.filter(member =>
-                    member.toLowerCase().includes(memberSearchTerm.toLowerCase())
-                  ).length})</CardTitle>
+                  <CardTitle className="text-lg">
+                    Group Members ({members.filter(member =>
+                      `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                      member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
+                    ).length})
+                  </CardTitle>
                 </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -272,51 +395,78 @@ export const GroupProfileModal = ({
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {group.members
-                    .filter(member => member.toLowerCase().includes(memberSearchTerm.toLowerCase()))
-                    .map((member, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 rounded-lg border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                          <span className="text-sm font-medium text-primary">
-                            {member.split(' ').map(n => n[0]).join('')}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">{member}</p>
-                          <p className="text-sm text-muted-foreground">Member</p>
+                {isLoadingMembers ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-10 w-10 rounded-full" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
                         </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedMemberName(member);
-                          setIsAttendanceModalOpen(true);
-                        }}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Attendance
-                      </Button>
-                    </div>
-                  ))}
-                  {group.members.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No members added yet</p>
-                    </div>
-                  )}
-                  {group.members.length > 0 && group.members.filter(member =>
-                    member.toLowerCase().includes(memberSearchTerm.toLowerCase())
-                  ).length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No members found</p>
-                      <p className="text-sm">Try adjusting your search terms</p>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : membersError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{membersError}</AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {members
+                      .filter(member => 
+                        `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                        member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
+                      )
+                      .map((member) => (
+                      <div key={member.memberID} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <span className="text-sm font-medium text-primary">
+                              {member.firstName[0]}{member.lastName[0]}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-foreground">
+                              {member.firstName} {member.lastName}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {member.email || member.phoneNumber || 'Member'}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedMemberName(`${member.firstName} ${member.lastName}`);
+                            setIsAttendanceModalOpen(true);
+                          }}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Attendance
+                        </Button>
+                      </div>
+                    ))}
+                    {members.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No members added yet</p>
+                      </div>
+                    )}
+                    {members.length > 0 && members.filter(member =>
+                      `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                      member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                        <p>No members found</p>
+                        <p className="text-sm">Try adjusting your search terms</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -324,11 +474,25 @@ export const GroupProfileModal = ({
           {activeTab === 'activities' && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Group Activities</CardTitle>
+                <CardTitle className="text-lg">Group Gatherings</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {activities.map((activity) => (
+                {gatheringsError && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{gatheringsError}</AlertDescription>
+                  </Alert>
+                )}
+                
+                {isLoadingGatherings ? (
+                  <div className="space-y-4">
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {gatherings.map((activity) => (
                     <div key={activity.id} className="flex items-center justify-between p-4 rounded-lg border">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
@@ -386,55 +550,56 @@ export const GroupProfileModal = ({
                       )}
                     </div>
                   ))}
-                  {activities.length === 0 && (
+                  
+                  {gatherings.length === 0 && !isLoadingGatherings && (
                     <div className="text-center py-8 text-muted-foreground">
                       <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No activities recorded yet</p>
-                      <p className="text-sm">Create your first activity to get started</p>
+                      <p>No gatherings recorded yet</p>
+                      <p className="text-sm">Create your first gathering to get started</p>
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
         </div>
-
-        {/* Modals */}
-        {group && (
-          <>
-            <CreateActivityModal
-              groupId={group.id}
-              groupName={group.name}
-              isOpen={isCreateActivityOpen}
-              onClose={() => setIsCreateActivityOpen(false)}
-              onSave={(activity) => {
-                console.log("Activity created:", activity);
-                setIsCreateActivityOpen(false);
-              }}
-            />
-
-            <MemberAttendanceModal
-              memberName={selectedMemberName}
-              groupName={group.name}
-              isOpen={isAttendanceModalOpen}
-              onClose={() => {
-                setIsAttendanceModalOpen(false);
-                setSelectedMemberName("");
-              }}
-            />
-
-            <GroupActivityAttendanceModal
-              isOpen={isActivityAttendanceModalOpen}
-              onClose={() => {
-                setIsActivityAttendanceModalOpen(false);
-                setSelectedActivity(null);
-              }}
-              group={group}
-              activity={selectedActivity}
-            />
-          </>
-        )}
       </DialogContent>
     </Dialog>
+
+    {/* Modals */}
+    {group && (
+      <>
+        <CreateGatheringModal
+          groupID={group.id.toString()}
+          groupName={group.name}
+          groupType={group.type}
+          isOpen={isCreateActivityOpen}
+          onClose={() => setIsCreateActivityOpen(false)}
+          onSave={handleGatheringSaved}
+        />
+
+        <MemberAttendanceModal
+          memberName={selectedMemberName}
+          groupName={group.name}
+          isOpen={isAttendanceModalOpen}
+          onClose={() => {
+            setIsAttendanceModalOpen(false);
+            setSelectedMemberName("");
+          }}
+        />
+
+        <GroupGatheringAttendanceModal
+          isOpen={isActivityAttendanceModalOpen}
+          onClose={() => {
+            setIsActivityAttendanceModalOpen(false);
+            setSelectedActivity(null);
+          }}
+          group={group}
+          activity={selectedActivity}
+        />
+      </>
+    )}
+    </>
   );
 };

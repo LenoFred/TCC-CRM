@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -18,8 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/config/api";
 
 interface VolunteerSchedulingModalProps {
   isOpen: boolean;
@@ -29,86 +28,96 @@ interface VolunteerSchedulingModalProps {
 
 export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerSchedulingModalProps) => {
   const { toast } = useToast();
-  const [selectedEvent, setSelectedEvent] = useState("");
-  const [roleSlots, setRoleSlots] = useState<{ roleId: string; roleName: string; count: number }[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState("");
+  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedMember, setSelectedMember] = useState("");
+  const [groups, setGroups] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Mock data
-  const events = [
-    { id: "1", name: "Sunday Service", date: "2024-09-01" },
-    { id: "2", name: "Youth Fellowship", date: "2024-09-01" },
-    { id: "3", name: "Easter Service", date: "2024-09-08" },
-    { id: "4", name: "Christmas Service", date: "2024-12-25" }
-  ];
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+    }
+  }, [isOpen]);
 
-  const volunteerRoles = [
-    { id: "1", name: "Usher" },
-    { id: "2", name: "Greeter" },
-    { id: "3", name: "Sound Tech" },
-    { id: "4", name: "Worship Team" },
-    { id: "5", name: "Children's Ministry" }
-  ];
-
-  const addRoleSlot = (roleId: string, roleName: string) => {
-    if (roleSlots.find(slot => slot.roleId === roleId)) {
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [groupsResponse, rolesResponse, membersResponse]: any[] = await Promise.all([
+        api.groups.getAll(),
+        api.volunteers.getRoles(),
+        api.members.getAll(),
+      ]);
+      
+      const groupsData = groupsResponse?.data || groupsResponse || [];
+      const rolesData = rolesResponse?.data || rolesResponse || [];
+      const membersData = membersResponse?.data || membersResponse || [];
+      
+      // Filter for active groups
+      const activeGroups = groupsData.filter((g: any) => 
+        g.status?.toLowerCase() === 'active'
+      );
+      
+      setGroups(activeGroups);
+      setRoles(rolesData);
+      setMembers(membersData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
       toast({
-        title: "Role Already Added",
-        description: "This role has already been added to the schedule.",
+        title: "Error",
+        description: "Failed to load data. Please try again.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    setRoleSlots([...roleSlots, { roleId, roleName, count: 1 }]);
   };
 
-  const updateRoleCount = (roleId: string, count: number) => {
-    if (count < 1) return;
-    setRoleSlots(roleSlots.map(slot => 
-      slot.roleId === roleId ? { ...slot, count } : slot
-    ));
-  };
-
-  const removeRoleSlot = (roleId: string) => {
-    setRoleSlots(roleSlots.filter(slot => slot.roleId !== roleId));
-  };
-
-  const handleSubmit = () => {
-    if (!selectedEvent) {
-      toast({
-        title: "Validation Error",
-        description: "Please select an event.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (roleSlots.length === 0) {
+  const handleSubmit = async () => {
+    if (!selectedGroup || !selectedRole || !selectedMember) {
       toast({
         title: "Validation Error",
-        description: "Please add at least one volunteer role.",
+        description: "Please fill in all required fields.",
         variant: "destructive",
       });
       return;
     }
 
-    const scheduleData = {
-      eventId: selectedEvent,
-      event: events.find(e => e.id === selectedEvent),
-      roles: roleSlots,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setIsLoading(true);
+      
+      const assignmentData = {
+        memberID: selectedMember,
+        groupID: selectedGroup,
+        roleID: selectedRole,
+        assignmentStatus: "Scheduled",
+      };
 
-    onSave(scheduleData);
+      await api.volunteers.createAssignment(assignmentData);
 
-    toast({
-      title: "Schedule Created",
-      description: "Volunteer schedule has been created successfully.",
-    });
+      toast({
+        title: "Assignment Created",
+        description: "Volunteer has been assigned successfully.",
+      });
 
-    // Reset form
-    setSelectedEvent("");
-    setRoleSlots([]);
-    onClose();
+      // Reset form
+      setSelectedGroup("");
+      setSelectedRole("");
+      setSelectedMember("");
+      
+      onSave(assignmentData);
+    } catch (error) {
+      console.error('Error creating assignment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create assignment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -117,110 +126,113 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
         <DialogHeader>
           <DialogTitle>Create Volunteer Schedule</DialogTitle>
           <DialogDescription>
-            Select an event and define the volunteer roles needed.
+            Assign a volunteer to a role for a specific event.
           </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-6">
-          {/* Event Selection */}
+          {/* Event/Group Selection */}
           <div>
-            <Label htmlFor="event">Select Event *</Label>
-            <Select value={selectedEvent} onValueChange={setSelectedEvent}>
+            <Label htmlFor="group">Select Event *</Label>
+            <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={isLoading}>
               <SelectTrigger>
                 <SelectValue placeholder="Choose an event" />
               </SelectTrigger>
               <SelectContent>
-                {events.map((event) => (
-                  <SelectItem key={event.id} value={event.id}>
-                    {event.name} - {event.date}
-                  </SelectItem>
-                ))}
+                {groups.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    No active events found
+                  </div>
+                ) : (
+                  groups.map((group: any) => (
+                    <SelectItem key={group.groupID} value={group.groupID}>
+                      <div className="flex flex-col">
+                        <span>{group.groupName || 'Unnamed Event'}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {group.groupType && `Type: ${group.groupType}`}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Add Volunteer Roles */}
+          {/* Role Selection */}
           <div>
-            <Label>Add Volunteer Roles</Label>
-            <div className="flex gap-2 mt-2">
-              <Select onValueChange={(value) => {
-                const role = volunteerRoles.find(r => r.id === value);
-                if (role) {
-                  addRoleSlot(role.id, role.name);
-                }
-              }}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Select a volunteer role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {volunteerRoles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
-                      {role.name}
+            <Label htmlFor="role">Select Volunteer Role *</Label>
+            <Select value={selectedRole} onValueChange={setSelectedRole} disabled={isLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a role" />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    No volunteer roles found
+                  </div>
+                ) : (
+                  roles.map((role: any) => (
+                    <SelectItem key={role.roleID} value={role.roleID}>
+                      {role.roleName}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Role Slots */}
-          {roleSlots.length > 0 && (
-            <div>
-              <Label>Volunteer Requirements</Label>
-              <div className="space-y-3 mt-2">
-                {roleSlots.map((slot) => (
-                  <div key={slot.roleId} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline">{slot.roleName}</Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {slot.count} volunteer{slot.count !== 1 ? 's' : ''} needed
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateRoleCount(slot.roleId, slot.count - 1)}
-                        disabled={slot.count <= 1}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <Input
-                        type="number"
-                        min="1"
-                        value={slot.count}
-                        onChange={(e) => updateRoleCount(slot.roleId, parseInt(e.target.value) || 1)}
-                        className="w-16 text-center"
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => updateRoleCount(slot.roleId, slot.count + 1)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeRoleSlot(slot.roleId)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        Remove
-                      </Button>
-                    </div>
+          {/* Member Selection */}
+          <div>
+            <Label htmlFor="member">Assign Member *</Label>
+            <Select value={selectedMember} onValueChange={setSelectedMember} disabled={isLoading}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a member" />
+              </SelectTrigger>
+              <SelectContent>
+                {members.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground text-center">
+                    No members found
                   </div>
-                ))}
+                ) : (
+                  members.map((member: any) => (
+                    <SelectItem key={member.memberID} value={member.memberID}>
+                      {member.firstName} {member.lastName}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Preview Badge */}
+          {selectedGroup && selectedRole && selectedMember && (
+            <div className="p-3 bg-muted/50 rounded-lg">
+              <Label className="text-xs text-muted-foreground">Assignment Preview</Label>
+              <div className="mt-2 space-y-1">
+                <div className="flex gap-2">
+                  <Badge variant="outline">
+                    {groups.find((g: any) => g.groupID === selectedGroup)?.groupName}
+                  </Badge>
+                  <Badge variant="outline">
+                    {roles.find((r: any) => r.roleID === selectedRole)?.roleName}
+                  </Badge>
+                </div>
+                <p className="text-sm">
+                  {members.find((m: any) => m.memberID === selectedMember)?.firstName}{' '}
+                  {members.find((m: any) => m.memberID === selectedMember)?.lastName}
+                </p>
               </div>
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit}>
-            Create Schedule
+          <Button onClick={handleSubmit} disabled={isLoading}>
+            {isLoading ? "Creating..." : "Assign Volunteer"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, UserCheck, UserPlus, Calendar, Users, Plus, CheckCircle, Eye, Send, CalendarCheck, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, UserCheck, UserPlus, Calendar, Users, CheckCircle, CalendarCheck, AlertCircle, RefreshCw } from "lucide-react";
 import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,14 +17,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -34,12 +26,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { CreateEventModal } from "@/components/CreateEventModal";
 import { DigitalCheckInModal } from "@/components/DigitalCheckInModal";
 import { GroupAttendanceModal } from "@/components/GroupAttendanceModal";
-import { EventManagementModal } from "@/components/EventManagementModal";
-import { GuestTrackingModal } from "@/components/GuestTrackingModal";
 import { SendFollowUpModal } from "@/components/SendFollowUpModal";
+import { CreateGatheringModal } from "@/components/CreateGatheringModal";
 import { useToast } from "@/hooks/use-toast";
 
 const AttendancePage = () => {
@@ -48,24 +38,29 @@ const AttendancePage = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [checkedInMembers, setCheckedInMembers] = useState<Set<number>>(new Set());
-  const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [isSelectEventModalOpen, setIsSelectEventModalOpen] = useState(false);
   const [isGroupAttendanceModalOpen, setIsGroupAttendanceModalOpen] = useState(false);
-  const [isEventManagementModalOpen, setIsEventManagementModalOpen] = useState(false);
-  const [isGuestTrackingModalOpen, setIsGuestTrackingModalOpen] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
+  const [isCreateGatheringModalOpen, setIsCreateGatheringModalOpen] = useState(false);
+  const [isAttendanceDirectoryOpen, setIsAttendanceDirectoryOpen] = useState(false);
   const [selectedEventForCheckIn, setSelectedEventForCheckIn] = useState<any>(null);
-  const [selectedEventForManagement, setSelectedEventForManagement] = useState<any>(null);
-  const [selectedEventForGuestTracking, setSelectedEventForGuestTracking] = useState<any>(null);
+  const [selectedGatheringForModal, setSelectedGatheringForModal] = useState<any>(null);
+  const [selectedAttendanceForView, setSelectedAttendanceForView] = useState<any>(null);
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [events, setEvents] = useState([]);
+  const [allGatherings, setAllGatherings] = useState([]); // Store all gatherings for directory
   const [members, setMembers] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [guestRecords, setGuestRecords] = useState([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingCheckIn, setIsLoadingCheckIn] = useState(false);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
   const [eventsError, setEventsError] = useState(null);
   const [membersError, setMembersError] = useState(null);
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
 
   // Handle URL parameter for opening check-in session modal
   useEffect(() => {
@@ -77,17 +72,123 @@ const AttendancePage = () => {
     }
   }, [searchParams]);
 
+  // Helper function to convert 12-hour time to 24-hour format
+  const convertTo24Hour = (timeStr: string): string => {
+    const cleanTime = timeStr.trim().toUpperCase();
+    
+    // If already in 24-hour format (contains :)
+    if (cleanTime.match(/^\d{1,2}:\d{2}$/) && !cleanTime.includes('AM') && !cleanTime.includes('PM')) {
+      const [hours, minutes] = cleanTime.split(':');
+      return `${hours.padStart(2, '0')}:${minutes}:00`;
+    }
+    
+    // Handle 12-hour format with AM/PM
+    const match = cleanTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/);
+    if (!match) {
+      return '00:00:00'; // Default fallback
+    }
+    
+    let [, hours, minutes, period] = match;
+    let hour = parseInt(hours);
+    
+    if (period === 'PM' && hour !== 12) {
+      hour += 12;
+    } else if (period === 'AM' && hour === 12) {
+      hour = 0;
+    }
+    
+    return `${hour.toString().padStart(2, '0')}:${minutes}:00`;
+  };
+
   const fetchEvents = async () => {
     setIsLoadingEvents(true);
     setEventsError(null);
     try {
-      const eventsData = await api.events.getAll(new URLSearchParams({ date: 'today' }));
-      console.log('Events data received:', eventsData);
-      console.log('Is events data array?', Array.isArray(eventsData));
-      setEvents(Array.isArray(eventsData) ? eventsData : []);
+      console.log('=== FETCHING GATHERINGS AND GROUPS ===');
+      console.log('API URL:', 'http://localhost:3001/api/gatherings');
+      
+      // Fetch both gatherings and groups in parallel
+      const [gatheringsResponse, groupsResponse] = await Promise.all([
+        api.gatherings.getAll(),
+        api.groups.getAll()
+      ]);
+      
+      console.log('Full API Response:', gatheringsResponse);
+      console.log('Response type:', typeof gatheringsResponse);
+      console.log('Response keys:', Object.keys(gatheringsResponse || {}));
+      
+      const gatheringsData = gatheringsResponse.data || [];
+      const groupsData = groupsResponse.data || [];
+      console.log('Extracted gatherings data:', gatheringsData);
+      console.log('Extracted groups data:', groupsData);
+      console.log('Is array?', Array.isArray(gatheringsData));
+      console.log('Data length:', gatheringsData.length);
+      
+      // Store groups for later use
+      setGroups(groupsData);
+      
+      // Create a map of groupID to groupName for quick lookup
+      const groupNameMap = new Map(
+        groupsData.map(group => [group.groupID, group.groupName])
+      );
+      
+      if (gatheringsData.length > 0) {
+        console.log('First gathering:', gatheringsData[0]);
+        console.log('Gathering keys:', Object.keys(gatheringsData[0]));
+      }
+      
+      // Filter gatherings for today with time window (5 hours before to 7 hours after)
+      const now = new Date();
+      const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const filteredGatherings = gatheringsData
+        .filter(gathering => {
+          // Check if date matches today
+          if (gathering.gatheringDate !== today) {
+            return false;
+          }
+          
+          // If no time specified, include it
+          if (!gathering.gatheringTime) {
+            return true;
+          }
+          
+          try {
+            // Parse gathering time (assumes format like "10:00 AM" or "14:00")
+            const timeStr = gathering.gatheringTime.trim();
+            const gatheringDateTime = new Date(`${gathering.gatheringDate}T${convertTo24Hour(timeStr)}`);
+            
+            // Calculate time window: 5 hours before to 7 hours after
+            const fiveHoursBefore = new Date(gatheringDateTime.getTime() - (5 * 60 * 60 * 1000));
+            const sevenHoursAfter = new Date(gatheringDateTime.getTime() + (7 * 60 * 60 * 1000));
+            
+            // Check if current time is within the window
+            return now >= fiveHoursBefore && now <= sevenHoursAfter;
+          } catch (error) {
+            console.error('Error parsing gathering time:', error);
+            return true; // Include if time parsing fails
+          }
+        })
+        .map(gathering => ({
+          ...gathering,
+          groupName: groupNameMap.get(gathering.parentID) || gathering.parentID
+        }));
+      
+      console.log('Filtered gatherings (today, within time window):', filteredGatherings.length);
+      setEvents(filteredGatherings);
+      
+      // Store all gatherings with group names for attendance directory
+      const allGatheringsWithGroups = gatheringsData.map(gathering => ({
+        ...gathering,
+        groupName: groupNameMap.get(gathering.parentID) || gathering.parentID
+      }));
+      setAllGatherings(allGatheringsWithGroups);
     } catch (error) {
-      console.error('Error fetching events:', error);
-      setEventsError(error.message || 'Failed to load events');
+      console.error('=== ERROR FETCHING GATHERINGS ===');
+      console.error('Error object:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+      setEventsError(error.message || 'Failed to load gatherings');
     } finally {
       setIsLoadingEvents(false);
     }
@@ -97,8 +198,10 @@ const AttendancePage = () => {
     setIsLoadingMembers(true);
     setMembersError(null);
     try {
-      const membersData = await api.members.getAll();
-      console.log('Members data received in AttendancePage:', membersData);
+      const membersResponse = await api.members.getAll();
+      console.log('Members data received in AttendancePage:', membersResponse);
+      const membersData = membersResponse?.data || membersResponse || [];
+      console.log('Extracted members array:', membersData);
       console.log('Is members data array?', Array.isArray(membersData));
       setMembers(Array.isArray(membersData) ? membersData : []);
     } catch (error) {
@@ -116,22 +219,15 @@ const AttendancePage = () => {
 
   // Events fetched from API
 
-  const eventCategories = [
-    { value: "all", label: "All Events" },
-    { value: "Regular Sunday Service", label: "Regular Sunday Services" },
-    { value: "Annual Event", label: "Annual Events" },
-    { value: "Meeting", label: "Meetings" },
-    { value: "Youth Ministry Activity", label: "Youth Ministry Activities" },
-    { value: "Choir Department Activity", label: "Choir Department Activities" }
-  ];
-
   // Members fetched from API
 
-  const filteredMembers = members.filter(member =>
-    !checkedInMembers.has(member.id) &&
-    (member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     member.phone.includes(searchTerm))
-  );
+  const filteredMembers = members.filter(member => {
+    const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
+    const phone = member.phone || '';
+    return !checkedInMembers.has(member.memberID) &&
+      (fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       phone.includes(searchTerm));
+  });
 
   const handleCheckIn = async (memberId: number) => {
     if (selectedEventForCheckIn) {
@@ -164,23 +260,21 @@ const AttendancePage = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground">Attendance</h1>
-            <p className="text-muted-foreground">Digital check-in and attendance tracking</p>
+            <p className="text-muted-foreground">Track attendance for gatherings</p>
           </div>
-          <Button className="gap-2" onClick={() => setIsCreateEventModalOpen(true)} disabled={isLoadingEvents}>
-            <Plus className="h-4 w-4" />
-            Create Event
+          <Button
+            variant="outline"
+            onClick={() => setIsAttendanceDirectoryOpen(true)}
+            className="gap-2"
+          >
+            <Users className="h-4 w-4" />
+            Attendance Directory
           </Button>
         </div>
 
         {/* Event Selection */}
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Check-in Session
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="py-4">
             <div className="flex justify-center">
               <Button
                 size="lg"
@@ -195,7 +289,298 @@ const AttendancePage = () => {
           </CardContent>
         </Card>
 
-        {selectedEventForCheckIn && (
+        {/* Attendance Directory Section */}
+        {isAttendanceDirectoryOpen && (
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Attendance Directory</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    View attendance records for past gatherings
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsAttendanceDirectoryOpen(false);
+                    setSelectedAttendanceForView(null);
+                    setAttendanceSearchQuery('');
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Gathering Selection by Month */}
+              <div className="space-y-2">
+                <Label>Select Gathering</Label>
+                <Select 
+                  value={selectedAttendanceForView?.gatheringID || ''} 
+                  onValueChange={async (value) => {
+                    const gathering = allGatherings.find(g => g.gatheringID === value);
+                    setSelectedAttendanceForView(gathering);
+                    
+                    // Fetch attendance and guest data for this gathering
+                    if (gathering) {
+                      setIsLoadingAttendance(true);
+                      try {
+                        const [attendanceResponse, guestResponse] = await Promise.all([
+                          api.attendance.getAll(new URLSearchParams({ gatheringID: gathering.gatheringID })),
+                          api.guestManagement.getAllGuests()
+                        ]);
+                        
+                        // Both APIs return { success: true, data: [...] } format
+                        const attendanceData = attendanceResponse?.data || [];
+                        const guestData = guestResponse?.data || [];
+                        
+                        console.log('Guest data from API:', guestData);
+                        console.log('Sample guest:', guestData[0]);
+                        console.log('Attendance data:', attendanceData);
+                        
+                        setAttendanceRecords(Array.isArray(attendanceData) ? attendanceData : []);
+                        setGuestRecords(Array.isArray(guestData) ? guestData : []);
+                      } catch (error) {
+                        console.error('Error fetching attendance:', error);
+                        toast({
+                          title: "Error",
+                          description: "Failed to load attendance records",
+                          variant: "destructive"
+                        });
+                      } finally {
+                        setIsLoadingAttendance(false);
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a gathering" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(() => {
+                      // Group gatherings by month
+                      const groupedByMonth = allGatherings.reduce((acc, gathering) => {
+                        if (!gathering.gatheringDate) return acc;
+                        const date = new Date(gathering.gatheringDate);
+                        const monthKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+                        if (!acc[monthKey]) acc[monthKey] = [];
+                        acc[monthKey].push(gathering);
+                        return acc;
+                      }, {} as Record<string, typeof allGatherings>);
+
+                      // Sort months in descending order (most recent first)
+                      const sortedMonths = Object.keys(groupedByMonth).sort((a, b) => {
+                        return new Date(b).getTime() - new Date(a).getTime();
+                      });
+
+                      return sortedMonths.map(month => (
+                        <div key={month}>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
+                            {month}
+                          </div>
+                          {groupedByMonth[month]
+                            .sort((a, b) => new Date(b.gatheringDate).getTime() - new Date(a.gatheringDate).getTime())
+                            .map((gathering) => (
+                              <SelectItem key={gathering.gatheringID} value={gathering.gatheringID}>
+                                <div className="flex flex-col py-1">
+                                  <span className="font-medium">{gathering.gatheringName || 'Unnamed Gathering'}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {gathering.gatheringType || 'No type'} • {gathering.gatheringDate || 'No date'} {gathering.gatheringTime ? `at ${gathering.gatheringTime}` : ''}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </div>
+                      ));
+                    })()}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedAttendanceForView && (
+                <>
+                  {/* Stats Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Checked In Members</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingAttendance ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          <div className="text-2xl font-bold text-foreground">
+                            {attendanceRecords.filter(a => {
+                              const member = members.find(m => m.memberID === a.memberID);
+                              return member !== undefined;
+                            }).length}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Absent Members</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingAttendance ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          <div className="text-2xl font-bold text-foreground">
+                            {members.length - attendanceRecords.filter(a => {
+                              const member = members.find(m => m.memberID === a.memberID);
+                              return member !== undefined;
+                            }).length}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Guests</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingAttendance ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          <div className="text-2xl font-bold text-foreground">
+                            {attendanceRecords.filter(a => a.memberID && a.memberID.startsWith('GST-')).length}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-sm font-medium text-muted-foreground">Total Present</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingAttendance ? (
+                          <Skeleton className="h-8 w-16" />
+                        ) : (
+                          <div className="text-2xl font-bold text-foreground">
+                            {attendanceRecords.length}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Search and Actions Bar */}
+                  <div className="flex gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search attendees by name, phone, or email..."
+                        value={attendanceSearchQuery}
+                        onChange={(e) => setAttendanceSearchQuery(e.target.value)}
+                        className="pl-10"
+                        disabled={isLoadingAttendance}
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsFollowUpModalOpen(true)}
+                      className="gap-2"
+                    >
+                      <Users className="h-4 w-4" />
+                      Send Follow-up
+                    </Button>
+                  </div>
+
+                  {/* Attendees Table */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Attendees ({attendanceRecords.length})</Label>
+                    </div>
+
+                    {isLoadingAttendance ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg overflow-hidden">
+                        <table className="w-full">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm font-medium">Name</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium">Type</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium">Phone</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium">Email</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {attendanceRecords
+                              .map(attendance => {
+                                // Check if it's a member or guest based on memberID prefix
+                                const isGuestRecord = attendance.memberID && attendance.memberID.startsWith('GST-');
+                                
+                                if (isGuestRecord) {
+                                  // Find guest by guestID matching memberID
+                                  const guest = guestRecords.find(g => g.guestID === attendance.memberID);
+                                  return {
+                                    ...attendance,
+                                    name: guest?.name || 'Unknown Guest',
+                                    phone: guest?.phone || 'N/A',
+                                    email: guest?.email || 'N/A',
+                                    type: 'Guest'
+                                  };
+                                } else {
+                                  // Find member by memberID
+                                  const member = members.find(m => m.memberID === attendance.memberID);
+                                  return {
+                                    ...attendance,
+                                    name: member ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : 'Unknown Member',
+                                    phone: member?.phone || 'N/A',
+                                    email: member?.email || 'N/A',
+                                    type: 'Member'
+                                  };
+                                }
+                              })
+                              .filter(attendee => {
+                                if (!attendanceSearchQuery) return true;
+                                const query = attendanceSearchQuery.toLowerCase();
+                                return (
+                                  attendee.name.toLowerCase().includes(query) ||
+                                  attendee.phone.toLowerCase().includes(query) ||
+                                  attendee.email.toLowerCase().includes(query)
+                                );
+                              })
+                              .map((attendee) => (
+                                <tr key={attendee.attendanceID} className="hover:bg-muted/30">
+                                  <td className="px-4 py-3">{attendee.name}</td>
+                                  <td className="px-4 py-3">
+                                    <Badge variant={attendee.type === 'Member' ? 'default' : 'secondary'}>
+                                      {attendee.type}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-muted-foreground">{attendee.phone}</td>
+                                  <td className="px-4 py-3 text-sm text-muted-foreground">{attendee.email}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                        {attendanceRecords.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No attendance records found for this gathering
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {selectedEventForCheckIn && !isCheckInModalOpen && (
           <>
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -309,24 +694,27 @@ const AttendancePage = () => {
                 {/* Members List */}
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {filteredMembers.length > 0 ? (
-                    filteredMembers.map((member) => (
+                    filteredMembers.map((member) => {
+                      const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
+                      const initials = `${member.firstName?.[0] || ''}${member.lastName?.[0] || ''}`.toUpperCase();
+                      return (
                       <div
-                        key={member.id}
+                        key={member.memberID}
                         className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center text-primary-foreground font-medium">
-                            {member.name.split(' ').map(n => n[0]).join('')}
+                            {initials}
                           </div>
                           <div>
-                            <p className="font-medium">{member.name}</p>
+                            <p className="font-medium">{fullName}</p>
                             <p className="text-sm text-muted-foreground">{member.phone}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge variant="outline">{member.group}</Badge>
+                          <Badge variant="outline">{member.groupName || member.groupID || 'No Group'}</Badge>
                           <Button
-                            onClick={() => handleCheckIn(member.id)}
+                            onClick={() => handleCheckIn(member.memberID)}
                             className="gap-2"
                             disabled={isLoadingCheckIn}
                           >
@@ -335,7 +723,8 @@ const AttendancePage = () => {
                           </Button>
                         </div>
                       </div>
-                    ))
+                    );
+                    })
                   ) : searchTerm ? (
                     <div className="text-center py-8 text-muted-foreground">
                       No members found matching "{searchTerm}"
@@ -362,10 +751,11 @@ const AttendancePage = () => {
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
                       {Array.from(checkedInMembers).map((memberId) => {
-                        const member = members.find(m => m.id === memberId);
+                        const member = members.find(m => m.memberID === memberId);
+                        const fullName = member ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : 'Unknown';
                         return (
                           <Badge key={memberId} variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                            {member?.name}
+                            {fullName}
                           </Badge>
                         );
                       })}
@@ -385,41 +775,31 @@ const AttendancePage = () => {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {filteredMembers.slice(0, 3).map((member) => (
-                        <Badge key={member.id} variant="outline" className="text-orange-600 border-orange-200">
-                          {member.name}
+                      {filteredMembers.slice(0, 3).map((member) => {
+                        const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
+                        return (
+                        <Badge key={member.memberID} variant="outline" className="text-orange-600 border-orange-200">
+                          {fullName}
                         </Badge>
-                      ))}
+                      );
+                      })}
                       {filteredMembers.length > 3 && (
                         <Badge variant="outline" className="text-muted-foreground">
                           +{filteredMembers.length - 3} more
                         </Badge>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="gap-2 flex-1"
-                        onClick={() => {
-                          setIsGuestTrackingModalOpen(true);
-                        }}
-                      >
-                        <Users className="h-4 w-4" />
-                        Track Guests
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="gap-2 flex-1"
-                        onClick={() => {
-                          setIsFollowUpModalOpen(true);
-                        }}
-                      >
-                        <UserPlus className="h-4 w-4" />
-                        Follow-up
-                      </Button>
-                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="gap-2 w-full"
+                      onClick={() => {
+                        setIsFollowUpModalOpen(true);
+                      }}
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Send Follow-up
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -429,108 +809,147 @@ const AttendancePage = () => {
 
         {/* Select Event Modal */}
         <Dialog open={isSelectEventModalOpen} onOpenChange={setIsSelectEventModalOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Select Event for Check-in</DialogTitle>
+              <DialogTitle>Select Gathering for Check-in</DialogTitle>
               <DialogDescription>
-                Choose a current activity or event to start the check-in process
+                Choose a gathering to start taking attendance
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Current Events</Label>
-                <Select 
-                  value={selectedEvent} 
-                  onValueChange={(value) => {
-                    setSelectedEvent(value);
-                    const event = events.find(e => e.id === value);
-                    setSelectedEventForCheckIn(event);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an event" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {events
-                      .filter(event => {
-                        const eventDate = new Date(event.date);
-                        const today = new Date();
-                        return (
-                          eventDate.toDateString() === today.toDateString()
-                        );
-                      })
-                      .map((event) => (
-                        <SelectItem key={event.id} value={event.id}>
-                          <div className="flex flex-col">
-                            <span>{event.name}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {event.type} {event.groupName ? `(${event.groupName})` : ''}
+              {isLoadingEvents ? (
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Loading gatherings...</p>
+                </div>
+              ) : events.length === 0 ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>No Gatherings Found</AlertTitle>
+                  <AlertDescription className="space-y-3">
+                    <p>There are no gatherings in the system. Create a gathering first to start taking attendance.</p>
+                    <Button 
+                      onClick={() => {
+                        setIsSelectEventModalOpen(false);
+                        setIsCreateGatheringModalOpen(true);
+                      }}
+                      className="w-full"
+                    >
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Create New Gathering
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Available Gatherings ({events.length})</Label>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setIsSelectEventModalOpen(false);
+                        setIsCreateGatheringModalOpen(true);
+                      }}
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      New
+                    </Button>
+                  </div>
+                  <Select 
+                    value={selectedEvent} 
+                    onValueChange={(value) => {
+                      setSelectedEvent(value);
+                      const gathering = events.find(e => e.gatheringID === value);
+                      setSelectedGatheringForModal(gathering);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a gathering" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {events.map((gathering) => (
+                        <SelectItem key={gathering.gatheringID} value={gathering.gatheringID}>
+                          <div className="flex flex-col py-1">
+                            <span className="font-medium">{gathering.gatheringName || 'Unnamed Gathering'}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {gathering.gatheringType || 'No type'} • {gathering.gatheringDate || 'No date'} {gathering.gatheringTime ? `at ${gathering.gatheringTime}` : ''}
                             </span>
                           </div>
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-              {selectedEventForCheckIn && (
+              {selectedGatheringForModal && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>{selectedEventForCheckIn.name}</CardTitle>
+                    <CardTitle>{selectedGatheringForModal.gatheringName}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Event Type:</span>
-                      <Badge variant="outline">{selectedEventForCheckIn.type}</Badge>
+                      <span className="text-muted-foreground">Type:</span>
+                      <Badge variant="outline">{selectedGatheringForModal.gatheringType}</Badge>
                     </div>
-                    {selectedEventForCheckIn.groupName && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Date:</span>
+                      <span>{selectedGatheringForModal.gatheringDate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Time:</span>
+                      <span>{selectedGatheringForModal.gatheringTime}</span>
+                    </div>
+                    {selectedGatheringForModal.parentID && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Group:</span>
-                        <span>{selectedEventForCheckIn.groupName}</span>
+                        <span>{selectedGatheringForModal.groupName || selectedGatheringForModal.parentID}</span>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Expected Attendance:</span>
-                      <span>{selectedEventForCheckIn.expectedAttendance}</span>
-                    </div>
                   </CardContent>
                 </Card>
               )}
 
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    if (selectedEventForCheckIn) {
-                      setIsCheckInModalOpen(true);
-                      setIsSelectEventModalOpen(false);
-                    }
-                  }}
-                  disabled={!selectedEventForCheckIn}
-                >
-                  <CalendarCheck className="h-4 w-4 mr-2" />
-                  Begin Check-in
-                </Button>
-              </DialogFooter>
+              {events.length > 0 && (
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsSelectEventModalOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (selectedGatheringForModal) {
+                        setSelectedEventForCheckIn(selectedGatheringForModal);
+                        setIsCheckInModalOpen(true);
+                        setIsSelectEventModalOpen(false);
+                      }
+                    }}
+                    disabled={!selectedGatheringForModal}
+                  >
+                    <CalendarCheck className="h-4 w-4 mr-2" />
+                    Begin Check-in
+                  </Button>
+                </DialogFooter>
+              )}
             </div>
           </DialogContent>
         </Dialog>
+      </div>
 
-        {/* Create Event Modal */}
-        <CreateEventModal
-          isOpen={isCreateEventModalOpen}
-          onClose={() => setIsCreateEventModalOpen(false)}
-          onSave={async (eventData) => {
-            try {
-              const newEvent = await api.events.create(eventData);
-              setEvents([...events, newEvent]);
-            } catch (error) {
-              console.error('Error creating event:', error);
-            }
-          }}
-        />
+      {/* Create Gathering Modal */}
+      <CreateGatheringModal
+        isOpen={isCreateGatheringModalOpen}
+        onClose={() => {
+          setIsCreateGatheringModalOpen(false);
+          fetchEvents(); // Refresh gatherings list
+        }}
+      />
 
-        {/* Digital Check-in Modal */}
-        <DigitalCheckInModal
+      {/* Digital Check-in Modal */}
+      <DigitalCheckInModal
           isOpen={isCheckInModalOpen}
           onClose={() => {
             setIsCheckInModalOpen(false);
@@ -539,8 +958,8 @@ const AttendancePage = () => {
           gathering={selectedEventForCheckIn}
         />
 
-        {/* Group Attendance Modal */}
-        <GroupAttendanceModal
+      {/* Group Attendance Modal */}
+      <GroupAttendanceModal
           isOpen={isGroupAttendanceModalOpen}
           onClose={() => {
             setIsGroupAttendanceModalOpen(false);
@@ -549,172 +968,35 @@ const AttendancePage = () => {
           group={selectedGroup}
         />
 
-        {/* Event Management Modal */}
-        <EventManagementModal
-          isOpen={isEventManagementModalOpen}
-          onClose={() => {
-            setIsEventManagementModalOpen(false);
-            setSelectedEventForManagement(null);
-          }}
-          event={selectedEventForManagement}
-        />
-
-        {/* Guest Tracking Modal */}
-        <GuestTrackingModal
-          isOpen={isGuestTrackingModalOpen}
-          onClose={() => {
-            setIsGuestTrackingModalOpen(false);
-            setSelectedEventForGuestTracking(null);
-          }}
-          eventId={selectedEventForGuestTracking?.id || selectedEvent}
-          eventName={selectedEventForGuestTracking?.name || events.find(e => e.id === selectedEvent)?.name}
-        />
-
-        {/* Follow Up Modal for Absent Members */}
-        <SendFollowUpModal
+      {/* Follow Up Modal for Absent Members and Guests */}
+      <SendFollowUpModal
           isOpen={isFollowUpModalOpen}
           onClose={() => setIsFollowUpModalOpen(false)}
-          absentMembers={members
-            .filter(m => !checkedInMembers.has(m.id))
-            .map(m => ({
-              id: m.id,
-              name: m.name,
-              lastAttended: "2024-08-31" // You might want to track this in your actual implementation
-            }))}
-          eventName={events.find(e => e.id === selectedEvent)?.name || "the event"}
+          absentMembers={selectedAttendanceForView 
+            ? members
+                .filter(m => !attendanceRecords.find(a => a.memberID === m.memberID))
+                .map(m => ({
+                  id: m.memberID,
+                  name: `${m.firstName} ${m.lastName}`,
+                  lastAttended: "2024-08-31"
+                }))
+            : members
+                .filter(m => !checkedInMembers.has(m.memberID))
+                .map(m => ({
+                  id: m.memberID,
+                  name: `${m.firstName} ${m.lastName}`,
+                  lastAttended: "2024-08-31"
+                }))
+          }
+          guests={attendanceRecords
+            .filter(a => guestRecords.find(g => g.guestID === a.memberID))
+            .map(a => {
+              const guest = guestRecords.find(g => g.guestID === a.memberID);
+              return guest!;
+            })
+          }
+          eventName={selectedAttendanceForView?.gatheringName || events.find(e => e.gatheringID === selectedEvent)?.gatheringName || "the gathering"}
         />
-      </div>
-
-      {/* Event Management Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Event Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Event Categories */}
-            <div className="flex gap-2 flex-wrap">
-              {eventCategories.map((category) => (
-                <Badge 
-                  key={category.value} 
-                  variant="secondary" 
-                  className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
-                  onClick={() => {
-                    // Filter events by category
-                    console.log("Filter by:", category.value);
-                  }}
-                >
-                  {category.label}
-                </Badge>
-              ))}
-            </div>
-
-            {/* Events Table */}
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Event Name</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Expected</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingEvents ? (
-                    Array.from({ length: 5 }).map((_, index) => (
-                      <TableRow key={index}>
-                        <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-6 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-6 w-20" /></TableCell>
-                        <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-8 w-32" /></TableCell>
-                      </TableRow>
-                    ))
-                  ) : eventsError ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
-                        <Alert variant="destructive" className="max-w-md mx-auto">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertTitle>Events Error</AlertTitle>
-                          <AlertDescription className="flex items-center justify-between">
-                            <span>{eventsError}</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={fetchEvents}
-                              disabled={isLoadingEvents}
-                            >
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Retry
-                            </Button>
-                          </AlertDescription>
-                        </Alert>
-                      </TableCell>
-                    </TableRow>
-                  ) : events.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No events found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    events.map((event) => (
-                      <TableRow key={event.id}>
-                        <TableCell className="font-medium">{event.name}</TableCell>
-                        <TableCell>{event.date}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{event.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={event.status === 'Completed' ? 'default' : 'secondary'}>
-                            {event.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{event.expectedAttendance}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedEventForManagement(event);
-                                setIsEventManagementModalOpen(true);
-                              }}
-                              disabled={isLoadingEvents}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View Details
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedEventForGuestTracking(event);
-                                setIsGuestTrackingModalOpen(true);
-                              }}
-                              disabled={isLoadingEvents}
-                            >
-                              <Users className="h-4 w-4 mr-1" />
-                              Track Guests
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </DashboardLayout>
   );
 };
