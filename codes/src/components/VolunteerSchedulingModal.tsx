@@ -30,7 +30,7 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
   const { toast } = useToast();
   const [selectedGroup, setSelectedGroup] = useState("");
   const [selectedRole, setSelectedRole] = useState("");
-  const [selectedMember, setSelectedMember] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
@@ -55,14 +55,24 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
       const rolesData = rolesResponse?.data || rolesResponse || [];
       const membersData = membersResponse?.data || membersResponse || [];
       
+      console.log('All members from API:', membersData.length);
+      
       // Filter for active groups
       const activeGroups = groupsData.filter((g: any) => 
         g.status?.toLowerCase() === 'active'
       );
       
+      // Filter for active members only
+      const activeMembers = membersData.filter((m: any) => {
+        const isActive = m.status?.toLowerCase() === 'active';
+        return isActive;
+      });
+      
+      console.log('Active members filtered:', activeMembers.length);
+      
       setGroups(activeGroups);
       setRoles(rolesData);
-      setMembers(membersData);
+      setMembers(activeMembers);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast({
@@ -76,10 +86,10 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
   };
 
   const handleSubmit = async () => {
-    if (!selectedGroup || !selectedRole || !selectedMember) {
+    if (!selectedGroup || !selectedRole || selectedMembers.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields.",
+        description: "Please select event, role, and at least one volunteer.",
         variant: "destructive",
       });
       return;
@@ -88,26 +98,29 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
     try {
       setIsLoading(true);
       
-      const assignmentData = {
-        memberID: selectedMember,
-        groupID: selectedGroup,
-        roleID: selectedRole,
-        assignmentStatus: "Scheduled",
-      };
+      // Create assignment for each selected member
+      const assignmentPromises = selectedMembers.map(memberID => 
+        api.volunteers.createAssignment({
+          memberID,
+          groupID: selectedGroup,
+          roleID: selectedRole,
+          assignmentStatus: "Scheduled",
+        })
+      );
 
-      await api.volunteers.createAssignment(assignmentData);
+      await Promise.all(assignmentPromises);
 
       toast({
-        title: "Assignment Created",
-        description: "Volunteer has been assigned successfully.",
+        title: "Assignments Created",
+        description: `${selectedMembers.length} volunteer(s) assigned successfully.`,
       });
 
       // Reset form
       setSelectedGroup("");
       setSelectedRole("");
-      setSelectedMember("");
+      setSelectedMembers([]);
       
-      onSave(assignmentData);
+      onSave({ selectedMembers });
     } catch (error) {
       console.error('Error creating assignment:', error);
       toast({
@@ -120,9 +133,21 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
     }
   };
 
+  const toggleMember = (memberID: string) => {
+    setSelectedMembers(prev => 
+      prev.includes(memberID)
+        ? prev.filter(id => id !== memberID)
+        : [...prev, memberID]
+    );
+  };
+
+  const removeMember = (memberID: string) => {
+    setSelectedMembers(prev => prev.filter(id => id !== memberID));
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Volunteer Schedule</DialogTitle>
           <DialogDescription>
@@ -184,33 +209,51 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
 
           {/* Member Selection */}
           <div>
-            <Label htmlFor="member">Assign Member *</Label>
-            <Select value={selectedMember} onValueChange={setSelectedMember} disabled={isLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a member" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    No members found
-                  </div>
-                ) : (
-                  members.map((member: any) => (
-                    <SelectItem key={member.memberID} value={member.memberID}>
+            <Label htmlFor="member">Select Volunteers * (choose one or more)</Label>
+            <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+              {members.length === 0 ? (
+                <div className="p-2 text-sm text-muted-foreground text-center">
+                  No active members found
+                </div>
+              ) : (
+                members.map((member: any) => (
+                  <div 
+                    key={member.memberID} 
+                    className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                    onClick={() => toggleMember(member.memberID)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedMembers.includes(member.memberID)}
+                      onChange={() => toggleMember(member.memberID)}
+                      className="h-4 w-4 cursor-pointer"
+                      disabled={isLoading}
+                    />
+                    <label className="flex-1 cursor-pointer text-sm">
                       {member.firstName} {member.lastName}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+                      {member.phoneNumber && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({member.phoneNumber})
+                        </span>
+                      )}
+                    </label>
+                  </div>
+                ))
+              )}
+            </div>
+            {selectedMembers.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {selectedMembers.length} volunteer(s) selected
+              </p>
+            )}
           </div>
 
-          {/* Preview Badge */}
-          {selectedGroup && selectedRole && selectedMember && (
+          {/* Preview Section */}
+          {selectedGroup && selectedRole && selectedMembers.length > 0 && (
             <div className="p-3 bg-muted/50 rounded-lg">
               <Label className="text-xs text-muted-foreground">Assignment Preview</Label>
-              <div className="mt-2 space-y-1">
-                <div className="flex gap-2">
+              <div className="mt-2 space-y-2">
+                <div className="flex gap-2 flex-wrap">
                   <Badge variant="outline">
                     {groups.find((g: any) => g.groupID === selectedGroup)?.groupName}
                   </Badge>
@@ -218,10 +261,32 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
                     {roles.find((r: any) => r.roleID === selectedRole)?.roleName}
                   </Badge>
                 </div>
-                <p className="text-sm">
-                  {members.find((m: any) => m.memberID === selectedMember)?.firstName}{' '}
-                  {members.find((m: any) => m.memberID === selectedMember)?.lastName}
-                </p>
+                <div>
+                  <p className="text-xs font-medium mb-1">Selected Volunteers:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedMembers.map((memberID) => {
+                      const member = members.find((m: any) => m.memberID === memberID);
+                      return (
+                        <Badge 
+                          key={memberID} 
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {member?.firstName} {member?.lastName}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeMember(memberID);
+                            }}
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           )}
