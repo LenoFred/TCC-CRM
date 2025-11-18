@@ -547,7 +547,7 @@ export const api = {
       }),
 
     getAssignments: () =>
-      apiRequest<any[]>('/volunteer-assignments'),
+      apiRequest<any[]>(`/volunteer-assignments?_t=${Date.now()}`),
 
     createAssignment: (data: {
       memberID: string;

@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Search, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -35,6 +37,24 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
   const [roles, setRoles] = useState<any[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [groupSearchQuery, setGroupSearchQuery] = useState("");
+
+  // Filter groups based on search query
+  const filteredGroups = groups.filter((group: any) => {
+    if (!groupSearchQuery.trim()) return false;
+    const groupName = (group.groupName || '').toLowerCase();
+    const groupType = (group.groupType || '').toLowerCase();
+    const query = groupSearchQuery.toLowerCase();
+    return groupName.includes(query) || groupType.includes(query);
+  });
+
+  // Filter members based on search query
+  const filteredMembers = members.filter((member: any) => {
+    if (!searchQuery.trim()) return false;
+    const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
+    return fullName.includes(searchQuery.toLowerCase());
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -158,30 +178,63 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
         <div className="space-y-6">
           {/* Event/Group Selection */}
           <div>
-            <Label htmlFor="group">Select Event *</Label>
-            <Select value={selectedGroup} onValueChange={setSelectedGroup} disabled={isLoading}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose an event" />
-              </SelectTrigger>
-              <SelectContent>
-                {groups.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    No active events found
+            <Label htmlFor="group">Search and Select Event *</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="group"
+                type="text"
+                placeholder="Type event/group name to search..."
+                value={groupSearchQuery}
+                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                className="pl-9"
+                disabled={isLoading}
+              />
+            </div>
+            
+            {/* Selected Event Display */}
+            {selectedGroup && (
+              <div className="mt-2">
+                <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                  {groups.find(g => g.groupID === selectedGroup)?.groupName || selectedGroup}
+                  <X 
+                    className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                    onClick={() => setSelectedGroup('')}
+                  />
+                </Badge>
+              </div>
+            )}
+            
+            {/* Search Results */}
+            {groupSearchQuery.trim() && !selectedGroup && (
+              <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                {filteredGroups.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No events found matching "{groupSearchQuery}"
                   </div>
                 ) : (
-                  groups.map((group: any) => (
-                    <SelectItem key={group.groupID} value={group.groupID}>
-                      <div className="flex flex-col">
-                        <span>{group.groupName || 'Unnamed Event'}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {group.groupType && `Type: ${group.groupType}`}
-                        </span>
+                  <div className="space-y-1 p-2">
+                    {filteredGroups.map((group: any) => (
+                      <div 
+                        key={group.groupID} 
+                        className="flex items-start space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                        onClick={() => {
+                          setSelectedGroup(group.groupID);
+                          setGroupSearchQuery('');
+                        }}
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium">{group.groupName || 'Unnamed Event'}</div>
+                          {group.groupType && (
+                            <div className="text-xs text-muted-foreground">Type: {group.groupType}</div>
+                          )}
+                        </div>
                       </div>
-                    </SelectItem>
-                  ))
+                    ))}
+                  </div>
                 )}
-              </SelectContent>
-            </Select>
+              </div>
+            )}
           </div>
 
           {/* Role Selection */}
@@ -207,44 +260,95 @@ export const VolunteerSchedulingModal = ({ isOpen, onClose, onSave }: VolunteerS
             </Select>
           </div>
 
-          {/* Member Selection */}
+          {/* Member Selection with Search */}
           <div>
-            <Label htmlFor="member">Select Volunteers * (choose one or more)</Label>
-            <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-              {members.length === 0 ? (
-                <div className="p-2 text-sm text-muted-foreground text-center">
-                  No active members found
-                </div>
-              ) : (
-                members.map((member: any) => (
-                  <div 
-                    key={member.memberID} 
-                    className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
-                    onClick={() => toggleMember(member.memberID)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedMembers.includes(member.memberID)}
-                      onChange={() => toggleMember(member.memberID)}
-                      className="h-4 w-4 cursor-pointer"
-                      disabled={isLoading}
-                    />
-                    <label className="flex-1 cursor-pointer text-sm">
-                      {member.firstName} {member.lastName}
-                      {member.phoneNumber && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          ({member.phoneNumber})
-                        </span>
-                      )}
-                    </label>
-                  </div>
-                ))
-              )}
+            <Label htmlFor="member">Search and Select Volunteers *</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="member"
+                type="text"
+                placeholder="Type member name to search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+                disabled={isLoading}
+              />
             </div>
+            
+            {/* Search Results */}
+            {searchQuery.trim() && (
+              <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                {filteredMembers.length === 0 ? (
+                  <div className="p-3 text-sm text-muted-foreground text-center">
+                    No members found matching "{searchQuery}"
+                  </div>
+                ) : (
+                  <div className="space-y-1 p-2">
+                    {filteredMembers.map((member: any) => (
+                      <div 
+                        key={member.memberID} 
+                        className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                        onClick={() => {
+                          toggleMember(member.memberID);
+                          setSearchQuery(""); // Clear search after selection
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMembers.includes(member.memberID)}
+                          onChange={() => {
+                            toggleMember(member.memberID);
+                            setSearchQuery("");
+                          }}
+                          className="h-4 w-4 cursor-pointer"
+                          disabled={isLoading}
+                        />
+                        <label className="flex-1 cursor-pointer text-sm">
+                          {member.firstName} {member.lastName}
+                          {member.phoneNumber && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({member.phoneNumber})
+                            </span>
+                          )}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Selected Members Display */}
             {selectedMembers.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-2">
-                {selectedMembers.length} volunteer(s) selected
-              </p>
+              <div className="mt-2">
+                <p className="text-xs text-muted-foreground mb-1">
+                  {selectedMembers.length} volunteer(s) selected:
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {selectedMembers.map((memberID) => {
+                    const member = members.find((m: any) => m.memberID === memberID);
+                    return (
+                      <Badge 
+                        key={memberID} 
+                        variant="secondary"
+                        className="text-xs"
+                      >
+                        {member?.firstName} {member?.lastName}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeMember(memberID);
+                          }}
+                          className="ml-1 hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </div>
 

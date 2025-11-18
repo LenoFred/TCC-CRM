@@ -61,6 +61,9 @@ const AttendancePage = () => {
   const [eventsError, setEventsError] = useState(null);
   const [membersError, setMembersError] = useState(null);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
+  const [upcomingGatheringsSearch, setUpcomingGatheringsSearch] = useState("");
+  const [upcomingGatherings, setUpcomingGatherings] = useState([]);
+  const [selectedGatheringToEdit, setSelectedGatheringToEdit] = useState<any>(null);
 
   // Handle URL parameter for opening check-in session modal
   useEffect(() => {
@@ -183,6 +186,35 @@ const AttendancePage = () => {
         groupName: groupNameMap.get(gathering.parentID) || gathering.parentID
       }));
       setAllGatherings(allGatheringsWithGroups);
+      
+      // Get upcoming gatherings (future events)
+      const upcomingGatheringsData = gatheringsData
+        .filter(gathering => {
+          if (!gathering.gatheringDate) return false;
+          
+          try {
+            const gatheringDate = new Date(gathering.gatheringDate);
+            const timeStr = gathering.gatheringTime ? gathering.gatheringTime.trim() : '00:00';
+            const gatheringDateTime = new Date(`${gathering.gatheringDate}T${convertTo24Hour(timeStr)}`);
+            
+            // Include only future gatherings
+            return gatheringDateTime > now;
+          } catch (error) {
+            return false;
+          }
+        })
+        .map(gathering => ({
+          ...gathering,
+          groupName: groupNameMap.get(gathering.parentID) || gathering.parentID
+        }))
+        .sort((a, b) => {
+          // Sort by date ascending (soonest first)
+          const dateA = new Date(`${a.gatheringDate}T${convertTo24Hour(a.gatheringTime || '00:00')}`);
+          const dateB = new Date(`${b.gatheringDate}T${convertTo24Hour(b.gatheringTime || '00:00')}`);
+          return dateA.getTime() - dateB.getTime();
+        });
+      
+      setUpcomingGatherings(upcomingGatheringsData);
     } catch (error) {
       console.error('=== ERROR FETCHING GATHERINGS ===');
       console.error('Error object:', error);
@@ -289,8 +321,165 @@ const AttendancePage = () => {
           </CardContent>
         </Card>
 
-        {/* Attendance Directory Section */}
-        {isAttendanceDirectoryOpen && (
+        {/* Upcoming Gatherings List or Attendance Directory */}
+        {!isAttendanceDirectoryOpen ? (
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Upcoming Gatherings for Check-In
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Gatherings scheduled beyond the current date/time
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchEvents}
+                  disabled={isLoadingEvents}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingEvents ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by gathering name, type, or group..."
+                  value={upcomingGatheringsSearch}
+                  onChange={(e) => setUpcomingGatheringsSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              {/* Gatherings List */}
+              {isLoadingEvents ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="space-y-2 flex-1">
+                        <Skeleton className="h-5 w-48" />
+                        <Skeleton className="h-4 w-64" />
+                      </div>
+                      <Skeleton className="h-9 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : eventsError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error Loading Gatherings</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{eventsError}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchEvents}
+                      disabled={isLoadingEvents}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              ) : upcomingGatherings.filter(gathering => {
+                if (!upcomingGatheringsSearch.trim()) return true;
+                const searchLower = upcomingGatheringsSearch.toLowerCase();
+                return (
+                  (gathering.gatheringName || '').toLowerCase().includes(searchLower) ||
+                  (gathering.gatheringType || '').toLowerCase().includes(searchLower) ||
+                  (gathering.groupName || '').toLowerCase().includes(searchLower)
+                );
+              }).length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg font-medium">No Upcoming Gatherings</p>
+                  <p className="text-sm mt-1">
+                    {upcomingGatheringsSearch ? 'No gatherings match your search' : 'There are no scheduled gatherings beyond the current date/time'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {upcomingGatherings
+                    .filter(gathering => {
+                      if (!upcomingGatheringsSearch.trim()) return true;
+                      const searchLower = upcomingGatheringsSearch.toLowerCase();
+                      return (
+                        (gathering.gatheringName || '').toLowerCase().includes(searchLower) ||
+                        (gathering.gatheringType || '').toLowerCase().includes(searchLower) ||
+                        (gathering.groupName || '').toLowerCase().includes(searchLower)
+                      );
+                    })
+                    .map((gathering) => {
+                      const gatheringDate = new Date(gathering.gatheringDate);
+                      const timeStr = gathering.gatheringTime || 'Time TBA';
+                      const isToday = gatheringDate.toDateString() === new Date().toDateString();
+                      
+                      return (
+                        <div
+                          key={gathering.gatheringID}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-lg">
+                                {gathering.gatheringName || 'Unnamed Gathering'}
+                              </h3>
+                              {isToday && (
+                                <Badge variant="default" className="bg-green-500">
+                                  Today
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {gatheringDate.toLocaleDateString('en-US', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                              <span>at {timeStr}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {gathering.gatheringType || 'No Type'}
+                              </Badge>
+                              <span className="text-xs">•</span>
+                              <span className="text-xs">{gathering.groupName || 'No Group'}</span>
+                            </div>
+                            {gathering.gatheringLocation && (
+                              <p className="text-xs text-muted-foreground">
+                                📍 {gathering.gatheringLocation}
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedGatheringToEdit(gathering);
+                              setIsCreateGatheringModalOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          /* Attendance Directory Section */
+          
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -944,8 +1133,22 @@ const AttendancePage = () => {
         isOpen={isCreateGatheringModalOpen}
         onClose={() => {
           setIsCreateGatheringModalOpen(false);
-          fetchEvents(); // Refresh gatherings list
+          setSelectedGatheringToEdit(null);
         }}
+        onSave={async (gatheringData) => {
+          console.log(selectedGatheringToEdit ? "Gathering updated:" : "Gathering created:", gatheringData);
+          setIsCreateGatheringModalOpen(false);
+          setSelectedGatheringToEdit(null);
+          await fetchEvents();
+          toast({
+            title: selectedGatheringToEdit ? "Gathering Updated" : "Gathering Created",
+            description: selectedGatheringToEdit 
+              ? "Gathering has been successfully updated" 
+              : "New gathering has been successfully created",
+          });
+        }}
+        gathering={selectedGatheringToEdit}
+        isEdit={!!selectedGatheringToEdit}
       />
 
       {/* Digital Check-in Modal */}

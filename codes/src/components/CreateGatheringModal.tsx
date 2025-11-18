@@ -35,6 +35,8 @@ interface CreateGatheringModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave?: () => void;
+  gathering?: any;
+  isEdit?: boolean;
 }
 
 export const CreateGatheringModal = ({ 
@@ -43,7 +45,9 @@ export const CreateGatheringModal = ({
   groupType,
   isOpen, 
   onClose, 
-  onSave 
+  onSave,
+  gathering,
+  isEdit = false
 }: CreateGatheringModalProps) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState<Omit<Gathering, 'gatheringID'>>({
@@ -106,6 +110,8 @@ export const CreateGatheringModal = ({
       const filtered = groups.filter((group: any) => 
         group.groupType === formData.gatheringType
       );
+      console.log('Filtering groups by type:', formData.gatheringType);
+      console.log('Filtered groups:', filtered.map(g => ({ id: g.groupID, name: g.groupName, type: g.groupType })));
       setFilteredGroups(filtered);
     } else {
       setFilteredGroups([]);
@@ -114,16 +120,32 @@ export const CreateGatheringModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({
-        gatheringName: "",
-        gatheringType: groupType || "",
-        parentID: groupID || "",
-        gatheringDate: new Date().toISOString().split('T')[0],
-        gatheringTime: "",
-      });
+      // Wait for groups to load before pre-filling in edit mode
+      if (isEdit && gathering && !isLoadingGroups && groups.length > 0) {
+        console.log('Pre-filling form with gathering data:', gathering);
+        console.log('Available groups:', groups.map(g => ({ id: g.groupID, name: g.groupName, type: g.groupType })));
+        // Pre-fill form with existing gathering data
+        setFormData({
+          gatheringName: gathering.gatheringName || "",
+          gatheringType: gathering.gatheringType || "",
+          parentID: gathering.parentID || "",
+          gatheringDate: gathering.gatheringDate || new Date().toISOString().split('T')[0],
+          gatheringTime: gathering.gatheringTime || "",
+        });
+        console.log('Form data set with parentID:', gathering.parentID);
+      } else if (!isEdit) {
+        // Reset form for new gathering
+        setFormData({
+          gatheringName: "",
+          gatheringType: groupType || "",
+          parentID: groupID || "",
+          gatheringDate: new Date().toISOString().split('T')[0],
+          gatheringTime: "",
+        });
+      }
       setErrors({});
     }
-  }, [isOpen, groupID, groupType]);
+  }, [isOpen, groupID, groupType, gathering, isEdit, isLoadingGroups, groups]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -162,12 +184,23 @@ export const CreateGatheringModal = ({
     setIsSubmitting(true);
     
     try {
-      await api.gatherings.create(formData);
-      
-      toast({
-        title: "Gathering created successfully",
-        description: `${formData.gatheringName} has been scheduled for ${groupName}.`,
-      });
+      if (isEdit && gathering?.gatheringID) {
+        // Update existing gathering
+        await api.gatherings.update(gathering.gatheringID, formData);
+        
+        toast({
+          title: "Gathering updated successfully",
+          description: `${formData.gatheringName} has been updated.`,
+        });
+      } else {
+        // Create new gathering
+        await api.gatherings.create(formData);
+        
+        toast({
+          title: "Gathering created successfully",
+          description: `${formData.gatheringName} has been scheduled.`,
+        });
+      }
       
       if (onSave) {
         onSave();
@@ -175,10 +208,10 @@ export const CreateGatheringModal = ({
       
       onClose();
     } catch (error: any) {
-      console.error('Error creating gathering:', error);
+      console.error(`Error ${isEdit ? 'updating' : 'creating'} gathering:`, error);
       toast({
         title: "Error",
-        description: error?.message || "Failed to create gathering. Please try again.",
+        description: error?.message || `Failed to ${isEdit ? 'update' : 'create'} gathering. Please try again.`,
         variant: "destructive",
       });
     } finally {
@@ -198,7 +231,7 @@ export const CreateGatheringModal = ({
       <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <DialogTitle className="text-xl font-bold">
-            {groupName ? `Create New Gathering - ${groupName}` : 'Create New Gathering'}
+            {isEdit ? 'Edit Gathering' : (groupName ? `Create New Gathering - ${groupName}` : 'Create New Gathering')}
           </DialogTitle>
           <Button
             onClick={onClose}

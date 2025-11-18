@@ -94,8 +94,20 @@ router.patch(
 );
 
 /**
+ * @route   PUT /api/volunteer-assignments/:id
+ * @desc    Update volunteer assignment (full update)
+ * @access  Private (temporarily disabled for testing)
+ */
+router.put(
+  '/:id',
+  // authenticate,
+  // requirePermission('can_manage_volunteers'),
+  asyncHandler(volunteerAssignmentsController.update.bind(volunteerAssignmentsController))
+);
+
+/**
  * @route   PATCH /api/volunteer-assignments/:id
- * @desc    Update volunteer assignment
+ * @desc    Update volunteer assignment (partial update)
  * @access  Private (temporarily disabled for testing)
  */
 router.patch(

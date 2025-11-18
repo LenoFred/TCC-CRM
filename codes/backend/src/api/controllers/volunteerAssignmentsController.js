@@ -28,6 +28,7 @@ class VolunteerAssignmentsController extends BaseController {
       'GroupID',
       'RoleID',
       'AssignmentStatus',
+      'AssignmentDate',
     ];
   }
 
@@ -69,6 +70,7 @@ class VolunteerAssignmentsController extends BaseController {
       groupID: data.groupID,
       roleID: data.roleID,
       assignmentStatus: data.assignmentStatus || data.status || 'Scheduled',
+      assignmentDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
     };
   }
 

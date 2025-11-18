@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { api } from "@/config/api";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { User, Calendar, UserCheck, MessageSquare } from "lucide-react";
+import { User, Calendar, UserCheck, MessageSquare, Search, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Assignment {
@@ -48,10 +49,13 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
   const [message, setMessage] = useState("");
   const [members, setMembers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [existingAssignments, setExistingAssignments] = useState<any[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       fetchMembers();
+      fetchExistingAssignments();
     }
   }, [isOpen]);
 
@@ -81,6 +85,16 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
     }
   };
 
+  const fetchExistingAssignments = async () => {
+    try {
+      const response: any = await api.volunteers.getAssignments();
+      const assignmentsData = response?.data || response || [];
+      setExistingAssignments(assignmentsData);
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    }
+  };
+
   const toggleVolunteer = (memberID: string) => {
     setSelectedVolunteers(prev => 
       prev.includes(memberID)
@@ -92,6 +106,27 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
   const removeVolunteer = (memberID: string) => {
     setSelectedVolunteers(prev => prev.filter(id => id !== memberID));
   };
+
+  // Filter members based on search query and exclude those already assigned
+  const filteredMembers = members.filter((member: any) => {
+    if (!searchQuery.trim()) return false;
+    
+    // Check if member matches search
+    const fullName = `${member.firstName} ${member.lastName}`.toLowerCase();
+    const matchesSearch = fullName.includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    
+    // Check if member is already assigned to this group and role
+    const isAlreadyAssigned = existingAssignments.some((a: any) => 
+      a.memberID === member.memberID && 
+      a.groupID === assignment?.groupID && 
+      a.roleID === assignment?.roleID &&
+      a.assignmentStatus === 'Scheduled'
+    );
+    
+    return !isAlreadyAssigned;
+  });
 
   const handleSubmit = async () => {
     if (!selectedAction) {
@@ -115,8 +150,35 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
     try {
       setIsLoading(true);
 
+      // Handle status changes for confirm and cancel
+      if (selectedAction === 'confirm') {
+        await api.volunteers.updateAssignment(assignment?.assignmentID || '', {
+          assignmentStatus: 'Completed',
+        });
+      } else if (selectedAction === 'cancel') {
+        await api.volunteers.updateAssignment(assignment?.assignmentID || '', {
+          assignmentStatus: 'Canceled',
+        });
+      }
       // Handle adding more volunteers
-      if (selectedAction === 'add') {
+      else if (selectedAction === 'add') {
+        const assignmentPromises = selectedVolunteers.map(memberID => 
+          api.volunteers.createAssignment({
+            memberID,
+            groupID: assignment?.groupID || '',
+            roleID: assignment?.roleID || '',
+            assignmentStatus: 'Scheduled',
+          })
+        );
+        await Promise.all(assignmentPromises);
+      }
+      // Handle reassigning volunteers
+      else if (selectedAction === 'reassign') {
+        // Update current assignment to canceled
+        await api.volunteers.updateAssignment(assignment?.assignmentID || '', {
+          assignmentStatus: 'Canceled',
+        });
+        // Create new assignments for selected volunteers
         const assignmentPromises = selectedVolunteers.map(memberID => 
           api.volunteers.createAssignment({
             memberID,
@@ -248,42 +310,57 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
           {(selectedAction === "reassign" || selectedAction === "add") && (
             <div>
               <Label htmlFor="volunteer">
-                {selectedAction === "add" ? "Add More Volunteers" : "Reassign to Volunteer(s)"}
+                {selectedAction === "add" ? "Search and Add Volunteers" : "Search and Reassign to Volunteer(s)"}
               </Label>
-              <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                {isLoading ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    Loading members...
-                  </div>
-                ) : members.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    No active members available
-                  </div>
-                ) : (
-                  members.map((member: any) => (
-                    <div 
-                      key={member.memberID} 
-                      className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
-                      onClick={() => toggleVolunteer(member.memberID)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedVolunteers.includes(member.memberID)}
-                        onChange={() => toggleVolunteer(member.memberID)}
-                        className="h-4 w-4 cursor-pointer"
-                      />
-                      <label className="flex-1 cursor-pointer text-sm">
-                        {member.firstName} {member.lastName}
-                        {member.phoneNumber && (
-                          <span className="text-xs text-muted-foreground ml-2">
-                            ({member.phoneNumber})
-                          </span>
-                        )}
-                      </label>
-                    </div>
-                  ))
-                )}
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="volunteer"
+                  type="text"
+                  placeholder="Type member name to search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  disabled={isLoading}
+                />
               </div>
+              
+              {/* Search Results */}
+              {searchQuery.trim() && (
+                <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                  {filteredMembers.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground text-center">
+                      {members.length === 0 
+                        ? "No active members available" 
+                        : `No members found matching "${searchQuery}" or all matching members are already assigned`}
+                    </div>
+                  ) : (
+                    <div className="space-y-1 p-2">
+                      {filteredMembers.map((member: any) => (
+                        <div 
+                          key={member.memberID} 
+                          className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
+                          onClick={() => {
+                            toggleVolunteer(member.memberID);
+                            setSearchQuery('');
+                          }}
+                        >
+                          <span className="flex-1 text-sm">
+                            {member.firstName} {member.lastName}
+                            {member.phoneNumber && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                ({member.phoneNumber})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Selected Volunteers */}
               {selectedVolunteers.length > 0 && (
                 <div className="mt-2">
                   <p className="text-xs text-muted-foreground mb-1">
@@ -296,18 +373,13 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
                         <Badge 
                           key={memberID} 
                           variant="secondary"
-                          className="text-xs"
+                          className="flex items-center gap-1 text-xs"
                         >
                           {member?.firstName} {member?.lastName}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeVolunteer(memberID);
-                            }}
-                            className="ml-1 hover:text-destructive"
-                          >
-                            ×
-                          </button>
+                          <X 
+                            className="h-3 w-3 cursor-pointer hover:text-destructive" 
+                            onClick={() => removeVolunteer(memberID)}
+                          />
                         </Badge>
                       );
                     })}
