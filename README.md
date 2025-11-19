@@ -108,7 +108,7 @@ Groups:
 GroupID, GroupName, GroupType, LeaderMemberID, Status, MeetingLocation, Description
 
 GroupMembers:
-GroupMemberID, MemberID, GroupID
+GroupMemberID, MemberID, GroupID, Status
 
 Gatherings:
 GatheringID, GatheringName, GatheringType, ParentID, GatheringDate, GatheringTime
@@ -120,13 +120,13 @@ Donations:
 DonationID, MemberID, Amount, DonationDate, Fund, PayDate, Status
 
 Guest
-GuestID, Name, Email, Phone 																					
+GuestID, Name, Phone, Email																					
 
 VolunteerRoles:
 RoleID, RoleName, Description
 
 VolunteerAssignments:
-AssignmentID, MemberID, GatheringID, RoleID, AssignmentStatus
+AssignmentID, MemberID, GroupID, RoleID, AssignmentStatus, AssignmentDate
 
 SupportRequests:
 RequestID, MemberID, RequestorName, RequestorContact, RequestCategory, RequestDetails, RequestStatus, AssignedTo
@@ -147,9 +147,10 @@ UpdatedAt — (DateTime) The date and time the record was last updated.
    ### VolunteerAssignments
    - AssignmentID (PK): String, Required, Unique
    - MemberID (FK): String -> Members.MemberID
-   - GatheringID (FK): String -> Gatherings.GatheringID
+   - GroupID (FK): String -> Gatherings.GatheringID
    - RoleID (FK): String -> VolunteerRoles.RoleID
-   - AssignmentStatus: String, Required (e.g., Confirmed, Served, Cancelled)
+   - AssignmentStatus: String, Required (e.g., Confirmed, Cancelled)
+   - AssignmentDate
 
    ### SupportRequests
    - RequestID (PK): String, Required, Unique
