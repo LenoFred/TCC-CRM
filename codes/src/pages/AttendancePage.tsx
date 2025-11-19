@@ -1135,8 +1135,8 @@ const AttendancePage = () => {
           setIsCreateGatheringModalOpen(false);
           setSelectedGatheringToEdit(null);
         }}
-        onSave={async (gatheringData) => {
-          console.log(selectedGatheringToEdit ? "Gathering updated:" : "Gathering created:", gatheringData);
+        onSave={async () => {
+          console.log(selectedGatheringToEdit ? "Gathering updated" : "Gathering created");
           setIsCreateGatheringModalOpen(false);
           setSelectedGatheringToEdit(null);
           await fetchEvents();

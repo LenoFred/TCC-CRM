@@ -312,8 +312,12 @@ export const CreateGatheringModal = ({
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="parentID">Select Group *</Label>
                   <Select
+                    key={`group-select-${formData.parentID}-${filteredGroups.length}`}
                     value={formData.parentID}
-                    onValueChange={(value) => handleInputChange('parentID', value)}
+                    onValueChange={(value) => {
+                      console.log('Group selected:', value);
+                      handleInputChange('parentID', value);
+                    }}
                     disabled={!formData.gatheringType || isLoadingGroups}
                   >
                     <SelectTrigger className={errors.parentID ? "border-destructive" : ""}>
