@@ -419,24 +419,28 @@ export const api = {
 
   // Analytics
   analytics: {
-    attendanceSummary: () =>
-      apiRequest<any>('/analytics/attendance-summary'),
-
-    donationsSummary: () =>
-      apiRequest<any>('/analytics/donations-summary'),
-
-    custom: (data: {
+    generateReport: (data: {
       dataSource: string;
       filters: any[];
-      outputFields: string[];
+      outputFields?: string[];
+      limit?: number;
     }) =>
-      apiRequest<any[]>('/reports/custom', {
+      apiRequest<{success: boolean; data: any[]; total: number; returned: number}>('/analytics/generate-report', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
 
-    getHistory: () =>
-      apiRequest<any[]>('/analytics/history'),
+    getSheetColumns: (sheetName: string) =>
+      apiRequest<{success: boolean; data: any[]}>(`/analytics/sheet-columns/${sheetName}`),
+
+    getSummaryStats: () =>
+      apiRequest<{success: boolean; data: any}>('/analytics/summary-stats'),
+
+    exportReport: (data: any[], fileName?: string) =>
+      apiRequest<any>('/analytics/export', {
+        method: 'POST',
+        body: JSON.stringify({ data, fileName }),
+      }),
   },
 
   // Guests

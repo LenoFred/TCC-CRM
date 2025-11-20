@@ -28,6 +28,7 @@ const supportRequestsRoutes = require('./api/routes/supportRequests');
 const staffRoutes = require('./api/routes/staff');
 const communicationsRoutes = require('./api/routes/communications');
 const businessLogicRoutes = require('./api/routes/businessLogic');
+const analyticsRoutes = require('./api/routes/analytics');
 
 // Create Express app
 const app = express();
@@ -129,6 +130,7 @@ app.use('/api/support-requests', supportRequestsRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/communications', communicationsRoutes);
 app.use('/api/business', businessLogicRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // ============================================
 // Serve Frontend (Production)
