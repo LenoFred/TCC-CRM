@@ -42,6 +42,8 @@ class SheetsService {
       STAFF_PERMISSIONS: 'StaffPermissions',
       BRANCHES: 'Branches',
       COMMUNICATIONS: 'Communications',
+      SCHEDULED_MESSAGES: 'ScheduledMessages',
+      MESSAGE_DRAFTS: 'MessageDrafts',
       SETTINGS: 'Settings',
     };
 

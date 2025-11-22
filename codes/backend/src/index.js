@@ -43,11 +43,33 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS configuration
-app.use(cors({
-  origin: config.cors.origin,
+// CORS configuration with detailed logging
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = Array.isArray(config.cors.origin) 
+      ? config.cors.origin 
+      : [config.cors.origin];
+    
+    logger.debug('CORS Request', { origin, allowedOrigins });
+    
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      logger.warn('CORS: Blocked origin', { origin, allowedOrigins });
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: config.cors.credentials,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -71,6 +93,37 @@ app.use(cookieParser());
 // ============================================
 // Request Logging
 // ============================================
+
+// Detailed request/response logging
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  
+  // Log incoming request
+  logger.info('Incoming Request', {
+    method: req.method,
+    url: req.url,
+    path: req.path,
+    query: req.query,
+    origin: req.get('origin'),
+    userAgent: req.get('user-agent'),
+    ip: req.ip || req.connection.remoteAddress,
+  });
+  
+  // Log response
+  const originalSend = res.send;
+  res.send = function(data) {
+    const duration = Date.now() - startTime;
+    logger.info('Outgoing Response', {
+      method: req.method,
+      url: req.url,
+      statusCode: res.statusCode,
+      duration: `${duration}ms`,
+    });
+    originalSend.call(this, data);
+  };
+  
+  next();
+});
 
 app.use(requestLogger);
 

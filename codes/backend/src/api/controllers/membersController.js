@@ -152,6 +152,20 @@ class MembersController extends BaseController {
       );
     }
 
+    // Filter by state
+    if (filters.state) {
+      filtered = filtered.filter(m => 
+        m.state?.toLowerCase() === filters.state.toLowerCase()
+      );
+    }
+
+    // Filter by LGA (Local Government Area)
+    if (filters.lga) {
+      filtered = filtered.filter(m => 
+        m.lGA?.toLowerCase() === filters.lga.toLowerCase()
+      );
+    }
+
     return filtered;
   }
 

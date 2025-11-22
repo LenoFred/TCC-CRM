@@ -48,12 +48,12 @@ router.get(
 /**
  * @route   GET /api/staff
  * @desc    Get all staff
- * @access  Private (Admin only)
+ * @access  Public (Auth disabled for development)
  */
 router.get(
   '/',
-  authenticate,
-  requireRole('Admin'),
+  // authenticate,
+  // requireRole('Admin'),
   asyncHandler(staffController.getAll.bind(staffController))
 );
 

@@ -9,24 +9,67 @@ const crypto = require('crypto');
 
 /**
  * Entity prefixes for ID generation
+ * Note: Keys should match the entity type names used in controllers
+ * Abbreviations are kept as aliases for backward compatibility
  */
 const ID_PREFIXES = {
+  // Core entities
   MEMBER: 'MEM',
+  MEM: 'MEM', // Alias
   FAMILY: 'FAM',
+  FAM: 'FAM', // Alias
   GROUP: 'GRP',
+  GRP: 'GRP', // Alias
   GROUP_MEMBER: 'GRM',
+  GRM: 'GRM', // Alias
+  
+  // Events & Gatherings
   EVENT: 'EVT',
+  EVT: 'EVT', // Alias
   GATHERING: 'GATH',
+  GATH: 'GATH', // Alias
   ATTENDANCE: 'ATT',
+  ATT: 'ATT', // Alias
+  
+  // Financial
   DONATION: 'DON',
+  DON: 'DON', // Alias
+  
+  // Volunteers
   VOLUNTEER_ROLE: 'VRL',
+  VRL: 'VRL', // Alias
   VOLUNTEER_ASSIGNMENT: 'VAS',
+  VAS: 'VAS', // Alias
+  
+  // Support & Requests
   SUPPORT_REQUEST: 'SUP',
+  SUP: 'SUP', // Alias
+  
+  // Staff & Permissions
   STAFF: 'STF',
+  STF: 'STF', // Alias
   STAFF_PERMISSION: 'PRM',
+  PRM: 'PRM', // Alias
+  
+  // Organization
   BRANCH: 'BRN',
+  BRN: 'BRN', // Alias
+  
+  // Communications
   COMMUNICATION: 'COM',
+  COM: 'COM', // Alias
+  SCHEDULED_MESSAGE: 'SCHED',
+  SCHED: 'SCHED', // Alias
+  MESSAGE_DRAFT: 'DRAFT',
+  DRAFT: 'DRAFT', // Alias
+  
+  // Guests
   GUEST: 'GST',
+  GST: 'GST', // Alias
+  
+  // Settings & Configuration
+  SETTING: 'SET',
+  SET: 'SET', // Alias
 };
 
 /**
