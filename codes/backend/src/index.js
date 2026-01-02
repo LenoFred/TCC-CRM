@@ -202,6 +202,21 @@ app.use('/api/analytics', analyticsRoutes);
 //   });
 // }
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'TCC CRM Backend API',
+    status: 'running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      members: '/api/members',
+      documentation: '/api/docs'
+    }
+  });
+});
+
 // Health check endpoint for Vercel/monitoring
 app.get('/api/health', (req, res) => {
   res.json({
