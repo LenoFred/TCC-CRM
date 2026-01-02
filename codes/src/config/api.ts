@@ -358,11 +358,41 @@ export const api = {
 
   // Communications
   communications: {
+    // Send message with email provider option
     send: (data: any) =>
-      apiRequest<any>('/communications/send', {
+      apiRequest<any>('/communications', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+
+    // Get communications history with filters
+    getHistory: (filters?: { startDate?: string; endDate?: string; channel?: string; status?: string }) => {
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.channel) params.append('channel', filters.channel);
+      if (filters?.status) params.append('status', filters.status);
+      const query = params.toString();
+      return apiRequest<{success: boolean; count: number; filters: any; data: any[]}>(`/communications/history${query ? `?${query}` : ''}`);
+    },
+
+    // Get analytics (cost, peak times, delivery rates)
+    getAnalytics: (startDate?: string, endDate?: string) => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      const query = params.toString();
+      return apiRequest<{success: boolean; dateRange: any; costAnalysis: any; peakTimes: any; deliveryRates: any}>(`/communications/analytics${query ? `?${query}` : ''}`);
+    },
+
+    // Get communication statistics
+    getStats: (startDate?: string, endDate?: string) => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('startDate', startDate);
+      if (endDate) params.append('endDate', endDate);
+      const query = params.toString();
+      return apiRequest<any>(`/communications/stats${query ? `?${query}` : ''}`);
+    },
 
     schedule: (data: any) =>
       apiRequest<any>('/communications/schedule', {
@@ -372,15 +402,15 @@ export const api = {
 
     recipients: {
       groups: () =>
-        apiRequest<any[]>('/recipients/groups'),
+        apiRequest<any[]>('/groups'),
 
       staff: () =>
-        apiRequest<any[]>('/recipients/staff'),
+        apiRequest<any[]>('/staff'),
     },
 
     // Drafts management
     getDrafts: () =>
-      apiRequest<any[]>('/communications/drafts'),
+      apiRequest<{success: boolean; data: any[]}>('/communications/drafts'),
     
     createDraft: (data: any) =>
       apiRequest<any>('/communications/drafts', {
@@ -398,19 +428,38 @@ export const api = {
       apiRequest<void>(`/communications/drafts/${id}`, { method: 'DELETE' }),
     
     // Scheduled messages
-    getScheduled: () =>
-      apiRequest<any[]>('/communications/scheduled'),
+    getScheduled: (params?: { search?: string; scheduleType?: string; status?: string; page?: number; limit?: number }) => {
+      const searchParams = new URLSearchParams();
+      if (params?.search) searchParams.append('search', params.search);
+      if (params?.scheduleType) searchParams.append('scheduleType', params.scheduleType);
+      if (params?.status) searchParams.append('status', params.status);
+      if (params?.page) searchParams.append('page', params.page.toString());
+      if (params?.limit) searchParams.append('limit', params.limit.toString());
+      const query = searchParams.toString();
+      return apiRequest<{success: boolean; data: any[]; total: number}>(`/communications/scheduled${query ? `?${query}` : ''}`);
+    },
+
+    getAllScheduled: () =>
+      apiRequest<{success: boolean; data: any[]}>('/communications/scheduled/all'),
+
+    getScheduledById: (id: string) =>
+      apiRequest<{success: boolean; data: any}>(`/communications/scheduled/${id}`),
     
     createScheduled: (data: any) =>
-      apiRequest<any>('/communications/scheduled', {
+      apiRequest<{success: boolean; data: any}>('/communications/scheduled', {
         method: 'POST',
         body: JSON.stringify(data),
       }),
     
     updateScheduled: (id: string, data: any) =>
-      apiRequest<any>(`/communications/scheduled/${id}`, {
-        method: 'PUT',
+      apiRequest<{success: boolean; data: any}>(`/communications/scheduled/${id}`, {
+        method: 'PATCH',
         body: JSON.stringify(data),
+      }),
+
+    cancelScheduled: (id: string) =>
+      apiRequest<{success: boolean; message: string}>(`/communications/scheduled/${id}/cancel`, {
+        method: 'POST',
       }),
     
     deleteScheduled: (id: string) =>
@@ -552,6 +601,9 @@ export const api = {
 
     getAssignments: () =>
       apiRequest<any[]>(`/volunteer-assignments?_t=${Date.now()}`),
+
+    getAssignmentsByRole: (roleID: string) =>
+      apiRequest<{roleID: string; total: number; assignments: any[]}>(`/volunteer-assignments/role/${roleID}`),
 
     createAssignment: (data: {
       memberID: string;

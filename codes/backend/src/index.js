@@ -200,6 +200,16 @@ if (config.server.isProduction) {
   });
 }
 
+// Health check endpoint for Vercel/monitoring
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: config.server.env,
+    uptime: process.uptime()
+  });
+});
+
 // ============================================
 // Error Handling
 // ============================================
@@ -224,7 +234,7 @@ const server = app.listen(PORT, () => {
   
   if (config.server.isDevelopment) {
     logger.info(`🔗 API Documentation: http://localhost:${PORT}/api`);
-    logger.info(`💚 Health Check: http://localhost:${PORT}/health`);
+    logger.info(`💚 Health Check: http://localhost:${PORT}/api/health`);
   }
 });
 
