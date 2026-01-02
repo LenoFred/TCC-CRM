@@ -1,0 +1,41 @@
+{
+  "version": 2,
+  "name": "tcc-crm-backend",
+  "builds": [
+    {
+      "src": "src/index.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/index.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "3001",
+    "GOOGLE_SHEET_ID": "@google_sheet_id",
+    "JWT_SECRET": "@jwt_secret",
+    "JWT_EXPIRES_IN": "24h",
+    "JWT_REFRESH_EXPIRES_IN": "7d",
+    "BCRYPT_ROUNDS": "12",
+    "RATE_LIMIT_WINDOW_MS": "900000",
+    "RATE_LIMIT_MAX_REQUESTS": "100",
+    "CACHE_TTL": "300",
+    "CACHE_CHECK_PERIOD": "600",
+    "WHATSAPP_META_PHONE_NUMBER_ID": "@whatsapp_meta_phone_number_id",
+    "WHATSAPP_META_ACCESS_TOKEN": "@whatsapp_meta_access_token",
+    "WHATSAPP_META_BUSINESS_ACCOUNT_ID": "@whatsapp_meta_business_account_id",
+    "SENDGRID_API_KEY": "@sendgrid_api_key",
+    "SENDGRID_FROM_EMAIL": "@sendgrid_from_email",
+    "SENDGRID_FROM_NAME": "Triumphant Christian Centre (TCC)",
+    "GMAIL_SMTP_USER": "@gmail_smtp_user",
+    "GMAIL_SMTP_APP_PASSWORD": "@gmail_smtp_app_password",
+    "GMAIL_SMTP_FROM_NAME": "Triumphant Christian Centre (TCC)",
+    "BULKSMS_NIGERIA_API_TOKEN": "@bulksms_nigeria_api_token",
+    "BULKSMS_NIGERIA_SENDER_NAME": "TCC",
+    "BULKSMS_NIGERIA_DND_ENABLED": "true"
+  }
+}
