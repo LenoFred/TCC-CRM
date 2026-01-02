@@ -31,15 +31,25 @@ const logFormat = winston.format.combine(
 /**
  * Create logger instance
  */
-const logger = winston.createLogger({
-  level: config.logging.level,
-  format: logFormat,
-  defaultMeta: { service: 'tcc-crm-backend' },
-  transports: [
-    // Console transport
-    new winston.transports.Console({
-      format: logFormat,
-    }),
+const transports = [
+  // Console transport (always enabled)
+  new winston.transports.Console({
+    format: logFormat,
+  }),
+];
+
+// Only add file transports in development (not on Vercel serverless)
+if (config.server.isDevelopment) {
+  const fs = require('fs');
+  const path = require('path');
+  const logsDir = path.join(__dirname, '../../logs');
+  
+  // Create logs directory if it doesn't exist
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  
+  transports.push(
     // File transport for errors
     new winston.transports.File({
       filename: 'logs/error.log',
@@ -52,19 +62,16 @@ const logger = winston.createLogger({
       filename: 'logs/combined.log',
       maxsize: 5242880, // 5MB
       maxFiles: 5,
-    }),
-  ],
-});
-
-/**
- * Create logs directory if it doesn't exist
- */
-const fs = require('fs');
-const path = require('path');
-const logsDir = path.join(__dirname, '../../logs');
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+    })
+  );
 }
+
+const logger = winston.createLogger({
+  level: config.logging.level,
+  format: logFormat,
+  defaultMeta: { service: 'tcc-crm-backend' },
+  transports: transports,
+});
 
 /**
  * Express middleware for request logging

@@ -10,10 +10,16 @@
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.js"
   },
-  "keywords": ["crm", "church", "google-sheets"],
+  "keywords": [
+    "crm",
+    "church",
+    "google-sheets"
+  ],
   "author": "TCC Development Team",
   "license": "ISC",
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
+    "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -24,7 +30,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "node-cache": "^5.1.2",
-    "nodemailer": "^6.9.8",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.10",
     "twilio": "^4.20.0",
     "winston": "^3.11.0",
     "zod": "^3.22.4"

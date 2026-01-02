@@ -31,7 +31,7 @@ class VolunteerRolesController extends BaseController {
 
   async prepareCreateData(data, user) {
     return {
-      roleID: generateId('VRL'),
+      roleID: generateId('VOLUNTEER_ROLE'),
       roleName: data.roleName || data.name || '',
       description: data.description || '',
     };

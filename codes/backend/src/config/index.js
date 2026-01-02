@@ -37,7 +37,18 @@ const config = {
 
   // CORS Configuration
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (() => {
+      try {
+        // Try to parse as JSON array first
+        const parsed = JSON.parse(process.env.CORS_ORIGIN || '[]');
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        // If not valid JSON, treat as single origin string
+      }
+      return process.env.CORS_ORIGIN || 'http://localhost:5173';
+    })(),
     credentials: true,
   },
 
@@ -47,21 +58,36 @@ const config = {
     checkPeriod: parseInt(process.env.CACHE_CHECK_PERIOD) || 5, // 5 seconds check period
   },
 
-  // Communications Configuration (Placeholders)
+  // Communications Configuration
   communications: {
-    twilio: {
-      accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-      authToken: process.env.TWILIO_AUTH_TOKEN || '',
-      phoneNumber: process.env.TWILIO_PHONE_NUMBER || '',
-      whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER || '',
+    // Meta WhatsApp Cloud API
+    whatsapp: {
+      phoneNumberId: process.env.WHATSAPP_META_PHONE_NUMBER_ID || '',
+      accessToken: process.env.WHATSAPP_META_ACCESS_TOKEN || '',
+      businessAccountId: process.env.WHATSAPP_META_BUSINESS_ACCOUNT_ID || '',
     },
-    email: {
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.EMAIL_PORT) || 587,
-      secure: process.env.EMAIL_SECURE === 'true' || false,
-      user: process.env.EMAIL_USER || '',
-      pass: process.env.EMAIL_PASSWORD || '',
-      fromName: process.env.EMAIL_FROM_NAME || 'The Covenant Church',
+    // SendGrid for promotional emails
+    sendgrid: {
+      apiKey: process.env.SENDGRID_API_KEY || '',
+      fromEmail: process.env.SENDGRID_FROM_EMAIL || '',
+      fromName: process.env.SENDGRID_FROM_NAME || 'The Covenant Church',
+      templates: {
+        newsletter: process.env.SENDGRID_TEMPLATE_NEWSLETTER || '',
+        event: process.env.SENDGRID_TEMPLATE_EVENT || '',
+        announcement: process.env.SENDGRID_TEMPLATE_ANNOUNCEMENT || '',
+      },
+    },
+    // Gmail SMTP for automated emails
+    gmail: {
+      user: process.env.GMAIL_SMTP_USER || '',
+      appPassword: process.env.GMAIL_SMTP_APP_PASSWORD || '',
+      fromName: process.env.GMAIL_SMTP_FROM_NAME || 'The Covenant Church',
+    },
+    // BulkSMS Nigeria for SMS
+    bulksms: {
+      apiToken: process.env.BULKSMS_NIGERIA_API_TOKEN || '',
+      senderName: process.env.BULKSMS_NIGERIA_SENDER_NAME || 'TCC',
+      dndEnabled: process.env.BULKSMS_NIGERIA_DND_ENABLED === 'true',
     },
   },
 

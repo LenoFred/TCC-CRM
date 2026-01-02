@@ -28,6 +28,18 @@ lerna-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.development
+*.env
+**/.env
+**/.env.*
+
+# Google Credentials (CRITICAL - NEVER COMMIT)
+credentials.json
+**/credentials.json
+credentials-base64.txt
+**/credentials-base64.txt
+tcc-crm-backend-*.json
 
 # Editor directories and files
 .vscode/*

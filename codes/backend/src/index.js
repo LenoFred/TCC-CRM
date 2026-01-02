@@ -28,6 +28,7 @@ const supportRequestsRoutes = require('./api/routes/supportRequests');
 const staffRoutes = require('./api/routes/staff');
 const communicationsRoutes = require('./api/routes/communications');
 const businessLogicRoutes = require('./api/routes/businessLogic');
+const analyticsRoutes = require('./api/routes/analytics');
 
 // Create Express app
 const app = express();
@@ -42,11 +43,33 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS configuration
-app.use(cors({
-  origin: config.cors.origin,
+// CORS configuration with detailed logging
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = Array.isArray(config.cors.origin) 
+      ? config.cors.origin 
+      : [config.cors.origin];
+    
+    logger.debug('CORS Request', { origin, allowedOrigins });
+    
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      logger.warn('CORS: Blocked origin', { origin, allowedOrigins });
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: config.cors.credentials,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -70,6 +93,37 @@ app.use(cookieParser());
 // ============================================
 // Request Logging
 // ============================================
+
+// Detailed request/response logging
+app.use((req, res, next) => {
+  const startTime = Date.now();
+  
+  // Log incoming request
+  logger.info('Incoming Request', {
+    method: req.method,
+    url: req.url,
+    path: req.path,
+    query: req.query,
+    origin: req.get('origin'),
+    userAgent: req.get('user-agent'),
+    ip: req.ip || req.connection.remoteAddress,
+  });
+  
+  // Log response
+  const originalSend = res.send;
+  res.send = function(data) {
+    const duration = Date.now() - startTime;
+    logger.info('Outgoing Response', {
+      method: req.method,
+      url: req.url,
+      statusCode: res.statusCode,
+      duration: `${duration}ms`,
+    });
+    originalSend.call(this, data);
+  };
+  
+  next();
+});
 
 app.use(requestLogger);
 
@@ -129,6 +183,7 @@ app.use('/api/support-requests', supportRequestsRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/communications', communicationsRoutes);
 app.use('/api/business', businessLogicRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // ============================================
 // Serve Frontend (Production)
@@ -144,6 +199,16 @@ if (config.server.isProduction) {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
+
+// Health check endpoint for Vercel/monitoring
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: config.server.env,
+    uptime: process.uptime()
+  });
+});
 
 // ============================================
 // Error Handling
@@ -169,7 +234,7 @@ const server = app.listen(PORT, () => {
   
   if (config.server.isDevelopment) {
     logger.info(`🔗 API Documentation: http://localhost:${PORT}/api`);
-    logger.info(`💚 Health Check: http://localhost:${PORT}/health`);
+    logger.info(`💚 Health Check: http://localhost:${PORT}/api/health`);
   }
 });
 

@@ -30,6 +30,8 @@ class CommunicationsController extends BaseController {
       'SentAt',
       'DeliveredAt',
       'FailureReason',
+      'Cost',
+      'Provider',
       'CreatedAt',
       'UpdatedAt',
     ];
@@ -217,6 +219,54 @@ class CommunicationsController extends BaseController {
     res.json({
       message: 'Communication status updated successfully',
       data: updated,
+    });
+  }
+
+  /**
+   * Get communications history with custom date range filtering
+   */
+  async getHistory(req, res) {
+    const { startDate, endDate, channel, status } = req.query;
+    
+    const communicationService = require('../../services/communicationService');
+    
+    const filters = {};
+    if (startDate) filters.startDate = startDate;
+    if (endDate) filters.endDate = endDate;
+    if (channel) filters.channel = channel;
+    if (status) filters.status = status;
+
+    const history = await communicationService.getHistory(filters);
+
+    res.json({
+      success: true,
+      count: history.length,
+      filters: filters,
+      data: history,
+    });
+  }
+
+  /**
+   * Get communications analytics (cost analysis, peak times, delivery rates)
+   */
+  async getAnalytics(req, res) {
+    const { startDate, endDate } = req.query;
+    
+    const communicationService = require('../../services/communicationService');
+
+    // Get all analytics data
+    const [costAnalysis, peakTimes, deliveryRates] = await Promise.all([
+      communicationService.getCostAnalysis(startDate, endDate),
+      communicationService.getPeakTimes(startDate, endDate),
+      communicationService.getDeliveryRates(startDate, endDate),
+    ]);
+
+    res.json({
+      success: true,
+      dateRange: { startDate, endDate },
+      costAnalysis,
+      peakTimes,
+      deliveryRates,
     });
   }
 

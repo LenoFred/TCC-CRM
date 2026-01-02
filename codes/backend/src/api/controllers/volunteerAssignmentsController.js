@@ -28,6 +28,7 @@ class VolunteerAssignmentsController extends BaseController {
       'GroupID',
       'RoleID',
       'AssignmentStatus',
+      'AssignmentDate',
     ];
   }
 
@@ -42,7 +43,7 @@ class VolunteerAssignmentsController extends BaseController {
     );
     const member = members.find((m) => m.memberID === data.memberID);
     if (!member) {
-      throw new ApiError(404, 'Member not found');
+      throw new ApiError('Member not found', 404);
     }
 
     // Validate role exists
@@ -51,7 +52,7 @@ class VolunteerAssignmentsController extends BaseController {
     );
     const role = roles.find((r) => r.roleID === data.roleID);
     if (!role) {
-      throw new ApiError(404, 'Volunteer role not found');
+      throw new ApiError('Volunteer role not found', 404);
     }
 
     // Validate group exists
@@ -60,15 +61,16 @@ class VolunteerAssignmentsController extends BaseController {
     );
     const group = groups.find((g) => g.groupID === data.groupID);
     if (!group) {
-      throw new ApiError(404, 'Group/Event not found');
+      throw new ApiError('Group/Event not found', 404);
     }
 
     return {
-      assignmentID: generateId('VAS'),
+      assignmentID: generateId('VOLUNTEER_ASSIGNMENT'),
       memberID: data.memberID,
       groupID: data.groupID,
       roleID: data.roleID,
       assignmentStatus: data.assignmentStatus || data.status || 'Scheduled',
+      assignmentDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
     };
   }
 

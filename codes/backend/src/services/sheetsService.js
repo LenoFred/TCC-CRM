@@ -42,6 +42,8 @@ class SheetsService {
       STAFF_PERMISSIONS: 'StaffPermissions',
       BRANCHES: 'Branches',
       COMMUNICATIONS: 'Communications',
+      SCHEDULED_MESSAGES: 'ScheduledMessages',
+      MESSAGE_DRAFTS: 'MessageDrafts',
       SETTINGS: 'Settings',
     };
 
@@ -50,18 +52,33 @@ class SheetsService {
 
   /**
    * Initialize Google Sheets authentication
+   * Supports both file-based credentials (local) and Base64 env var (Vercel)
    */
   async initializeAuth() {
     try {
-      const credentialsPath = path.isAbsolute(config.googleSheets.credentialsPath)
-        ? config.googleSheets.credentialsPath
-        : path.join(__dirname, '../../', config.googleSheets.credentialsPath);
+      let credentials;
 
-      if (!fs.existsSync(credentialsPath)) {
-        throw new Error(`Credentials file not found at: ${credentialsPath}`);
+      // Check for Base64-encoded credentials in environment variable (for Vercel)
+      if (process.env.GOOGLE_CREDENTIALS_BASE64) {
+        logger.info('Loading Google credentials from GOOGLE_CREDENTIALS_BASE64 environment variable');
+        const credentialsJson = Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8');
+        credentials = JSON.parse(credentialsJson);
+      } 
+      // Fall back to file-based credentials (for local development)
+      else {
+        const credentialsPath = path.isAbsolute(config.googleSheets.credentialsPath)
+          ? config.googleSheets.credentialsPath
+          : path.join(__dirname, '../../', config.googleSheets.credentialsPath);
+
+        if (!fs.existsSync(credentialsPath)) {
+          throw new Error(
+            `Credentials not found. Set GOOGLE_CREDENTIALS_BASE64 environment variable or provide credentials file at: ${credentialsPath}`
+          );
+        }
+
+        logger.info('Loading Google credentials from file:', credentialsPath);
+        credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
       }
-
-      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
 
       this.auth = new google.auth.GoogleAuth({
         credentials,

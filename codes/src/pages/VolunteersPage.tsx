@@ -36,11 +36,14 @@ const VolunteersPage = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
   const [volunteerRoles, setVolunteerRoles] = useState([]);
   const [upcomingAssignments, setUpcomingAssignments] = useState([]);
+  const [pastAssignments, setPastAssignments] = useState([]);
   const [isLoadingRoles, setIsLoadingRoles] = useState(true);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [isLoadingPastAssignments, setIsLoadingPastAssignments] = useState(true);
   const [isSavingRole, setIsSavingRole] = useState(false);
   const [rolesError, setRolesError] = useState(null);
   const [assignmentsError, setAssignmentsError] = useState(null);
+  const [pastAssignmentsError, setPastAssignmentsError] = useState(null);
 
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
@@ -62,6 +65,7 @@ const VolunteersPage = () => {
     setIsLoadingAssignments(true);
     setAssignmentsError(null);
     try {
+      // Use api helper with cache buster
       const assignmentsResponse: any = await api.volunteers.getAssignments();
       console.log('Assignments data received:', assignmentsResponse);
       const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
@@ -80,9 +84,34 @@ const VolunteersPage = () => {
     }
   };
 
+  const fetchPastAssignments = async () => {
+    setIsLoadingPastAssignments(true);
+    setPastAssignmentsError(null);
+    try {
+      // Use api helper with cache buster
+      const assignmentsResponse: any = await api.volunteers.getAssignments();
+      console.log('Past assignments data received:', assignmentsResponse);
+      const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
+      
+      // Show completed assignments (completed or canceled)
+      const completedAssignments = assignmentsData.filter((a: any) => 
+        a.assignmentStatus === 'Completed' || a.assignmentStatus === 'Canceled'
+      );
+      
+      console.log('Completed assignments filtered:', completedAssignments.length);
+      setPastAssignments(Array.isArray(completedAssignments) ? completedAssignments : []);
+    } catch (error) {
+      console.error('Error fetching past assignments:', error);
+      setPastAssignmentsError(error.message || 'Failed to load past assignments');
+    } finally {
+      setIsLoadingPastAssignments(false);
+    }
+  };
+
   useEffect(() => {
     fetchRoles();
     fetchAssignments();
+    fetchPastAssignments();
   }, []);
 
   const handleEditRole = (role: any) => {
@@ -187,13 +216,13 @@ const VolunteersPage = () => {
           </Card>
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Roles</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Past Volunteers</CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoadingRoles ? (
+              {isLoadingPastAssignments ? (
                 <Skeleton className="h-8 w-8" />
               ) : (
-                <div className="text-2xl font-bold text-foreground">{volunteerRoles.length}</div>
+                <div className="text-2xl font-bold text-foreground">{pastAssignments.length}</div>
               )}
             </CardContent>
           </Card>
@@ -204,6 +233,7 @@ const VolunteersPage = () => {
             <TabsTrigger value="roles">Volunteer Roles</TabsTrigger>
             <TabsTrigger value="scheduling">Scheduling</TabsTrigger>
             <TabsTrigger value="assignments">Assignments</TabsTrigger>
+            <TabsTrigger value="past">Past Volunteers</TabsTrigger>
           </TabsList>
 
           <TabsContent value="roles" className="space-y-4">
@@ -411,6 +441,113 @@ const VolunteersPage = () => {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="past" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="flex items-center gap-2">
+                    <UserCheck className="h-5 w-5" />
+                    Past Volunteers
+                  </CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={fetchPastAssignments}
+                    disabled={isLoadingPastAssignments}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingPastAssignments ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {isLoadingPastAssignments ? (
+                  <div className="space-y-4">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-2 flex-1">
+                          <Skeleton className="h-5 w-48" />
+                          <Skeleton className="h-4 w-32" />
+                        </div>
+                        <Skeleton className="h-6 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : pastAssignmentsError ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Past Assignments Error</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between">
+                      <span>{pastAssignmentsError}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchPastAssignments}
+                        disabled={isLoadingPastAssignments}
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Retry
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="border rounded-lg">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Event</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Volunteer</TableHead>
+                          <TableHead>Assigned Date</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pastAssignments.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                              <UserCheck className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                              <p>No past volunteer assignments found</p>
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          pastAssignments.map((assignment: any) => (
+                            <TableRow key={assignment.assignmentID}>
+                              <TableCell className="font-medium">
+                                {assignment.groupName || assignment.groupID || 'N/A'}
+                              </TableCell>
+                              <TableCell>
+                                {assignment.groupType || 'N/A'}
+                              </TableCell>
+                              <TableCell>{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {assignment.memberName || assignment.memberID || 'Unassigned'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {assignment.assignmentDate || 'N/A'}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={assignment.assignmentStatus === 'Completed' ? 'default' : 'secondary'}
+                                  className={assignment.assignmentStatus === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
+                                >
+                                  {assignment.assignmentStatus || 'N/A'}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
         {/* Modals */}
@@ -455,7 +592,11 @@ const VolunteersPage = () => {
             console.log("Assignment updated:", assignmentData);
             setIsManageAssignmentModalOpen(false);
             setSelectedAssignment(null);
-            await fetchAssignments();
+            // Refresh both active and past assignments to reflect changes
+            await Promise.all([
+              fetchAssignments(),
+              fetchPastAssignments()
+            ]);
             toast({
               title: "Assignment Updated",
               description: "Volunteer assignment has been successfully updated",
