@@ -189,16 +189,18 @@ app.use('/api/analytics', analyticsRoutes);
 // Serve Frontend (Production)
 // ============================================
 
-if (config.server.isProduction) {
-  const path = require('path');
-  const frontendPath = path.join(__dirname, '../../frontend/build');
-  
-  app.use(express.static(frontendPath));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  });
-}
+// Note: Frontend is deployed separately on Vercel
+// Static file serving disabled for serverless deployment
+// if (config.server.isProduction) {
+//   const path = require('path');
+//   const frontendPath = path.join(__dirname, '../../frontend/build');
+//   
+//   app.use(express.static(frontendPath));
+//   
+//   app.get('*', (req, res) => {
+//     res.sendFile(path.join(frontendPath, 'index.html'));
+//   });
+// }
 
 // Health check endpoint for Vercel/monitoring
 app.get('/api/health', (req, res) => {
