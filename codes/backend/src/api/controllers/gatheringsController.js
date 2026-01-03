@@ -52,20 +52,13 @@ class GatheringsController extends BaseController {
       throw new ApiError('Invalid gathering date', 400);
     }
 
-    // Validate that ParentID exists (either as Event or Group)
+    // Validate that ParentID exists in Groups
     if (data.parentID) {
-      // Try to find in Events first
-      const events = await sheetsService.getSheetObjects(sheetsService.SHEETS.EVENTS);
-      const event = events.find((e) => e.eventID === data.parentID);
+      const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+      const group = groups.find((g) => g.groupID === data.parentID);
       
-      if (!event) {
-        // If not found in events, try Groups
-        const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
-        const group = groups.find((g) => g.groupID === data.parentID);
-        
-        if (!group) {
-          throw new ApiError('Parent ID not found in Events or Groups', 404);
-        }
+      if (!group) {
+        throw new ApiError('Parent Group ID not found', 404);
       }
     }
 
