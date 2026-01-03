@@ -176,6 +176,11 @@ export const api = {
       const timestamp = Date.now();
       return apiRequest<{memberID: string; total: number; attendance: any[]}>(`/attendance/member/${memberID}?_t=${timestamp}`);
     },
+
+    getByGathering: (gatheringID: string) => {
+      const timestamp = Date.now();
+      return apiRequest<{gatheringID: string; total: number; attendance: any[]}>(`/attendance/gathering/${gatheringID}?_t=${timestamp}`);
+    },
   },
 
   // Group Members
