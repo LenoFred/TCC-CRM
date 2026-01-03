@@ -124,11 +124,10 @@ router.get(
       const sheetsService = require('../../services/sheetsService');
       
       // Fetch all required data
-      const [members, families, groups, events] = await Promise.all([
+      const [members, families, groups] = await Promise.all([
         sheetsService.getSheetObjects('Members'),
         sheetsService.getSheetObjects('Families'),
         sheetsService.getSheetObjects('Groups'),
-        sheetsService.getSheetObjects('Events'),
       ]);
       
       // Calculate stats
@@ -138,13 +137,6 @@ router.get(
       const totalFamilies = families.length;
       const totalGroups = groups.filter(g => g.isActive === 'true' || g.isActive === true).length;
       
-      // Get upcoming events (where date > today)
-      const today = new Date().toISOString().split('T')[0];
-      const upcomingEvents = events
-        .filter(e => e.eventDate && e.eventDate > today)
-        .sort((a, b) => a.eventDate.localeCompare(b.eventDate))
-        .slice(0, 5); // Return top 5 upcoming events
-      
       res.status(200).json({
         success: true,
         data: {
@@ -153,7 +145,6 @@ router.get(
           guestMembers,
           totalFamilies,
           totalGroups,
-          upcomingEvents,
         },
       });
     } catch (error) {

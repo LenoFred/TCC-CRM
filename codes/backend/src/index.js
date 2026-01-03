@@ -18,7 +18,6 @@ const membersRoutes = require('./api/routes/members');
 const familiesRoutes = require('./api/routes/families');
 const groupsRoutes = require('./api/routes/groups');
 const groupMembersRoutes = require('./api/routes/groupMembers');
-const eventsRoutes = require('./api/routes/events');
 const gatheringsRoutes = require('./api/routes/gatherings');
 const attendanceRoutes = require('./api/routes/attendance');
 const donationsRoutes = require('./api/routes/donations');
@@ -152,7 +151,6 @@ app.get('/api', (req, res) => {
       members: '/api/members',
       families: '/api/families',
       groups: '/api/groups',
-      events: '/api/events',
       attendance: '/api/attendance',
       donations: '/api/donations',
       volunteers: '/api/volunteers',
@@ -173,7 +171,6 @@ app.use('/api/members', membersRoutes);
 app.use('/api/families', familiesRoutes);
 app.use('/api/groups', groupsRoutes);
 app.use('/api/group-members', groupMembersRoutes);
-app.use('/api/events', eventsRoutes);
 app.use('/api/gatherings', gatheringsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/donations', donationsRoutes);

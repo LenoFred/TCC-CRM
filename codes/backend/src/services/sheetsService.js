@@ -30,7 +30,6 @@ class SheetsService {
       FAMILIES: 'Families',
       GROUPS: 'Groups',
       GROUP_MEMBERS: 'GroupMembers',
-      EVENTS: 'Events',
       GATHERINGS: 'Gatherings',
       ATTENDANCE: 'Attendance',
       DONATIONS: 'Donations',
