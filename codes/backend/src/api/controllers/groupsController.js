@@ -139,6 +139,11 @@ class GroupsController extends BaseController {
   async getGroupWithMembers(req, res) {
     const { id } = req.params;
 
+    // Validate ID
+    if (!id || id === 'undefined' || id === 'null') {
+      throw new ApiError(400, 'Invalid group ID provided');
+    }
+
     // Get group details
     const groupData = await sheetsService.getSheetObjects(this.sheetName);
     const group = groupData.find((g) => this.matchId(g, id));
