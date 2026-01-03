@@ -166,18 +166,33 @@ export const GroupProfileModal = ({
       const response = await api.gatherings.getByGroup(group.id.toString());
       const gatheringsData = response.data || [];
       
-      // Transform gatherings to match Activity interface
-      const transformedGatherings: Activity[] = gatheringsData.map((gathering: Gathering) => ({
-        id: gathering.gatheringID,
-        name: gathering.gatheringName,
-        description: '',
-        date: gathering.gatheringDate,
-        time: gathering.gatheringTime || '',
-        location: group.location || '',
-        type: gathering.gatheringType || group.type,
-        status: new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned',
-        attendanceCount: 0 // TODO: Get actual attendance count
-      }));
+      // Transform gatherings and fetch attendance counts
+      const transformedGatheringsPromises = gatheringsData.map(async (gathering: Gathering) => {
+        let attendanceCount = 0;
+        
+        // Fetch attendance count for this gathering
+        try {
+          const attendanceResponse = await api.attendance.getByGathering(gathering.gatheringID);
+          attendanceCount = attendanceResponse.total || attendanceResponse.attendance?.length || 0;
+        } catch (error) {
+          console.error(`Error fetching attendance for gathering ${gathering.gatheringID}:`, error);
+          // If error, keep attendanceCount as 0
+        }
+        
+        return {
+          id: gathering.gatheringID,
+          name: gathering.gatheringName,
+          description: '',
+          date: gathering.gatheringDate,
+          time: gathering.gatheringTime || '',
+          location: group.location || '',
+          type: gathering.gatheringType || group.type,
+          status: new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned',
+          attendanceCount
+        };
+      });
+      
+      const transformedGatherings: Activity[] = await Promise.all(transformedGatheringsPromises);
       
       setGatherings(transformedGatherings);
     } catch (error: any) {
@@ -527,12 +542,10 @@ export const GroupProfileModal = ({
                               {activity.location}
                             </div>
                           )}
-                          {activity.status === 'Completed' && (
-                            <div className="flex items-center gap-1">
-                              <Users className="w-4 h-4" />
-                              {activity.attendanceCount} attended
-                            </div>
-                          )}
+                          <div className="flex items-center gap-1">
+                            <Users className="w-4 h-4" />
+                            {activity.attendanceCount || 0} {activity.attendanceCount === 1 ? 'attendee' : 'attendees'}
+                          </div>
                         </div>
                       </div>
                       {activity.status === 'Completed' && (
