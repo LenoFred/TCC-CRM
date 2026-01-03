@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Users, Search, CalendarDays } from "lucide-react";
+import { X, Users, Search, CalendarDays, Loader2, AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { api } from "@/config/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface Group {
   id: string;
@@ -30,9 +33,11 @@ interface Activity {
 }
 
 interface Member {
-  id: number;
-  name: string;
+  memberID: string;
+  firstName: string;
+  lastName: string;
   checkInTime: string;
+  status?: string;
 }
 
 interface GroupGatheringAttendanceModalProps {
@@ -48,21 +53,57 @@ export const GroupGatheringAttendanceModal = ({
   group,
   activity 
 }: GroupGatheringAttendanceModalProps) => {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [attendees, setAttendees] = useState<Member[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && activity) {
-      // Mock data - replace with actual API call
-      setAttendees([
-        { id: 1, name: "John Smith", checkInTime: "09:45" },
-        { id: 2, name: "Sarah Johnson", checkInTime: "09:50" },
-        { id: 3, name: "Michael Brown", checkInTime: "09:55" },
-        { id: 4, name: "Emily Davis", checkInTime: "10:00" },
-        { id: 5, name: "David Wilson", checkInTime: "10:05" },
-      ]);
+      fetchAttendance();
     }
   }, [isOpen, activity]);
+
+  const fetchAttendance = async () => {
+    if (!activity) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      console.lo{
+      const fullName = `${attendee.firstName} ${attendee.lastName}`.toLowerCase();
+      return fullName.includes(searchTerm.toLowerCase());
+    }
+      const response = await api.attendance.getByGathering(activity.id);
+      console.log('Attendance response:', response);
+      
+      // The API returns { gatheringID, total, attendance: [...] }
+      const attendanceData = response.attendance || [];
+      
+      // Transform the data to match our interface
+      const transformedAttendees: Member[] = attendanceData.map((record: any) => ({
+        memberID: record.memberID,
+        firstName: record.member?.firstName || 'Unknown',
+        lastName: record.member?.lastName || 'Member',
+        checkInTime: record.checkInTime || '',
+        status: record.status || 'Present'
+      }));
+      
+      setAttendees(transformedAttendees);
+    } catch (error: any) {
+      console.error('Error fetching attendance:', error);
+      setError(error.message || 'Failed to load attendance');
+      toast({
+        title: "Error",
+        description: "Failed to load attendance data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!activity) return null;
 
@@ -133,47 +174,62 @@ export const GroupGatheringAttendanceModal = ({
             />
           </div>
 
-          {/* Attendees List */}
-          <div className="space-y-2">
-            {filteredAttendees.map((attendee) => (
-              <div
-                key={attendee.id}
-                className="flex items-center justify-between p-3 rounded-lg border bg-card"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-primary">
-                      {attendee.name.split(' ').map(n => n[0]).join('')}
-                    </span>
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-2 text-muted-foreground">Loading attendance...</span>
+            </div>
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : attendees.length === 0 ? (
+            <div className="text-center py-8">
+              <Users className="w-12 h-12 mx-auto mb-2 opacity-50 text-muted-foreground" />
+              <p className="text-muted-foreground">No attendance taken for this gathering yet</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Use the Digital Check-In feature to record attendance
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredAttendees.map((attendee) => (
+                <div
+                  key={attendee.memberID}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium text-primary">
+                        {attendee.firstName[0]}{attendee.lastName[0]}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-medium">{attendee.firstName} {attendee.lastName}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {attendee.status || 'Present'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium">{attendee.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Checked in at {attendee.checkInTime}
-                    </p>
-                  </div>
+                  <Badge variant="secondary">
+                    {attendee.checkInTime ? new Date(`2024-01-01T${attendee.checkInTime}`).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }) : 'N/A'}
+                  </Badge>
                 </div>
-              </div>
-            ))}
-
-            {/* Empty State */}
-            {filteredAttendees.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
-                {searchTerm ? (
-                  <>
-                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No attendees found</p>
-                    <p className="text-sm">Try adjusting your search terms</p>
-                  </>
-                ) : (
-                  <>
-                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>No attendance recorded</p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+              ))}
+              
+              {filteredAttendees.length === 0 && attendees.length > 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No attendees found matching "{searchTerm}"</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
