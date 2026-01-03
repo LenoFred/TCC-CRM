@@ -1,7 +1,9 @@
 // API Configuration for TCC CRM
-const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? 'https://api.tccchurch.com'
-  : 'http://localhost:3001/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (
+  process.env.NODE_ENV === 'production'
+    ? 'https://tcc-crm-backend.vercel.app/api'
+    : 'http://localhost:3001/api'
+);
 
 // CORS configuration headers
 const corsHeaders = {
