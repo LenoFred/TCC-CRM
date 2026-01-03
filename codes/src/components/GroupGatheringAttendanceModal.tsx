@@ -105,7 +105,10 @@ export const GroupGatheringAttendanceModal = ({
   if (!activity) return null;
 
   const filteredAttendees = attendees.filter(
-    attendee => attendee.name.toLowerCase().includes(searchTerm.toLowerCase())
+    attendee => {
+      const fullName = `${attendee.firstName} ${attendee.lastName}`.toLowerCase();
+      return fullName.includes(searchTerm.toLowerCase());
+    }
   );
 
   return (
