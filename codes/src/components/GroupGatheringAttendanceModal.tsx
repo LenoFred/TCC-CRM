@@ -72,10 +72,7 @@ export const GroupGatheringAttendanceModal = ({
     setError(null);
     
     try {
-      console.lo{
-      const fullName = `${attendee.firstName} ${attendee.lastName}`.toLowerCase();
-      return fullName.includes(searchTerm.toLowerCase());
-    }
+      console.log('Fetching attendance for gathering:', activity.id);
       const response = await api.attendance.getByGathering(activity.id);
       console.log('Attendance response:', response);
       
