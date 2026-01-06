@@ -56,6 +56,9 @@ tcc-crm-backend-*.json
 coverage
 .nyc_output
 
+# Backend Scripts (test, confirmation, ingestion scripts - not for production)
+backend/scripts
+
 # Cache
 .cache
 .parcel-cache
