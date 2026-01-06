@@ -26,6 +26,8 @@ const volunteerAssignmentsRoutes = require('./api/routes/volunteerAssignments');
 const supportRequestsRoutes = require('./api/routes/supportRequests');
 const staffRoutes = require('./api/routes/staff');
 const communicationsRoutes = require('./api/routes/communications');
+const templatesRoutes = require('./api/routes/templates'); // NEW: Template-based messaging
+const formsRoutes = require('./api/routes/forms'); // NEW: Form ingestion endpoints
 const businessLogicRoutes = require('./api/routes/businessLogic');
 const analyticsRoutes = require('./api/routes/analytics');
 
@@ -156,6 +158,8 @@ app.get('/api', (req, res) => {
       volunteers: '/api/volunteers',
       staff: '/api/staff',
       communications: '/api/communications',
+      templates: '/api/templates',
+      forms: '/api/forms',
       business: '/api/business',
       analytics: '/api/analytics',
     },
@@ -179,6 +183,8 @@ app.use('/api/volunteer-assignments', volunteerAssignmentsRoutes);
 app.use('/api/support-requests', supportRequestsRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/communications', communicationsRoutes);
+app.use('/api/templates', templatesRoutes); // NEW: Template management API
+app.use('/api/forms', formsRoutes); // NEW: Form ingestion API
 app.use('/api/business', businessLogicRoutes);
 app.use('/api/analytics', analyticsRoutes);
 
@@ -240,7 +246,7 @@ app.use(errorHandler);
 
 const PORT = config.server.port;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info(`🚀 TCC-CRM Backend started successfully`);
   logger.info(`📡 Server running on port ${PORT}`);
   logger.info(`🌍 Environment: ${config.server.env}`);
@@ -250,11 +256,30 @@ const server = app.listen(PORT, () => {
     logger.info(`🔗 API Documentation: http://localhost:${PORT}/api`);
     logger.info(`💚 Health Check: http://localhost:${PORT}/api/health`);
   }
+
+  // Initialize Form Ingestion Service
+  try {
+    const formIngestionService = require('./services/formIngestionService');
+    await formIngestionService.initialize();
+    formIngestionService.startPolling();
+    logger.info('✅ Form Ingestion Service initialized and polling started');
+  } catch (error) {
+    logger.error('❌ Failed to initialize Form Ingestion Service:', error.message);
+  }
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  
+  // Stop form ingestion polling
+  try {
+    const formIngestionService = require('./services/formIngestionService');
+    formIngestionService.stopPolling();
+  } catch (error) {
+    logger.error('Error stopping form ingestion:', error.message);
+  }
+  
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);
@@ -263,6 +288,15 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  
+  // Stop form ingestion polling
+  try {
+    const formIngestionService = require('./services/formIngestionService');
+    formIngestionService.stopPolling();
+  } catch (error) {
+    logger.error('Error stopping form ingestion:', error.message);
+  }
+  
   server.close(() => {
     logger.info('HTTP server closed');
     process.exit(0);
