@@ -158,6 +158,10 @@ export const AddEditMemberModal = ({
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
+    
+    // Semantic validation patterns - MUST match backend patterns from formIngestionService.js
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phonePattern = /^[\d\s\+\-\(\)]{7,20}$/;
 
     if (!formData.firstName.trim()) {
       newErrors.firstName = "First name is required";
@@ -169,12 +173,14 @@ export const AddEditMemberModal = ({
 
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
+    } else if (!emailPattern.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address (e.g., user@example.com)";
     }
 
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
+    } else if (!phonePattern.test(formData.phone)) {
+      newErrors.phone = "Invalid phone format (7-20 digits, spaces/+/-/() allowed)";
     }
 
     if (!formData.joinDate) {
@@ -187,6 +193,8 @@ export const AddEditMemberModal = ({
 
     if (!formData.gender) {
       newErrors.gender = "Gender is required";
+    } else if (!['Male', 'Female', 'male', 'female'].includes(formData.gender)) {
+      newErrors.gender = "Gender must be Male or Female";
     }
 
     if (!formData.address?.trim()) {

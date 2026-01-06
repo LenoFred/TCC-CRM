@@ -250,9 +250,20 @@ const MembersPage = () => {
       setEditingMember(null);
     } catch (error: any) {
       console.error('Error saving member:', error);
+      
+      // Extract semantic validation errors from backend
+      let errorMessage = "Failed to save member";
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = error.response.data.errors.join(', ');
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: error.message || "Failed to save member",
+        description: errorMessage,
         variant: "destructive",
       });
     }
