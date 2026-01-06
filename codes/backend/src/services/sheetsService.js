@@ -43,6 +43,7 @@ class SheetsService {
       COMMUNICATIONS: 'Communications',
       SCHEDULED_MESSAGES: 'ScheduledMessages',
       MESSAGE_DRAFTS: 'MessageDrafts',
+      COMMUNICATION_TEMPLATES: 'Communication_Templates', // NEW: Template-based messaging
       SETTINGS: 'Settings',
     };
 
