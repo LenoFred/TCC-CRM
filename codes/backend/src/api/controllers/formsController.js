@@ -3,7 +3,7 @@
  * Handles manual triggering of form ingestion
  */
 
-const formIngestionService = require('../services/formIngestionService');
+const formIngestionService = require('../../services/formIngestionService');
 
 /**
  * @route   POST /api/forms/ingest/all
