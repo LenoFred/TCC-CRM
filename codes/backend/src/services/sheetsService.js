@@ -34,6 +34,7 @@ class SheetsService {
       ATTENDANCE: 'Attendance',
       DONATIONS: 'Donations',
       GUEST: 'Guest',
+      VOLUNTEER: 'Volunteer',
       VOLUNTEER_ROLES: 'VolunteerRoles',
       VOLUNTEER_ASSIGNMENTS: 'VolunteerAssignments',
       SUPPORT_REQUESTS: 'SupportRequests',

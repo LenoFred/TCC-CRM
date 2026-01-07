@@ -14,20 +14,20 @@ class StaffController extends BaseController {
   }
 
   getSearchFields() {
-    return ['email', 'role', 'department', 'status'];
+    return ['fullName', 'email', 'staffRole', 'jobTitle', 'status'];
   }
 
   getDefaultHeaders() {
     return [
       'StaffID',
-      'MemberID',
+      'JobTitle',
+      'AppointmentDate',
+      'FullName',
       'Email',
-      'PasswordHash',
-      'Role',
-      'Department',
+      'StaffRole',
       'Status',
+      'PhoneNumber',
       'LastLogin',
-      'CreatedAt',
       'UpdatedAt',
     ];
   }
@@ -37,15 +37,6 @@ class StaffController extends BaseController {
   }
 
   async prepareCreateData(data, user) {
-    // Validate member exists
-    const members = await sheetsService.getSheetObjects(
-      sheetsService.SHEETS.MEMBERS
-    );
-    const member = members.find((m) => m.memberID === data.memberID);
-    if (!member) {
-      throw new ApiError(404, 'Member not found');
-    }
-
     // Check if email already exists
     const staff = await sheetsService.getSheetObjects(this.sheetName);
     const existingStaff = staff.find(
@@ -57,31 +48,32 @@ class StaffController extends BaseController {
 
     return {
       staffID: generateId('STF'),
-      memberID: data.memberID,
-      email: data.email,
-      passwordHash: data.passwordHash || '', // Should be hashed by auth service
-      role: data.role || 'Staff',
-      department: data.department || 'General',
+      jobTitle: data.jobTitle || data.role || 'Staff',
+      appointmentDate: data.appointmentDate || new Date().toISOString().split('T')[0],
+      fullName: data.name || data.fullName || '',
+      email: data.email || '',
+      staffRole: data.staffRole || data.role || 'Staff',
       status: data.status || 'Active',
-      lastLogin: '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      phoneNumber: data.phone || data.phoneNumber || '',
+      lastLogin: '', // Will be populated when staff logs in
+      updatedAt: new Date().toISOString(), // Track creation time with full timestamp
     };
   }
 
   applyFilters(data, filters) {
     let filteredData = data;
 
-    if (filters.role) {
+    if (filters.staffRole || filters.role) {
+      const role = filters.staffRole || filters.role;
       filteredData = filteredData.filter(
-        (item) => item.role?.toLowerCase() === filters.role.toLowerCase()
+        (item) => item.staffRole?.toLowerCase() === role.toLowerCase()
       );
     }
 
-    if (filters.department) {
+    if (filters.jobTitle) {
       filteredData = filteredData.filter(
         (item) =>
-          item.department?.toLowerCase() === filters.department.toLowerCase()
+          item.jobTitle?.toLowerCase().includes(filters.jobTitle.toLowerCase())
       );
     }
 
@@ -99,27 +91,46 @@ class StaffController extends BaseController {
    */
   async getAll(req, res) {
     await super.getAll(req, res);
-    
-    // Remove password hashes from response
-    if (res.locals.responseData) {
-      res.locals.responseData.data = res.locals.responseData.data.map((staff) => {
-        const { passwordHash, ...staffWithoutPassword } = staff;
-        return staffWithoutPassword;
-      });
-    }
   }
 
   /**
-   * Override getById to exclude password hash
+   * Override getById - no special handling needed
    */
   async getById(req, res) {
     await super.getById(req, res);
-    
-    // Remove password hash from response
-    if (res.locals.responseData) {
-      const { passwordHash, ...staffWithoutPassword } = res.locals.responseData;
-      res.json(staffWithoutPassword);
-    }
+  }
+
+  /**
+   * Override update to automatically set UpdatedAt timestamp
+   */
+  async update(req, res) {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    console.log('📝 Update request received:', {
+      id,
+      updateData,
+      role: updateData.role,
+      staffRole: updateData.staffRole
+    });
+
+    // Transform field names from frontend to backend format
+    if (updateData.name) updateData.fullName = updateData.name;
+    if (updateData.role) updateData.staffRole = updateData.role;
+    if (updateData.phone) updateData.phoneNumber = updateData.phone;
+
+    console.log('📝 After transformation:', {
+      fullName: updateData.fullName,
+      staffRole: updateData.staffRole,
+      phoneNumber: updateData.phoneNumber
+    });
+
+    // Automatically set UpdatedAt to current timestamp
+    updateData.updatedAt = new Date().toISOString();
+
+    // Call parent update method
+    req.body = updateData;
+    await super.update(req, res);
   }
 
   /**

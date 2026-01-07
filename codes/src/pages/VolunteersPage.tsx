@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -45,6 +54,15 @@ const VolunteersPage = () => {
   const [assignmentsError, setAssignmentsError] = useState(null);
   const [pastAssignmentsError, setPastAssignmentsError] = useState(null);
 
+  // Past Volunteers Filters
+  const [pastVolunteerFilters, setPastVolunteerFilters] = useState({
+    startDate: '',
+    endDate: '',
+    roleID: 'all',
+    status: 'all',
+    search: '',
+  });
+
   const fetchRoles = async () => {
     setIsLoadingRoles(true);
     setRolesError(null);
@@ -65,17 +83,41 @@ const VolunteersPage = () => {
     setIsLoadingAssignments(true);
     setAssignmentsError(null);
     try {
-      // Use api helper with cache buster
-      const assignmentsResponse: any = await api.volunteers.getAssignments();
-      console.log('Assignments data received:', assignmentsResponse);
-      const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
+      // Fetch both regular assignments and volunteer sheet data in parallel
+      const [assignmentsResponse, volunteersResponse]: [any, any] = await Promise.all([
+        api.volunteers.getAssignments(),
+        api.volunteers.getAll()
+      ]);
       
-      // Show all scheduled assignments
+      console.log('Assignments data received:', assignmentsResponse);
+      console.log('Volunteers (form submissions) data received:', volunteersResponse);
+      
+      const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
+      const volunteersData = volunteersResponse?.data || volunteersResponse || [];
+      
+      // Show all scheduled assignments from regular assignments
       const scheduledAssignments = assignmentsData.filter((a: any) => 
         a.assignmentStatus === 'Scheduled'
       );
+
+      // Transform volunteer sheet data to look like assignments with type="Self"
+      const selfAssignments = volunteersData.map((volunteer: any) => ({
+        assignmentID: volunteer.volunteerID,
+        type: 'Self',
+        event: volunteer.departmentOfInterest || 'N/A',
+        roleName: volunteer.departmentOfInterest || 'N/A',
+        volunteerName: volunteer.fullName || 'N/A',
+        assignmentStatus: 'Scheduled',
+        assignedDate: volunteer.date || new Date().toISOString().split('T')[0],
+        // Store full volunteer data for the modal
+        volunteerData: volunteer,
+      }));
+
+      // Merge both arrays: regular assignments + self-assignments
+      const allAssignments = [...scheduledAssignments, ...selfAssignments];
       
-      setUpcomingAssignments(Array.isArray(scheduledAssignments) ? scheduledAssignments : []);
+      console.log('Merged assignments (regular + self):', allAssignments.length);
+      setUpcomingAssignments(Array.isArray(allAssignments) ? allAssignments : []);
     } catch (error) {
       console.error('Error fetching assignments:', error);
       setAssignmentsError(error.message || 'Failed to load assignments');
@@ -94,9 +136,47 @@ const VolunteersPage = () => {
       const assignmentsData = assignmentsResponse?.data || assignmentsResponse || [];
       
       // Show completed assignments (completed or canceled)
-      const completedAssignments = assignmentsData.filter((a: any) => 
+      let completedAssignments = assignmentsData.filter((a: any) => 
         a.assignmentStatus === 'Completed' || a.assignmentStatus === 'Canceled'
       );
+
+      // Apply filters
+      // Date range filter
+      if (pastVolunteerFilters.startDate) {
+        completedAssignments = completedAssignments.filter((a: any) => {
+          const assignedDate = a.assignedDate || '';
+          return assignedDate >= pastVolunteerFilters.startDate;
+        });
+      }
+      if (pastVolunteerFilters.endDate) {
+        completedAssignments = completedAssignments.filter((a: any) => {
+          const assignedDate = a.assignedDate || '';
+          return assignedDate <= pastVolunteerFilters.endDate;
+        });
+      }
+
+      // Role filter
+      if (pastVolunteerFilters.roleID && pastVolunteerFilters.roleID !== 'all') {
+        completedAssignments = completedAssignments.filter((a: any) => 
+          a.roleID === pastVolunteerFilters.roleID
+        );
+      }
+
+      // Status filter
+      if (pastVolunteerFilters.status && pastVolunteerFilters.status !== 'all') {
+        completedAssignments = completedAssignments.filter((a: any) => 
+          a.assignmentStatus === pastVolunteerFilters.status
+        );
+      }
+
+      // Search filter (by volunteer name)
+      if (pastVolunteerFilters.search) {
+        const searchLower = pastVolunteerFilters.search.toLowerCase();
+        completedAssignments = completedAssignments.filter((a: any) => {
+          const volunteerName = a.volunteerName || '';
+          return volunteerName.toLowerCase().includes(searchLower);
+        });
+      }
       
       console.log('Completed assignments filtered:', completedAssignments.length);
       setPastAssignments(Array.isArray(completedAssignments) ? completedAssignments : []);
@@ -113,6 +193,11 @@ const VolunteersPage = () => {
     fetchAssignments();
     fetchPastAssignments();
   }, []);
+
+  // Refetch past assignments when filters change
+  useEffect(() => {
+    fetchPastAssignments();
+  }, [pastVolunteerFilters]);
 
   const handleEditRole = (role: any) => {
     setSelectedRole(role);
@@ -354,17 +439,18 @@ const VolunteersPage = () => {
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Event</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Assigned</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <div className="w-full">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[20%] min-w-[120px]">Event</TableHead>
+                          <TableHead className="w-[15%] min-w-[100px]">Type</TableHead>
+                          <TableHead className="w-[20%] min-w-[120px]">Role</TableHead>
+                          <TableHead className="w-[20%] min-w-[120px]">Assigned</TableHead>
+                          <TableHead className="w-[15%] min-w-[100px]">Status</TableHead>
+                          <TableHead className="w-[10%] text-right">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
                     <TableBody>
                       {isLoadingAssignments ? (
                         Array.from({ length: 5 }).map((_, index) => (
@@ -407,19 +493,25 @@ const VolunteersPage = () => {
                       ) : (
                         upcomingAssignments.map((assignment: any) => (
                           <TableRow key={assignment.assignmentID}>
-                            <TableCell className="font-medium">
-                              {assignment.groupName || assignment.groupID || 'N/A'}
+                            <TableCell className="font-medium truncate max-w-[200px]">
+                              {assignment.type === 'Self' 
+                                ? assignment.event 
+                                : (assignment.groupName || assignment.groupID || 'N/A')}
                             </TableCell>
-                            <TableCell>
-                              {assignment.groupType || 'N/A'}
+                            <TableCell className="truncate">
+                              {assignment.type === 'Self' 
+                                ? <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">Self</Badge>
+                                : (assignment.groupType || 'Staff-Assigned')}
                             </TableCell>
-                            <TableCell>{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
-                            <TableCell>
+                            <TableCell className="truncate max-w-[150px]">{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
+                            <TableCell className="truncate max-w-[150px]">
                               <Badge variant="outline" className="text-xs">
-                                {assignment.memberName || assignment.memberID || 'Unassigned'}
+                                {assignment.type === 'Self' 
+                                  ? assignment.volunteerName 
+                                  : (assignment.memberName || assignment.memberID || 'Unassigned')}
                               </Badge>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="truncate">
                               <Badge
                                 variant={assignment.status === 'Completed' ? 'default' : 'secondary'}
                                 className={assignment.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : ''}
@@ -437,6 +529,7 @@ const VolunteersPage = () => {
                       )}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -462,6 +555,97 @@ const VolunteersPage = () => {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Filters Section */}
+                <div className="mb-6 p-4 bg-muted/50 rounded-lg space-y-4">
+                  <h4 className="text-sm font-medium mb-3">Filter Past Volunteers</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {/* Date Range */}
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate" className="text-xs">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={pastVolunteerFilters.startDate}
+                        onChange={(e) => setPastVolunteerFilters({ ...pastVolunteerFilters, startDate: e.target.value })}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="endDate" className="text-xs">End Date</Label>
+                      <Input
+                        id="endDate"
+                        type="date"
+                        value={pastVolunteerFilters.endDate}
+                        onChange={(e) => setPastVolunteerFilters({ ...pastVolunteerFilters, endDate: e.target.value })}
+                        className="h-9"
+                      />
+                    </div>
+
+                    {/* Role Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="roleFilter" className="text-xs">Role</Label>
+                      <Select
+                        value={pastVolunteerFilters.roleID}
+                        onValueChange={(value) => setPastVolunteerFilters({ ...pastVolunteerFilters, roleID: value })}
+                      >
+                        <SelectTrigger id="roleFilter" className="h-9">
+                          <SelectValue placeholder="All Roles" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Roles</SelectItem>
+                          {volunteerRoles.map((role: any) => (
+                            <SelectItem key={role.roleID || role.id} value={role.roleID || role.id}>
+                              {role.roleName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="space-y-2">
+                      <Label htmlFor="statusFilter" className="text-xs">Status</Label>
+                      <Select
+                        value={pastVolunteerFilters.status}
+                        onValueChange={(value) => setPastVolunteerFilters({ ...pastVolunteerFilters, status: value })}
+                      >
+                        <SelectTrigger id="statusFilter" className="h-9">
+                          <SelectValue placeholder="All Statuses" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          <SelectItem value="Completed">Completed</SelectItem>
+                          <SelectItem value="Canceled">Canceled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Search */}
+                    <div className="space-y-2">
+                      <Label htmlFor="searchVolunteer" className="text-xs">Search Volunteer</Label>
+                      <Input
+                        id="searchVolunteer"
+                        type="text"
+                        placeholder="Name..."
+                        value={pastVolunteerFilters.search}
+                        onChange={(e) => setPastVolunteerFilters({ ...pastVolunteerFilters, search: e.target.value })}
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Clear Filters Button */}
+                  <div className="flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPastVolunteerFilters({ startDate: '', endDate: '', roleID: 'all', status: 'all', search: '' })}
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                </div>
+
                 {isLoadingPastAssignments ? (
                   <div className="space-y-4">
                     {Array.from({ length: 5 }).map((_, index) => (
@@ -493,17 +677,18 @@ const VolunteersPage = () => {
                   </Alert>
                 ) : (
                   <div className="border rounded-lg">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Event</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Volunteer</TableHead>
-                          <TableHead>Assigned Date</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
+                    <div className="w-full">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[20%] min-w-[120px]">Event</TableHead>
+                            <TableHead className="w-[15%] min-w-[100px]">Type</TableHead>
+                            <TableHead className="w-[20%] min-w-[120px]">Role</TableHead>
+                            <TableHead className="w-[20%] min-w-[120px]">Volunteer</TableHead>
+                            <TableHead className="w-[15%] min-w-[100px]">Assigned Date</TableHead>
+                            <TableHead className="w-[10%] min-w-[100px]">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
                       <TableBody>
                         {pastAssignments.length === 0 ? (
                           <TableRow>
@@ -515,22 +700,22 @@ const VolunteersPage = () => {
                         ) : (
                           pastAssignments.map((assignment: any) => (
                             <TableRow key={assignment.assignmentID}>
-                              <TableCell className="font-medium">
+                              <TableCell className="font-medium truncate max-w-[200px]">
                                 {assignment.groupName || assignment.groupID || 'N/A'}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="truncate">
                                 {assignment.groupType || 'N/A'}
                               </TableCell>
-                              <TableCell>{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
-                              <TableCell>
+                              <TableCell className="truncate max-w-[150px]">{assignment.roleName || assignment.roleID || 'N/A'}</TableCell>
+                              <TableCell className="truncate max-w-[150px]">
                                 <Badge variant="outline" className="text-xs">
                                   {assignment.memberName || assignment.memberID || 'Unassigned'}
                                 </Badge>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="truncate">
                                 {assignment.assignmentDate || 'N/A'}
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="truncate">
                                 <Badge
                                   variant={assignment.assignmentStatus === 'Completed' ? 'default' : 'secondary'}
                                   className={assignment.assignmentStatus === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}
@@ -543,6 +728,7 @@ const VolunteersPage = () => {
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                   </div>
                 )}
               </CardContent>

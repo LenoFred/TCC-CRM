@@ -47,16 +47,29 @@ class CommunicationsController extends BaseController {
    * SIMPLE & CLEAN: Extract contacts based on channel, send one by one
    */
   async create(req, res) {
-    const { message, channel, memberIds, familyIds, groupIds, manualPhoneNumbers, manualEmails, subject, emailProvider } = req.body;
+    const { message, channel, memberIds, familyIds, groupIds, staffIds, manualPhoneNumbers, manualEmails, subject, emailProvider } = req.body;
 
     logger.info('=== COMMUNICATIONS CREATE START ===', {
       channel,
       memberIds,
       familyIds,
       groupIds,
+      staffIds,
       manualPhones: manualPhoneNumbers,
-      manualEmails
+      manualEmails,
+      fullBody: req.body
     });
+
+    // Validate required fields
+    if (!message || message.trim() === '') {
+      logger.error('Validation failed: message is required');
+      throw new ApiError(400, 'Message content is required');
+    }
+
+    if (!channel || channel.trim() === '') {
+      logger.error('Validation failed: channel is required');
+      throw new ApiError(400, 'Communication channel is required');
+    }
 
     const communicationService = require('../../services/communicationService');
     const normalizedChannel = channel?.toLowerCase();
@@ -121,6 +134,42 @@ class CommunicationsController extends BaseController {
                 selectedMembers.push(member);
               }
             });
+          }
+        });
+      }
+
+      // D. Add staff members
+      if (staffIds && staffIds.length > 0) {
+        const staffMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.STAFF);
+        logger.info('=== STAFF FROM SHEETS ===', {
+          totalStaff: staffMembers.length,
+          sampleStaff: staffMembers[0] ? {
+            staffID: staffMembers[0].staffID,
+            fullName: staffMembers[0].fullName,
+            phone: staffMembers[0].phoneNumber,
+            email: staffMembers[0].email
+          } : null
+        });
+
+        staffIds.forEach(staffId => {
+          const staffMember = staffMembers.find(s => String(s.staffID) === String(staffId));
+          if (staffMember) {
+            // Create a member-like object for staff
+            selectedMembers.push({
+              memberID: staffMember.staffID,
+              firstName: staffMember.fullName ? staffMember.fullName.split(' ')[0] : '',
+              lastName: staffMember.fullName ? staffMember.fullName.split(' ').slice(1).join(' ') : '',
+              phoneNumber: staffMember.phoneNumber,
+              email: staffMember.email
+            });
+            logger.info('Found staff member by ID', { 
+              staffID: staffMember.staffID, 
+              fullName: staffMember.fullName,
+              phone: staffMember.phoneNumber, 
+              email: staffMember.email 
+            });
+          } else {
+            logger.warn('Staff member not found', { staffId });
           }
         });
       }
