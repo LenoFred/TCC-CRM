@@ -50,12 +50,6 @@ const navigationItems = [
     description: "Departments & ministries"
   },
   {
-    title: "Donations",
-    url: "/donations", 
-    icon: Heart,
-    description: "Donation tracking"
-  },
-  {
     title: "Attendance",
     url: "/attendance",
     icon: Calendar,
@@ -83,16 +77,22 @@ const navigationItems = [
 
 const adminItems = [
   {
-    title: "Branches",
-    url: "/branches",
-    icon: Building2,
-    description: "Church locations"
-  },
-  {
     title: "Staff Management",
     url: "/staff",
     icon: Shield,
     description: "User permissions"
+  },
+  {
+    title: "Donations",
+    url: "/donations",
+    icon: Heart,
+    description: "Donation tracking"
+  },
+  {
+    title: "Branches",
+    url: "/branches",
+    icon: Building2,
+    description: "Church locations"
   },
   {
     title: "Settings",
@@ -126,12 +126,12 @@ export function AppSidebar() {
 
   const getNavClassName = (path: string) => {
     return isActive(path)
-      ? "bg-sidebar-accent text-sidebar-primary font-medium border-r-2 border-sidebar-primary"
-      : "hover:bg-sidebar-accent/50 text-sidebar-foreground";
+      ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold border-l-4 border-primary"
+      : "hover:bg-sidebar-accent/50 text-sidebar-foreground hover:text-sidebar-accent-foreground transition-colors";
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border bg-sidebar">
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
       <SidebarContent className="bg-sidebar">
         {/* Church Logo/Brand */}
         <div className="p-6 border-b border-sidebar-border">
@@ -157,18 +157,20 @@ export function AppSidebar() {
             <SidebarMenu>
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-12">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.url)}
+                    tooltip={collapsed ? item.title : undefined}
+                  >
                     <NavLink 
                       to={item.url} 
-                      className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${getNavClassName(item.url)}`}
+                      className={`flex items-center gap-3 ${getNavClassName(item.url)}`}
                     >
-                      <item.icon className="w-5 h-5" />
-                      {!collapsed && (
-                        <div className="flex-1">
-                          <div className="font-medium">{item.title}</div>
-                          <div className="text-xs opacity-70">{item.description}</div>
-                        </div>
-                      )}
+                      <item.icon className="w-5 h-5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{item.title}</div>
+                        <div className="text-xs opacity-70 truncate">{item.description}</div>
+                      </div>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -186,18 +188,20 @@ export function AppSidebar() {
             <SidebarMenu>
               {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-12">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={isActive(item.url)}
+                    tooltip={collapsed ? item.title : undefined}
+                  >
                     <NavLink 
                       to={item.url} 
-                      className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${getNavClassName(item.url)}`}
+                      className={`flex items-center gap-3 ${getNavClassName(item.url)}`}
                     >
-                      <item.icon className="w-5 h-5" />
-                      {!collapsed && (
-                        <div className="flex-1">
-                          <div className="font-medium">{item.title}</div>
-                          <div className="text-xs opacity-70">{item.description}</div>
-                        </div>
-                      )}
+                      <item.icon className="w-5 h-5 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{item.title}</div>
+                        <div className="text-xs opacity-70 truncate">{item.description}</div>
+                      </div>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
