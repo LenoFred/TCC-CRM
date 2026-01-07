@@ -140,12 +140,27 @@ class CommunicationService {
       if (this.bulksmsEnabled) {
         try {
           // BulkSMS Nigeria API
-          const response = await axios.post('https://www.bulksmsnigeria.com/api/v1/sms/create', {
+          const requestData = {
             api_token: this.bulksmsApiToken,
             from: this.bulksmsSenderName,
             to: formattedPhone,
             body: message,
             dnd: this.bulksmsDndEnabled ? '2' : '1', // 2 = bypass DND, 1 = respect DND
+          };
+
+          logger.info('BulkSMS Request', { 
+            from: this.bulksmsSenderName, 
+            to: formattedPhone, 
+            dnd: this.bulksmsDndEnabled ? '2' : '1',
+            bodyLength: message.length 
+          });
+
+          const response = await axios.post('https://www.bulksmsnigeria.com/api/v1/sms/create', requestData);
+
+          logger.info('BulkSMS Full Response', { 
+            status: response.data.status,
+            data: response.data.data,
+            message: response.data.message 
           });
 
           if (response.data && response.data.status === 'success') {
@@ -299,7 +314,8 @@ class CommunicationService {
    */
   async sendEmail(to, subject, htmlContent, options = {}) {
     try {
-      const provider = options.emailProvider || 'sendgrid'; // Default to SendGrid
+      // Default to Gmail SMTP if enabled, fallback to SendGrid
+      let provider = options.emailProvider || (this.gmailEnabled ? 'gmail' : 'sendgrid');
       logger.info(`Sending Email via ${provider}`, { to, subject });
 
       // Record in database

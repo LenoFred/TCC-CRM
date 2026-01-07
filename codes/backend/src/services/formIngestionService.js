@@ -360,13 +360,27 @@ class FormIngestionService {
            * [10] FamilyID, [11] Status, [12] JoinDate, [13] MemberType,
            * [14] EmergencyContact, [15] FamilyRole
            */
+          
+          // Format DOB as YYYY-MM-DD to ensure it's stored as date type
+          let dobFormatted = formData.DOB;
+          if (dobFormatted) {
+            try {
+              const dobDate = new Date(dobFormatted);
+              if (!isNaN(dobDate.getTime())) {
+                dobFormatted = dobDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+              }
+            } catch (e) {
+              console.warn(`  ⚠️  Invalid DOB format: ${formData.DOB}`);
+            }
+          }
+          
           const memberData = [
             this.generateId('MEM', 'member'),           // [0] MemberID - AUTO
             formData.FirstName,                         // [1] FirstName - FORM
             formData.LastName,                          // [2] LastName - FORM
             formData.PhoneNumber,                       // [3] PhoneNumber - FORM
             formData.Email,                             // [4] Email - FORM
-            formData.DOB,                               // [5] DOB - FORM
+            dobFormatted,                               // [5] DOB - FORM (formatted as YYYY-MM-DD)
             formData.Gender,                            // [6] Gender - FORM
             formData.State,                             // [7] State - FORM
             formData.LGA,                               // [8] LGA - FORM
@@ -382,7 +396,7 @@ class FormIngestionService {
           await this.sheets.spreadsheets.values.append({
             spreadsheetId: this.MAIN_SHEET_ID,
             range: 'Members!A:P',
-            valueInputOption: 'RAW',
+            valueInputOption: 'USER_ENTERED', // Changed from 'RAW' to preserve date formatting
             resource: { values: [memberData] }
           });
 
@@ -477,20 +491,21 @@ class FormIngestionService {
           }
 
           /**
-           * Guest Sheet Structure (4 columns):
-           * [0] GuestID, [1] Name, [2] Phone, [3] Email
+           * Guest Sheet Structure (5 columns):
+           * [0] GuestID, [1] Name, [2] Phone, [3] Email, [4] Date
            */
           const guestData = [
-            this.generateId('GST', 'guest'),   // [0] GuestID - AUTO
-            formData.Name,                     // [1] Name - FORM
-            formData.Phone,                    // [2] Phone - FORM
-            formData.Email                     // [3] Email - FORM
+            this.generateId('GST', 'guest'),            // [0] GuestID - AUTO
+            formData.Name,                              // [1] Name - FORM
+            formData.Phone,                             // [2] Phone - FORM
+            formData.Email,                             // [3] Email - FORM
+            new Date().toISOString().split('T')[0]      // [4] Date - AUTO (YYYY-MM-DD format)
           ];
 
           await this.sheets.spreadsheets.values.append({
             spreadsheetId: this.MAIN_SHEET_ID,
-            range: 'Guest!A:D',
-            valueInputOption: 'RAW',
+            range: 'Guest!A:E',
+            valueInputOption: 'USER_ENTERED', // Changed from 'RAW' to preserve date formatting
             resource: { values: [guestData] }
           });
 

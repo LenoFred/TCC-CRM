@@ -35,7 +35,8 @@ export const removeAuthToken = (): void => {
 // Enhanced fetch wrapper with CORS support and authentication
 export const apiRequest = async <T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retries = 2
 ): Promise<T> => {
   const token = getAuthToken();
   
@@ -66,6 +67,15 @@ export const apiRequest = async <T>(
     //   window.location.href = '/login';
     //   throw new Error('Unauthorized');
     // }
+    
+    // Handle 429 Rate Limit - Retry with exponential backoff
+    if (response.status === 429 && retries > 0) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
+      const delay = retryAfter * 1000 || (3 - retries) * 1000; // Exponential backoff
+      console.log(`Rate limited (429). Retrying after ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return apiRequest<T>(endpoint, options, retries - 1);
+    }
     
     // Handle other HTTP errors
     if (!response.ok) {
@@ -131,6 +141,9 @@ export const api = {
     
     delete: (id: string) =>
       apiRequest<void>(`/members/${id}`, { method: 'DELETE' }),
+    
+    getStats: () =>
+      apiRequest<{success: boolean; data: any}>('/members/stats'),
   },
 
   // Donations

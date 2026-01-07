@@ -242,4 +242,151 @@ router.delete(
   asyncHandler(communicationsController.delete.bind(communicationsController))
 );
 
+// ==========================================
+// TEST ENDPOINTS (Phase 3 - Local Testing)
+// ==========================================
+
+/**
+ * @route   GET /api/communications/test/status
+ * @desc    Get communication service status (which services are enabled)
+ * @access  Public (for local testing)
+ */
+router.get('/test/status', asyncHandler(async (req, res) => {
+  const communicationService = require('../../services/communicationService');
+  
+  const status = {
+    whatsapp: {
+      enabled: communicationService.whatsappEnabled,
+      phoneNumberId: communicationService.whatsappPhoneNumberId ? 'configured' : 'missing',
+      accessToken: communicationService.whatsappAccessToken ? 'configured' : 'missing'
+    },
+    email: {
+      gmail: {
+        enabled: communicationService.gmailEnabled,
+        user: communicationService.gmailUser || 'not configured'
+      },
+      sendgrid: {
+        enabled: communicationService.sendgridEnabled,
+        fromEmail: communicationService.sendgridFromEmail || 'not configured'
+      }
+    },
+    sms: {
+      enabled: communicationService.bulksmsEnabled,
+      apiToken: communicationService.bulksmsApiToken ? 'configured' : 'missing',
+      senderName: communicationService.bulksmsSenderName || 'not configured'
+    }
+  };
+  
+  res.json({ 
+    success: true, 
+    message: 'Communication service status retrieved',
+    services: status 
+  });
+}));
+
+/**
+ * @route   POST /api/communications/test/whatsapp
+ * @desc    Test WhatsApp message sending
+ * @access  Public (for local testing)
+ * @body    { phoneNumber: string, message: string }
+ */
+router.post('/test/whatsapp', asyncHandler(async (req, res) => {
+  const { phoneNumber, message } = req.body;
+  
+  if (!phoneNumber || !message) {
+    throw new ApiError(400, 'phoneNumber and message are required');
+  }
+  
+  const communicationService = require('../../services/communicationService');
+  
+  if (!communicationService.whatsappEnabled) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'WhatsApp service not configured',
+      hint: 'Check WHATSAPP_META_PHONE_NUMBER_ID and WHATSAPP_META_ACCESS_TOKEN in .env'
+    });
+  }
+  
+  try {
+    const result = await communicationService.sendWhatsApp(phoneNumber, message);
+    res.json({ 
+      success: true, 
+      message: 'WhatsApp test message sent successfully',
+      result 
+    });
+  } catch (error) {
+    throw new ApiError(500, `WhatsApp test failed: ${error.message}`);
+  }
+}));
+
+/**
+ * @route   POST /api/communications/test/email
+ * @desc    Test email sending
+ * @access  Public (for local testing)
+ * @body    { to: string, subject: string, body: string }
+ */
+router.post('/test/email', asyncHandler(async (req, res) => {
+  const { to, subject, body } = req.body;
+  
+  if (!to || !subject || !body) {
+    throw new ApiError(400, 'to, subject, and body are required');
+  }
+  
+  const communicationService = require('../../services/communicationService');
+  
+  if (!communicationService.gmailEnabled && !communicationService.sendgridEnabled) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Email service not configured',
+      hint: 'Check GMAIL_SMTP_USER and GMAIL_SMTP_APP_PASSWORD in .env'
+    });
+  }
+  
+  try {
+    const result = await communicationService.sendEmail(to, subject, body);
+    res.json({ 
+      success: true, 
+      message: 'Email test message sent successfully',
+      result 
+    });
+  } catch (error) {
+    throw new ApiError(500, `Email test failed: ${error.message}`);
+  }
+}));
+
+/**
+ * @route   POST /api/communications/test/sms
+ * @desc    Test SMS sending
+ * @access  Public (for local testing)
+ * @body    { phoneNumber: string, message: string }
+ */
+router.post('/test/sms', asyncHandler(async (req, res) => {
+  const { phoneNumber, message } = req.body;
+  
+  if (!phoneNumber || !message) {
+    throw new ApiError(400, 'phoneNumber and message are required');
+  }
+  
+  const communicationService = require('../../services/communicationService');
+  
+  if (!communicationService.bulksmsEnabled) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'SMS service not configured',
+      hint: 'Check BULKSMS_NIGERIA_API_TOKEN in .env'
+    });
+  }
+  
+  try {
+    const result = await communicationService.sendSMS(phoneNumber, message);
+    res.json({ 
+      success: true, 
+      message: 'SMS test message sent successfully',
+      result 
+    });
+  } catch (error) {
+    throw new ApiError(500, `SMS test failed: ${error.message}`);
+  }
+}));
+
 module.exports = router;

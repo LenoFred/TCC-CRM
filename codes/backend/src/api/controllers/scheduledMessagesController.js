@@ -48,6 +48,14 @@ class ScheduledMessagesController extends BaseController {
   }
 
   async prepareCreateData(data, user) {
+    // Determine initial status based on frequency:
+    // - Active: for recurring messages (will run multiple times)
+    // - Pending: for one-time messages (waiting for scheduled date)
+    let initialStatus = 'pending';
+    if (data.frequency && data.frequency !== 'once') {
+      initialStatus = 'active';
+    }
+    
     return {
       scheduleID: generateId('SCHEDULED_MESSAGE'),
       title: data.title || '',
@@ -61,7 +69,7 @@ class ScheduledMessagesController extends BaseController {
       scheduleDate: data.scheduleDate || '',
       scheduleTime: data.scheduleTime || '',
       frequency: data.frequency || '', // 'daily', 'weekly', 'monthly', 'yearly'
-      status: data.status || 'pending', // 'pending', 'active', 'sent', 'cancelled', 'failed'
+      status: data.status || initialStatus, // 'pending', 'active', 'sent', 'cancelled', 'failed'
       groupIDs: data.groupIDs || '',
       tags: data.tags || '',
       createdBy: user?.id || '',
@@ -230,6 +238,53 @@ class ScheduledMessagesController extends BaseController {
       success: true,
       message: `${this.entityName} cancelled successfully`,
     });
+  }
+
+  /**
+   * Mark a scheduled message as completed (called after message is sent)
+   * For one-time messages, status changes to 'completed'
+   * For recurring messages, status stays 'active' and nextRun is updated
+   */
+  async markAsCompleted(scheduleID, nextRunDate = null) {
+    try {
+      // Get the schedule first
+      const schedules = await this.sheetsService.getSheetObjects(this.sheetName);
+      const schedule = schedules.find(s => s.scheduleID === scheduleID);
+      
+      if (!schedule) {
+        console.error(`Schedule ${scheduleID} not found`);
+        return false;
+      }
+
+      const updates = {
+        lastSent: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // If it's a one-time message (frequency is 'once' or empty), mark as completed
+      if (!schedule.frequency || schedule.frequency === 'once') {
+        updates.status = 'completed';
+      } else {
+        // For recurring messages, keep status as 'active' and update nextRun
+        updates.status = 'active';
+        if (nextRunDate) {
+          updates.nextRun = nextRunDate;
+        }
+      }
+
+      const idColumn = this.getIdColumn();
+      const success = await this.sheetsService.updateRow(
+        this.sheetName,
+        idColumn,
+        scheduleID,
+        updates
+      );
+
+      return success;
+    } catch (error) {
+      console.error('Error marking schedule as completed:', error);
+      return false;
+    }
   }
 }
 

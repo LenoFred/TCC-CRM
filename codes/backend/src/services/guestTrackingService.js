@@ -60,26 +60,31 @@ class GuestTrackingService {
       // Create new guest
       const guestID = generateId('GUEST');
       const fullName = `${guestData.firstName} ${guestData.lastName}`;
+      const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      
       const guest = {
         guestID,
         name: fullName,
         phone: guestData.phone || '',
         email: guestData.email || '',
+        date: currentDate, // Date when guest was added
       };
 
       logger.info('Creating new guest', { 
         guestID, 
         name: fullName, 
         phone: guest.phone,
-        email: guest.email 
+        email: guest.email,
+        date: guest.date 
       });
 
-      // Add to Guest sheet (GuestID, Name, Phone, Email)
+      // Add to Guest sheet (GuestID, Name, Phone, Email, Date)
       const newGuestRow = [
         guest.guestID,
         guest.name,
         guest.phone,
         guest.email,
+        guest.date, // Include date column
       ];
 
       logger.info('Appending guest to Guest sheet', { 

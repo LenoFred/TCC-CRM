@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MessageSquare, Mail, Phone, Send, Users, Calendar, Clock, MapPin, Building, UserCheck, Heart, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, RefreshCw, RefreshCcw, Trash2, CheckCircle, XCircle, Loader2, CalendarRange, TrendingUp, DollarSign, Plus, X } from "lucide-react";
+import { MessageSquare, Mail, Phone, Send, Users, Calendar, Clock, MapPin, Building, UserCheck, Heart, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, RefreshCw, RefreshCcw, Trash2, CheckCircle, XCircle, Loader2, CalendarRange, TrendingUp, DollarSign, Plus, X, List } from "lucide-react";
 import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -305,6 +305,11 @@ const CommunicationsPage = () => {
   // Manual phone number input
   const [manualPhoneNumbers, setManualPhoneNumbers] = useState<string[]>([]);
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
+  
+  // Manual email input
+  const [manualEmails, setManualEmails] = useState<string[]>([]);
+  const [emailInput, setEmailInput] = useState("");
+  
   const [volunteerTeams, setVolunteerTeams] = useState([]);
   const [guests, setGuests] = useState([]);
   const [locationMembers, setLocationMembers] = useState([]);
@@ -332,9 +337,11 @@ const CommunicationsPage = () => {
   const [historyFilters, setHistoryFilters] = useState({
     startDate: '',
     endDate: '',
-    channel: '',
-    status: ''
+    channel: 'all',
+    status: 'all'
   });
+  const [selectedMessage, setSelectedMessage] = useState<any | null>(null);
+  const [isMessageDetailsModalOpen, setIsMessageDetailsModalOpen] = useState(false);
 
   // Drafts state
   const [drafts, setDrafts] = useState([]);
@@ -350,10 +357,15 @@ const CommunicationsPage = () => {
   const [editingSchedule, setEditingSchedule] = useState<any | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [scheduleToDelete, setScheduleToDelete] = useState<any | null>(null);
+  const [isViewSchedulesModalOpen, setIsViewSchedulesModalOpen] = useState(false);
+  const [scheduledSearchQuery, setScheduledSearchQuery] = useState("");
+  const [scheduledFilter, setScheduledFilter] = useState("all");
+  const [scheduledChannelFilter, setScheduledChannelFilter] = useState("all");
 
   // Automated messages state
   const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<any | null>(null);
+  const [isViewAutomationsModalOpen, setIsViewAutomationsModalOpen] = useState(false);
   const [automatedConfigs, setAutomatedConfigs] = useState<any[]>([
     { id: 1, name: 'Birthday Messages', type: 'birthday', enabled: true, channel: 'whatsapp,email', triggerTime: '09:00' },
     { id: 2, name: 'Volunteer Assignment Notifications', type: 'volunteer', enabled: true, channel: 'whatsapp,sms', triggerTime: 'instant' },
@@ -368,7 +380,7 @@ const CommunicationsPage = () => {
   // Stats state
   const [stats, setStats] = useState<any>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
-  const [totalMembers, setTotalMembers] = useState(0);
+  const [activeMembers, setActiveMembers] = useState(0);
 
   // Email provider selection
   const [emailProvider, setEmailProvider] = useState<'sendgrid' | 'gmail'>('sendgrid');
@@ -502,10 +514,20 @@ const CommunicationsPage = () => {
   const fetchCommunicationsHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const response = await api.communications.getHistory(historyFilters);
-      setCommunicationsHistory((response as any)?.data || []);
+      // Build filter params, excluding 'all' values
+      const filterParams: any = {};
+      if (historyFilters.startDate) filterParams.startDate = historyFilters.startDate;
+      if (historyFilters.endDate) filterParams.endDate = historyFilters.endDate;
+      if (historyFilters.channel && historyFilters.channel !== 'all') filterParams.channel = historyFilters.channel;
+      if (historyFilters.status && historyFilters.status !== 'all') filterParams.status = historyFilters.status;
+      
+      const response = await api.communications.getHistory(filterParams);
+      const historyData = (response as any)?.data || [];
+      // Ensure it's always an array
+      setCommunicationsHistory(Array.isArray(historyData) ? historyData : []);
     } catch (error: any) {
       console.error('Error fetching history:', error);
+      setCommunicationsHistory([]); // Set empty array on error
       toast({
         title: "Error",
         description: "Failed to load communications history",
@@ -730,11 +752,30 @@ const CommunicationsPage = () => {
         recipientTypes.push('manual');
       }
       
+      // Collect manual emails if provided
+      if (manualEmails.length > 0) {
+        recipientData.manualEmails = manualEmails;
+        if (!recipientTypes.includes('manual')) {
+          recipientTypes.push('manual');
+        }
+      }
+      
       // Set recipientType as comma-separated list or 'mixed' if multiple types
       scheduleData.recipientType = recipientTypes.length > 1 ? 'mixed' : recipientTypes[0] || '';
       
       // Store recipients as JSON string
       scheduleData.recipients = JSON.stringify(recipientData);
+      
+      // Set status based on frequency:
+      // - Active: for recurring messages (daily, weekly, monthly, etc.)
+      // - Pending: for one-time messages that haven't been sent yet
+      if (!editingSchedule) {
+        if (scheduleData.frequency && scheduleData.frequency !== 'once') {
+          scheduleData.status = 'active';
+        } else {
+          scheduleData.status = 'pending';
+        }
+      }
       
       if (editingSchedule) {
         await api.communications.updateScheduled(editingSchedule.scheduleID, scheduleData);
@@ -757,6 +798,7 @@ const CommunicationsPage = () => {
       setSelectedLocationMembers([]);
       setSelectedRecipients([]);
       setManualPhoneNumbers([]);
+      setManualEmails([]);
       setRecipientCategory('');
       
       setIsScheduleModalOpen(false);
@@ -806,13 +848,15 @@ const CommunicationsPage = () => {
     }
   };
 
-  // Fetch total members count
+  // Fetch active members count
   const fetchMembersCount = async () => {
     try {
-      const response = await api.members.getAll();
-      setTotalMembers((response as any)?.total || 0);
+      const response = await api.members.getStats();
+      console.log('=== FRONTEND: Members Stats Response ===', response);
+      console.log('Active members count:', (response as any)?.data?.active);
+      setActiveMembers((response as any)?.data?.active || 0);
     } catch (error: any) {
-      console.error('Error fetching members count:', error);
+      console.error('Error fetching members stats:', error);
     }
   };
 
@@ -868,22 +912,85 @@ const CommunicationsPage = () => {
     }
   };
 
+  // Handle schedule delete
+  const handleDeleteSchedule = async (scheduleId: string) => {
+    if (!confirm('Are you sure you want to delete this scheduled message?')) {
+      return;
+    }
+    try {
+      await api.communications.deleteScheduled(scheduleId);
+      toast({
+        title: "Success",
+        description: "Scheduled message deleted successfully",
+      });
+      fetchScheduledMessages();
+    } catch (error: any) {
+      console.error('Error deleting schedule:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete scheduled message",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle automation toggle
+  const handleToggleAutomation = async (automationId: number, enabled: boolean) => {
+    try {
+      setAutomatedConfigs(automatedConfigs.map(config => 
+        config.id === automationId ? { ...config, enabled } : config
+      ));
+      toast({
+        title: "Success",
+        description: `Automation ${enabled ? 'enabled' : 'disabled'} successfully`,
+      });
+    } catch (error: any) {
+      console.error('Error toggling automation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update automation",
+        variant: "destructive"
+      });
+    }
+  };
+
   useEffect(() => {
     const initializeData = async () => {
       try {
         setIsInitializing(true);
-        await Promise.all([
-          fetchRecipients(),
-          fetchCommunicationsHistory(),
-          fetchDrafts(),
-          fetchScheduledMessages().catch(err => {
-            console.error('Failed to fetch scheduled messages:', err);
-            setScheduledMessages([]);
-            setIsLoadingScheduled(false);
-          }),
-          fetchStats(),
-          fetchMembersCount()
-        ]);
+        
+        // Stagger API calls to avoid rate limiting (429 errors)
+        // Load critical data first
+        await fetchStats();
+        await new Promise(resolve => setTimeout(resolve, 300)); // 300ms delay
+        
+        await fetchMembersCount();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Load recipients in background
+        fetchRecipients().catch(err => {
+          console.error('Failed to fetch recipients:', err);
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Load communication history
+        await fetchCommunicationsHistory().catch(err => {
+          console.error('Failed to fetch history:', err);
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Load drafts
+        await fetchDrafts().catch(err => {
+          console.error('Failed to fetch drafts:', err);
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Load scheduled messages
+        await fetchScheduledMessages().catch(err => {
+          console.error('Failed to fetch scheduled messages:', err);
+          setScheduledMessages([]);
+          setIsLoadingScheduled(false);
+        });
       } catch (error) {
         console.error('Error initializing data:', error);
       } finally {
@@ -915,7 +1022,7 @@ const CommunicationsPage = () => {
   }, [scheduleSearch, scheduleTypeFilter]);
 
   const recipientCategories = [
-    { value: "all_members", label: "All Active Members", icon: Users, count: isLoadingRecipients ? '...' : totalMembers },
+    { value: "all_members", label: "All Active Members", icon: Users, count: isLoadingRecipients ? '...' : activeMembers },
     { value: "groups", label: "Groups/Departments", icon: Building, count: isLoadingRecipients ? '...' : groups.length },
     { value: "families", label: "Families", icon: Heart, count: isLoadingRecipients ? '...' : families.length },
     { value: "guests", label: "Guests", icon: Users, count: isLoadingRecipients ? '...' : guests.length },
@@ -1130,7 +1237,7 @@ const CommunicationsPage = () => {
                 <Skeleton className="h-8 w-20" />
               ) : (
                 <div className="text-2xl font-bold text-foreground">
-                  {totalMembers?.toLocaleString() || 0}
+                  {activeMembers?.toLocaleString() || 0}
                 </div>
               )}
             </CardContent>
@@ -1142,8 +1249,6 @@ const CommunicationsPage = () => {
             <TabsTrigger value="compose">Compose Message</TabsTrigger>
             <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
             <TabsTrigger value="history">Message History</TabsTrigger>
-            <TabsTrigger value="drafts">Drafts</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="compose" className="space-y-4">
@@ -1949,63 +2054,127 @@ const CommunicationsPage = () => {
                     </div>
                   </div>
 
-                  {/* Manual Phone Number Input */}
-                  <div className="border rounded-lg p-4 space-y-3">
-                    <Label htmlFor="manual-phone">Add Custom Phone Numbers</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="manual-phone"
-                        placeholder="Enter phone number (e.g., +2348012345678)"
-                        value={phoneNumberInput}
-                        onChange={(e) => setPhoneNumberInput(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => {
-                          const trimmedNumber = phoneNumberInput.trim();
-                          if (trimmedNumber && !manualPhoneNumbers.includes(trimmedNumber)) {
-                            setManualPhoneNumbers([...manualPhoneNumbers, trimmedNumber]);
-                            setPhoneNumberInput("");
-                            toast({
-                              title: "Phone number added",
-                              description: `${trimmedNumber} added to recipients`,
-                            });
-                          }
-                        }}
-                        disabled={!phoneNumberInput.trim()}
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add
-                      </Button>
-                    </div>
-                    {manualPhoneNumbers.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium">
-                          Manual Recipients ({manualPhoneNumbers.length})
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {manualPhoneNumbers.map((number, index) => (
-                            <Badge key={index} variant="secondary" className="gap-1">
-                              {number}
-                              <X
-                                className="h-3 w-3 cursor-pointer"
-                                onClick={() => {
-                                  setManualPhoneNumbers(manualPhoneNumbers.filter((_, i) => i !== index));
+                  {/* Manual Phone Number / Email Input - Changes based on channel */}
+                  {communicationChannel && (
+                    <div className="border rounded-lg p-4 space-y-3">
+                      {(communicationChannel.toLowerCase() === 'sms' || communicationChannel.toLowerCase() === 'whatsapp') ? (
+                        <>
+                          <Label htmlFor="manual-phone">Add Custom Phone Numbers</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="manual-phone"
+                              placeholder="Enter phone number (e.g., +2348012345678)"
+                              value={phoneNumberInput}
+                              onChange={(e) => setPhoneNumberInput(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                const trimmedNumber = phoneNumberInput.trim();
+                                if (trimmedNumber && !manualPhoneNumbers.includes(trimmedNumber)) {
+                                  setManualPhoneNumbers([...manualPhoneNumbers, trimmedNumber]);
+                                  setPhoneNumberInput("");
                                   toast({
-                                    title: "Phone number removed",
-                                    description: `${number} removed from recipients`,
+                                    title: "Phone number added",
+                                    description: `${trimmedNumber} added to recipients`,
                                   });
-                                }}
-                              />
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                                }
+                              }}
+                              disabled={!phoneNumberInput.trim()}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                          {manualPhoneNumbers.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">
+                                Manual Recipients ({manualPhoneNumbers.length})
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {manualPhoneNumbers.map((number, index) => (
+                                  <Badge key={index} variant="secondary" className="gap-1">
+                                    {number}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => {
+                                        setManualPhoneNumbers(manualPhoneNumbers.filter((_, i) => i !== index));
+                                        toast({
+                                          title: "Phone number removed",
+                                          description: `${number} removed from recipients`,
+                                        });
+                                      }}
+                                    />
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : communicationChannel.toLowerCase() === 'email' ? (
+                        <>
+                          <Label htmlFor="manual-email">Add Custom Emails</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="manual-email"
+                              type="email"
+                              placeholder="Enter email address (e.g., example@email.com)"
+                              value={emailInput}
+                              onChange={(e) => setEmailInput(e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                const trimmedEmail = emailInput.trim();
+                                if (trimmedEmail && !manualEmails.includes(trimmedEmail)) {
+                                  setManualEmails([...manualEmails, trimmedEmail]);
+                                  setEmailInput("");
+                                  toast({
+                                    title: "Email added",
+                                    description: `${trimmedEmail} added to recipients`,
+                                  });
+                                }
+                              }}
+                              disabled={!emailInput.trim()}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                          {manualEmails.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-sm font-medium">
+                                Manual Recipients ({manualEmails.length})
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {manualEmails.map((email, index) => (
+                                  <Badge key={index} variant="secondary" className="gap-1">
+                                    {email}
+                                    <X
+                                      className="h-3 w-3 cursor-pointer"
+                                      onClick={() => {
+                                        setManualEmails(manualEmails.filter((_, i) => i !== index));
+                                        toast({
+                                          title: "Email removed",
+                                          description: `${email} removed from recipients`,
+                                        });
+                                      }}
+                                    />
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                  )}
 
                   <div>
                     <Label>Communication Channel</Label>
@@ -2144,7 +2313,9 @@ const CommunicationsPage = () => {
                           setCommunicationChannel("");
                           setLocationMembers([]);
                           setManualPhoneNumbers([]);
+                          setManualEmails([]);
                           setPhoneNumberInput("");
+                          setEmailInput("");
                           setLocationSearchTerm("");
                           setAllMembersSearch("");
                         } catch (error) {
@@ -2162,9 +2333,6 @@ const CommunicationsPage = () => {
                       <Send className="h-4 w-4" />
                       {isSendingMessage ? "Sending..." : "Send Message"}
                     </Button>
-                    <Button variant="outline">
-                      Save Draft
-                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -2172,288 +2340,112 @@ const CommunicationsPage = () => {
           </TabsContent>
 
           <TabsContent value="scheduled" className="space-y-6">
-            {/* Scheduled Messages Card */}
+            {/* Simplified Scheduled Messages Card */}
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-5 w-5" />
-                      Scheduled Messages
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Schedule messages for gatherings, programs, and special events
-                    </p>
-                  </div>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Scheduled Messages
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Schedule messages for future dates and times
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Action Buttons */}
+                <div className="flex gap-3">
                   <Button 
                     onClick={() => {
                       setEditingSchedule(null);
                       setIsScheduleModalOpen(true);
                     }}
-                    className="gap-2"
+                    className="flex-1 gap-2"
                   >
                     <CalendarRange className="h-4 w-4" />
                     New Schedule
                   </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {/* Search and Filter */}
-                <div className="flex gap-2 mb-4">
-                  <Input
-                    placeholder="Search scheduled messages..."
-                    className="flex-1"
-                    value={scheduleSearch}
-                    onChange={(e) => setScheduleSearch(e.target.value)}
-                  />
-                  <Select value={scheduleTypeFilter} onValueChange={setScheduleTypeFilter}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="sunday service">Sunday Service</SelectItem>
-                      <SelectItem value="program">Programs</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsViewSchedulesModalOpen(true)}
+                    className="flex-1 gap-2"
+                  >
+                    <List className="h-4 w-4" />
+                    View All Schedules
+                  </Button>
                 </div>
 
-                {/* Scheduled Messages List - Scrollable */}
-                <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
-                  {isLoadingScheduled ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <RefreshCw className="h-8 w-8 mx-auto mb-2 animate-spin opacity-50" />
-                      <p>Loading scheduled messages...</p>
-                    </div>
-                  ) : !Array.isArray(scheduledMessages) || scheduledMessages.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <CalendarRange className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="font-medium">No scheduled messages</p>
-                      <p className="text-sm">Create your first scheduled message to get started</p>
-                    </div>
-                  ) : (
-                    Array.isArray(scheduledMessages) && scheduledMessages.map((schedule: any) => {
-                      const getScheduleTypeBadgeColor = (type: string) => {
-                        switch (type?.toLowerCase()) {
-                          case 'gathering': return 'bg-blue-500';
-                          case 'sunday': return 'bg-purple-500';
-                          case 'annual': return 'bg-orange-500';
-                          case 'custom': return 'bg-green-500';
-                          default: return 'bg-gray-500';
-                        }
-                      };
-
-                      const getStatusBadgeVariant = (status: string) => {
-                        switch (status?.toLowerCase()) {
-                          case 'active': return 'default';
-                          case 'pending': return 'secondary';
-                          case 'sent': return 'outline';
-                          case 'cancelled': return 'destructive';
-                          default: return 'outline';
-                        }
-                      };
-
-                      const formatScheduleTime = (date: string, time: string, frequency: string) => {
-                        if (frequency && frequency !== 'once') {
-                          const frequencyMap: any = {
-                            'daily': 'Daily',
-                            'every-2-days': 'Every 2 Days',
-                            'every-3-days': 'Every 3 Days',
-                            'weekly': 'Weekly',
-                            'bi-weekly': 'Bi-Weekly',
-                            'monthly': 'Monthly'
-                          };
-                          const label = frequencyMap[frequency] || frequency;
-                          return `${label} at ${time || 'scheduled time'} (starts ${date ? new Date(date).toLocaleDateString() : 'TBD'})`;
-                        }
-                        return `Once on ${date ? new Date(date).toLocaleDateString() : 'Not set'} at ${time || 'Not set'}`;
-                      };
-
-                      const recipientCount = (() => {
-                        try {
-                          const recipients = JSON.parse(schedule.recipients || '{}');
-                          let count = 0;
-                          if (recipients.memberIds) count += recipients.memberIds.length;
-                          if (recipients.groupIds) count += recipients.groupIds.length;
-                          if (recipients.familyIds) count += recipients.familyIds.length;
-                          if (recipients.staffIds) count += recipients.staffIds.length;
-                          if (recipients.guestIds) count += recipients.guestIds.length;
-                          return count;
-                        } catch {
-                          return 0;
-                        }
-                      })();
-
-                      return (
-                        <div key={schedule.scheduleID} className="flex items-start justify-between p-4 border rounded-lg hover:border-primary/50 transition-colors">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <Badge variant="default" className={getScheduleTypeBadgeColor(schedule.scheduleType)}>
-                                {schedule.scheduleType || 'Custom'}
-                              </Badge>
-                              <Badge variant={getStatusBadgeVariant(schedule.status) as any} className="text-xs">
-                                {schedule.status || 'Pending'}
-                              </Badge>
-                              {schedule.frequency && schedule.frequency !== 'once' && (
-                                <Badge variant="secondary" className="text-xs">
-                                  🔄 Recurring
-                                </Badge>
-                              )}
-                            </div>
-                            <h4 className="font-semibold mb-1">{schedule.title || 'Untitled Schedule'}</h4>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {schedule.message?.substring(0, 100)}{schedule.message?.length > 100 ? '...' : ''}
-                            </p>
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {formatScheduleTime(schedule.scheduleDate, schedule.scheduleTime, schedule.frequency)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Users className="h-3 w-3" />
-                                {schedule.recipientType || 'Custom'} ({recipientCount} recipients)
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <MessageSquare className="h-3 w-3" />
-                                {schedule.channel || 'Not set'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 ml-4">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => handleEditSchedule(schedule)}
-                            >
-                              Edit
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="text-destructive"
-                              onClick={() => handleCancelSchedule(schedule)}
-                            >
-                              {schedule.status?.toLowerCase() === 'active' ? 'Cancel' : 'Delete'}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Active Schedules</p>
+                    <p className="text-2xl font-bold">
+                      {Array.isArray(scheduledMessages) ? 
+                        scheduledMessages.filter(s => s.status?.toLowerCase() === 'active').length : 0}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Recurring Messages</p>
+                    <p className="text-2xl font-bold">
+                      {Array.isArray(scheduledMessages) ? 
+                        scheduledMessages.filter(s => s.frequency && s.frequency !== 'once').length : 0}
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Automated Messages Configuration Card */}
+            {/* Simplified Automated Messages Card */}
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <RefreshCcw className="h-5 w-5" />
-                      Automated Message Configurations
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Configure automatic messages triggered by events and member activities
-                    </p>
-                  </div>
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCcw className="h-5 w-5" />
+                  Automated Messages
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Auto-send messages for birthdays, events, and member activities
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Action Buttons */}
+                <div className="flex gap-3">
                   <Button 
                     onClick={() => {
                       setEditingAutomation(null);
                       setIsAutomatedModalOpen(true);
                     }}
-                    className="gap-2"
+                    className="flex-1 gap-2"
                   >
                     <Plus className="h-4 w-4" />
                     New Automation
                   </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setIsViewAutomationsModalOpen(true)}
+                    className="flex-1 gap-2"
+                  >
+                    <List className="h-4 w-4" />
+                    View Automations
+                  </Button>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4">
-                  {automatedConfigs.map((config) => {
-                    const getIcon = (type: string) => {
-                      switch(type) {
-                        case 'birthday': return <Heart className="h-5 w-5 text-pink-500" />;
-                        case 'volunteer': return <UserCheck className="h-5 w-5 text-blue-500" />;
-                        case 'guest_welcome': return <Users className="h-5 w-5 text-green-500" />;
-                        case 'absent_followup': return <AlertCircle className="h-5 w-5 text-orange-500" />;
-                        default: return <Bell className="h-5 w-5 text-gray-500" />;
-                      }
-                    };
 
-                    const getDescription = (type: string) => {
-                      switch(type) {
-                        case 'birthday': return 'Automatically send birthday greetings to members on their special day';
-                        case 'volunteer': return "Notify volunteers when they're assigned to teams and remind them 24-48 hours before duty";
-                        case 'guest_welcome': return 'Send welcome messages to first-time guests and follow up after their visit';
-                        case 'absent_followup': return "Reach out to members who haven't attended services for a specified period";
-                        default: return 'Automated message configuration';
-                      }
-                    };
-
-                    return (
-                      <div key={config.id} className="flex items-start justify-between p-4 border rounded-lg hover:border-primary/50 transition-colors">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="mt-1">
-                            {getIcon(config.type)}
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-semibold">{config.name}</h4>
-                              <Badge 
-                                variant={config.enabled ? "default" : "secondary"} 
-                                className={config.enabled ? "bg-green-500 text-xs" : "text-xs"}
-                              >
-                                {config.enabled ? 'Active' : 'Inactive'}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {getDescription(config.type)}
-                            </p>
-                            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {config.triggerTime}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <MessageSquare className="h-3 w-3" />
-                                {config.channel.split(',').join(' + ')}
-                              </span>
-                            </div>
-                          </div>
+                {/* Active Automations Summary */}
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs text-muted-foreground font-medium">Active Automations:</p>
+                  {automatedConfigs.filter(c => c.enabled).length === 0 ? (
+                    <p className="text-sm text-muted-foreground italic">No active automations</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {automatedConfigs.filter(c => c.enabled).map(config => (
+                        <div key={config.id} className="flex items-center gap-2 text-sm">
+                          <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                          <span>{config.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({config.channel.split(',').join(' + ')})
+                          </span>
                         </div>
-                        <div className="flex gap-2 ml-4">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setEditingAutomation(config);
-                              setIsAutomatedModalOpen(true);
-                            }}
-                          >
-                            Configure
-                          </Button>
-                          <Button 
-                            variant={config.enabled ? "outline" : "default"} 
-                            size="sm" 
-                            className={config.enabled ? "text-destructive" : "bg-green-500"}
-                            onClick={() => {
-                              setAutomatedConfigs(automatedConfigs.map(c => 
-                                c.id === config.id ? { ...c, enabled: !c.enabled } : c
-                              ));
-                              toast({
-                                title: config.enabled ? "Automation Disabled" : "Automation Enabled",
-                                description: `${config.name} has been ${config.enabled ? 'disabled' : 'enabled'}.`
-                              });
-                            }}
-                          >
-                            {config.enabled ? 'Disable' : 'Enable'}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      ))}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -2498,7 +2490,7 @@ const CommunicationsPage = () => {
                         <SelectValue placeholder="All channels" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Channels</SelectItem>
+                        <SelectItem value="all">All Channels</SelectItem>
                         <SelectItem value="whatsapp">WhatsApp</SelectItem>
                         <SelectItem value="email">Email</SelectItem>
                         <SelectItem value="sms">SMS</SelectItem>
@@ -2512,7 +2504,7 @@ const CommunicationsPage = () => {
                         <SelectValue placeholder="All statuses" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">All Statuses</SelectItem>
+                        <SelectItem value="all">All Statuses</SelectItem>
                         <SelectItem value="sent">Sent</SelectItem>
                         <SelectItem value="delivered">Delivered</SelectItem>
                         <SelectItem value="failed">Failed</SelectItem>
@@ -2527,421 +2519,63 @@ const CommunicationsPage = () => {
                   <div className="space-y-3">
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-20" />)}
                   </div>
-                ) : communicationsHistory.length === 0 ? (
+                ) : !Array.isArray(communicationsHistory) || communicationsHistory.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No communications found</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {communicationsHistory.map((comm: any) => (
-                      <div key={comm.communicationID} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold">{comm.subject || 'No Subject'}</h3>
-                            {comm.provider && (
-                              <Badge variant="outline" className="text-xs">{comm.provider}</Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              {comm.messageType === 'WhatsApp' && <MessageSquare className="h-3 w-3" />}
-                              {comm.messageType === 'Email' && <Mail className="h-3 w-3" />}
-                              {comm.messageType === 'SMS' && <Phone className="h-3 w-3" />}
-                              {comm.messageType}
-                            </span>
-                            <span>{new Date(comm.createdAt).toLocaleString()}</span>
-                            {comm.cost && Number(comm.cost) > 0 && <span>₦{Number(comm.cost).toFixed(2)}</span>}
-                          </div>
-                          {comm.failureReason && (
-                            <p className="text-xs text-destructive mt-1">{comm.failureReason}</p>
-                          )}
-                        </div>
-                        <Badge 
-                          variant="outline"
-                          className={
-                            comm.status.toLowerCase() === 'sent' || comm.status.toLowerCase() === 'delivered'
-                              ? "bg-green-100 text-green-800 border-green-200"
-                              : comm.status.toLowerCase() === 'failed'
-                              ? "bg-red-100 text-red-800 border-red-200"
-                              : "bg-yellow-100 text-yellow-800 border-yellow-200"
-                          }
-                        >
-                          {comm.status}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="drafts" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle>Saved Drafts</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Messages you've saved for later
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={fetchDrafts}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {isLoadingDrafts ? (
-                  <div className="space-y-3">
-                    {[1, 2].map(i => <Skeleton key={i} className="h-24" />)}
-                  </div>
-                ) : drafts.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No drafts saved</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {drafts.map((draft: any) => (
-                      <div key={draft.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{draft.subject || 'No Subject'}</h4>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {draft.recipientCount || 0} recipients • {draft.messageType} • 
-                            Last modified: {new Date(draft.updatedAt).toLocaleDateString()}
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                            {draft.message}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="default" 
-                            size="sm"
-                            disabled={sendingDraftId === draft.id}
-                            onClick={() => handleSendDraft(draft.id)}
-                          >
-                            {sendingDraftId === draft.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Send className="h-4 w-4 mr-1" />
-                                Send
-                              </>
-                            )}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDeleteDraft(draft.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-            <TabsContent value="analytics" className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  Communications Analytics
-                </CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={fetchAnalytics}
-                  disabled={isLoadingAnalytics}
-                >
-                  <RefreshCcw className={`h-4 w-4 mr-2 ${isLoadingAnalytics ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {isLoadingAnalytics ? (
-                  <div className="space-y-4">
-                    <Skeleton className="h-32 w-full" />
-                    <Skeleton className="h-32 w-full" />
-                    <Skeleton className="h-32 w-full" />
-                  </div>
-                ) : !analytics ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">No analytics data available</p>
-                    <Button variant="outline" onClick={fetchAnalytics} className="mt-4">
-                      Load Analytics
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Cost Analysis Section */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-primary" />
-                        <h3 className="text-lg font-semibold">Cost Analysis</h3>
-                      </div>
+                    {communicationsHistory.map((comm: any) => {
+                      // Safety check for each item
+                      if (!comm) return null;
                       
-                      {/* Total Cost Card */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Card className="bg-primary/5 border-primary/20">
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Total Spend</p>
-                              <p className="text-2xl font-bold">₦{analytics.costAnalysis?.totalCost?.toFixed(2) || '0.00'}</p>
+                      return (
+                        <div 
+                          key={comm.communicationID || comm.id || Math.random()} 
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setSelectedMessage(comm);
+                            setIsMessageDetailsModalOpen(true);
+                          }}
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-semibold">{comm.subject || 'No Subject'}</h3>
+                              {comm.provider && (
+                                <Badge variant="outline" className="text-xs">{comm.provider}</Badge>
+                              )}
                             </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Average Cost Card */}
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Avg Per Message</p>
-                              <p className="text-2xl font-bold">₦{analytics.costAnalysis?.averageCostPerMessage?.toFixed(2) || '0.00'}</p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                {comm.messageType === 'WhatsApp' && <MessageSquare className="h-3 w-3" />}
+                                {comm.messageType === 'Email' && <Mail className="h-3 w-3" />}
+                                {comm.messageType === 'SMS' && <Phone className="h-3 w-3" />}
+                                {comm.messageType || comm.channel || 'N/A'}
+                              </span>
+                              <span>{comm.createdAt ? new Date(comm.createdAt).toLocaleString() : 'N/A'}</span>
+                              {comm.cost && Number(comm.cost) > 0 && <span>₦{Number(comm.cost).toFixed(2)}</span>}
                             </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Messages Sent Card */}
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Messages Sent</p>
-                              <p className="text-2xl font-bold">{analytics.costAnalysis?.totalMessages || 0}</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        {/* Date Range Card */}
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Period</p>
-                              <p className="text-sm font-medium">
-                                {analytics.dateRange?.start && analytics.dateRange?.end 
-                                  ? `${new Date(analytics.dateRange.start).toLocaleDateString()} - ${new Date(analytics.dateRange.end).toLocaleDateString()}`
-                                  : 'All Time'
-                                }
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      {/* Cost by Channel */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {analytics.costAnalysis?.costByChannel && Object.entries(analytics.costAnalysis.costByChannel).map(([channel, data]: [string, any]) => (
-                          <Card key={channel}>
-                            <CardContent className="pt-6">
-                              <div className="flex items-center justify-between">
-                                <div className="space-y-1">
-                                  <p className="text-sm text-muted-foreground capitalize">{channel}</p>
-                                  <p className="text-xl font-bold">₦{data.cost?.toFixed(2) || '0.00'}</p>
-                                  <p className="text-xs text-muted-foreground">{data.count || 0} messages</p>
-                                </div>
-                                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                                  {channel === 'whatsapp' && <MessageSquare className="h-6 w-6 text-primary" />}
-                                  {channel === 'email' && <Mail className="h-6 w-6 text-primary" />}
-                                  {channel === 'sms' && <Phone className="h-6 w-6 text-primary" />}
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-
-                      {/* Cost by Provider */}
-                      {analytics.costAnalysis?.costByProvider && Object.keys(analytics.costAnalysis.costByProvider).length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Cost by Provider</h4>
-                          <div className="space-y-2">
-                            {Object.entries(analytics.costAnalysis.costByProvider).map(([provider, data]: [string, any]) => (
-                              <div key={provider} className="flex items-center justify-between p-3 border rounded-lg">
-                                <div className="flex items-center gap-3">
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
-                                  <div>
-                                    <p className="font-medium capitalize">{provider}</p>
-                                    <p className="text-sm text-muted-foreground">{data.count || 0} messages</p>
-                                  </div>
-                                </div>
-                                <p className="font-semibold">₦{data.cost?.toFixed(2) || '0.00'}</p>
-                              </div>
-                            ))}
+                            {comm.failureReason && (
+                              <p className="text-xs text-destructive mt-1">{comm.failureReason}</p>
+                            )}
                           </div>
+                          <Badge 
+                            variant="outline"
+                            className={
+                              comm.status?.toLowerCase() === 'sent' || comm.status?.toLowerCase() === 'delivered'
+                                ? "bg-green-100 text-green-800 border-green-200"
+                                : comm.status?.toLowerCase() === 'failed'
+                                ? "bg-red-100 text-red-800 border-red-200"
+                                : "bg-yellow-100 text-yellow-800 border-yellow-200"
+                            }
+                          >
+                            {comm.status || 'Unknown'}
+                          </Badge>
                         </div>
-                      )}
-                    </div>
-
-                    {/* Peak Times Section */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <CalendarRange className="h-5 w-5 text-primary" />
-                        <h3 className="text-lg font-semibold">Peak Sending Times</h3>
-                      </div>
-
-                      {/* Recommendation Banner */}
-                      {analytics.peakTimes?.recommendation && (
-                        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                          <div className="flex items-start gap-3">
-                            <TrendingUp className="h-5 w-5 text-primary mt-0.5" />
-                            <div>
-                              <p className="font-medium text-primary">Optimization Tip</p>
-                              <p className="text-sm text-muted-foreground mt-1">{analytics.peakTimes.recommendation}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Peak Hour and Day */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Peak Hour</p>
-                              <p className="text-xl font-bold">{analytics.peakTimes?.peakHour?.label || 'N/A'}</p>
-                              <p className="text-sm text-muted-foreground">{analytics.peakTimes?.peakHour?.count || 0} messages sent</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Peak Day</p>
-                              <p className="text-xl font-bold">{analytics.peakTimes?.peakDay?.name || 'N/A'}</p>
-                              <p className="text-sm text-muted-foreground">{analytics.peakTimes?.peakDay?.count || 0} messages sent</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      {/* Hourly Distribution Preview */}
-                      {analytics.peakTimes?.hourlyDistribution && analytics.peakTimes.hourlyDistribution.length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Hourly Distribution</h4>
-                          <div className="grid grid-cols-6 md:grid-cols-12 gap-2">
-                            {analytics.peakTimes.hourlyDistribution.map((hour: any, index: number) => (
-                              <div key={index} className="flex flex-col items-center gap-1">
-                                <div 
-                                  className="w-full bg-primary/20 rounded hover:bg-primary/30 transition-colors"
-                                  style={{ height: `${Math.max(20, (hour.count / Math.max(...analytics.peakTimes.hourlyDistribution.map((h: any) => h.count))) * 60)}px` }}
-                                  title={`${hour.hour}:00 - ${hour.count} messages`}
-                                />
-                                <span className="text-xs text-muted-foreground">{hour.hour}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Delivery Rates Section */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-5 w-5 text-primary" />
-                        <h3 className="text-lg font-semibold">Delivery Rates</h3>
-                      </div>
-
-                      {/* Overall Stats */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <Card className={analytics.deliveryRates?.overall?.successRate >= 80 ? "border-green-500/50 bg-green-50/50" : ""}>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Success Rate</p>
-                              <p className="text-2xl font-bold text-green-600">
-                                {analytics.deliveryRates?.overall?.successRate?.toFixed(1) || '0'}%
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {(analytics.deliveryRates?.overall?.sent || 0) + (analytics.deliveryRates?.overall?.delivered || 0)} successful
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Delivered</p>
-                              <p className="text-2xl font-bold">{analytics.deliveryRates?.overall?.delivered || 0}</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card className={analytics.deliveryRates?.overall?.failureRate > 20 ? "border-red-500/50 bg-red-50/50" : ""}>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Failed</p>
-                              <p className="text-2xl font-bold text-red-600">{analytics.deliveryRates?.overall?.failed || 0}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {analytics.deliveryRates?.overall?.failureRate?.toFixed(1) || '0'}% failure rate
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-
-                        <Card>
-                          <CardContent className="pt-6">
-                            <div className="space-y-2">
-                              <p className="text-sm text-muted-foreground">Pending</p>
-                              <p className="text-2xl font-bold">{analytics.deliveryRates?.overall?.pending || 0}</p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-
-                      {/* By Channel Breakdown */}
-                      {analytics.deliveryRates?.byChannel && Object.keys(analytics.deliveryRates.byChannel).length > 0 && (
-                        <div className="space-y-2">
-                          <h4 className="text-sm font-medium">Performance by Channel</h4>
-                          <div className="space-y-2">
-                            {Object.entries(analytics.deliveryRates.byChannel).map(([channel, data]: [string, any]) => (
-                              <div key={channel} className="border rounded-lg p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                  <div className="flex items-center gap-2">
-                                    {channel === 'whatsapp' && <MessageSquare className="h-4 w-4" />}
-                                    {channel === 'email' && <Mail className="h-4 w-4" />}
-                                    {channel === 'sms' && <Phone className="h-4 w-4" />}
-                                    <span className="font-medium capitalize">{channel}</span>
-                                  </div>
-                                  <div className="flex items-center gap-4 text-sm">
-                                    <span className="text-green-600 font-medium">{data.successRate?.toFixed(1)}% success</span>
-                                    <span className="text-red-600">{data.failureRate?.toFixed(1)}% failed</span>
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-4 gap-2 text-sm">
-                                  <div>
-                                    <p className="text-muted-foreground">Sent</p>
-                                    <p className="font-medium">{data.sent || 0}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Delivered</p>
-                                    <p className="font-medium">{data.delivered || 0}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Failed</p>
-                                    <p className="font-medium">{data.failed || 0}</p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground">Pending</p>
-                                    <p className="font-medium">{data.pending || 0}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -3573,6 +3207,276 @@ const CommunicationsPage = () => {
           </Dialog>
         )}
 
+        {/* View All Schedules Modal */}
+        {isViewSchedulesModalOpen && (
+          <Dialog open={isViewSchedulesModalOpen} onOpenChange={setIsViewSchedulesModalOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  All Scheduled Messages
+                </DialogTitle>
+                <DialogDescription>
+                  View, edit, and manage all your scheduled messages
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 mt-4">
+                {/* Search and Filters */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Input
+                    placeholder="Search schedules..."
+                    value={scheduledSearchQuery}
+                    onChange={(e) => setScheduledSearchQuery(e.target.value)}
+                  />
+                  <Select value={scheduledFilter} onValueChange={setScheduledFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Schedules</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={scheduledChannelFilter} onValueChange={setScheduledChannelFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Channels</SelectItem>
+                      <SelectItem value="sms">SMS</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Scheduled Messages List */}
+                <div className="space-y-3 max-h-[50vh] overflow-y-auto">
+                  {scheduledMessages
+                    .filter(schedule => {
+                      // Filter by status
+                      if (scheduledFilter !== 'all' && schedule.status?.toLowerCase() !== scheduledFilter) {
+                        return false;
+                      }
+                      // Filter by channel
+                      if (scheduledChannelFilter !== 'all' && schedule.channel?.toLowerCase() !== scheduledChannelFilter) {
+                        return false;
+                      }
+                      // Filter by search query
+                      if (scheduledSearchQuery) {
+                        const query = scheduledSearchQuery.toLowerCase();
+                        return (
+                          schedule.message?.toLowerCase().includes(query) ||
+                          schedule.subject?.toLowerCase().includes(query) ||
+                          schedule.recipients?.toString().toLowerCase().includes(query)
+                        );
+                      }
+                      return true;
+                    })
+                    .map((schedule) => (
+                      <Card key={schedule.scheduleID || schedule.id} className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-sm">
+                                {schedule.subject || schedule.message?.substring(0, 50) + '...'}
+                              </h4>
+                              <Badge variant={schedule.status?.toLowerCase() === 'active' ? 'default' : 'secondary'}>
+                                {schedule.status || 'Pending'}
+                              </Badge>
+                              {schedule.frequency && schedule.frequency !== 'once' && (
+                                <Badge variant="outline">
+                                  <RefreshCcw className="h-3 w-3 mr-1" />
+                                  {schedule.frequency}
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(schedule.scheduledDate || schedule.date).toLocaleString()}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Users className="h-3 w-3" />
+                                {Array.isArray(schedule.recipients) ? schedule.recipients.length : schedule.recipients || 0} recipients
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {schedule.channel === 'sms' && <MessageSquare className="h-3 w-3" />}
+                                {schedule.channel === 'email' && <Mail className="h-3 w-3" />}
+                                {schedule.channel === 'whatsapp' && <Phone className="h-3 w-3" />}
+                                {schedule.channel?.toUpperCase()}
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {schedule.message}
+                            </p>
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingSchedule(schedule);
+                                setIsViewSchedulesModalOpen(false);
+                                setIsScheduleModalOpen(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteSchedule(schedule.scheduleID || schedule.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+
+                  {scheduledMessages.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No scheduled messages yet</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => {
+                          setIsViewSchedulesModalOpen(false);
+                          setIsScheduleModalOpen(true);
+                        }}
+                      >
+                        Create First Schedule
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* View Automations Modal */}
+        {isViewAutomationsModalOpen && (
+          <Dialog open={isViewAutomationsModalOpen} onOpenChange={setIsViewAutomationsModalOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <RefreshCcw className="h-5 w-5" />
+                  Automated Messages
+                </DialogTitle>
+                <DialogDescription>
+                  Manage automated messages triggered by events like birthdays, anniversaries, and more
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 mt-4">
+                {/* Automations List */}
+                <div className="space-y-3">
+                  {automatedConfigs.map((config) => (
+                    <Card key={config.id} className={`p-4 ${!config.enabled ? 'opacity-60' : ''}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`h-3 w-3 rounded-full ${config.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
+                            <h4 className="font-semibold text-sm">{config.name}</h4>
+                            <Badge variant={config.enabled ? 'default' : 'secondary'}>
+                              {config.enabled ? 'Active' : 'Disabled'}
+                            </Badge>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {config.trigger === 'birthday' && 'On member birthdays'}
+                              {config.trigger === 'anniversary' && 'On member anniversaries'}
+                              {config.trigger === 'new_member' && 'When new member joins'}
+                              {config.trigger === 'event' && 'Before scheduled events'}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {config.channel.includes('sms') && <MessageSquare className="h-3 w-3" />}
+                              {config.channel.includes('email') && <Mail className="h-3 w-3" />}
+                              {config.channel.includes('whatsapp') && <Phone className="h-3 w-3" />}
+                              {config.channel.split(',').join(' + ').toUpperCase()}
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {config.message}
+                          </p>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingAutomation(config);
+                              setIsViewAutomationsModalOpen(false);
+                              setIsAutomatedModalOpen(true);
+                            }}
+                          >
+                            Configure
+                          </Button>
+                          <Button
+                            variant={config.enabled ? 'outline' : 'default'}
+                            size="sm"
+                            onClick={() => handleToggleAutomation(config.id, !config.enabled)}
+                          >
+                            {config.enabled ? 'Disable' : 'Enable'}
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+
+                  {automatedConfigs.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <RefreshCcw className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No automated messages configured yet</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => {
+                          setIsViewAutomationsModalOpen(false);
+                          setIsAutomatedModalOpen(true);
+                        }}
+                      >
+                        Create First Automation
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Actions */}
+                <div className="border-t pt-4">
+                  <Button
+                    onClick={() => {
+                      setEditingAutomation(null);
+                      setIsViewAutomationsModalOpen(false);
+                      setIsAutomatedModalOpen(true);
+                    }}
+                    className="w-full gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Create New Automation
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
         {/* Automated Message Configuration Modal */}
         {isAutomatedModalOpen && (
           <Dialog open={isAutomatedModalOpen} onOpenChange={setIsAutomatedModalOpen}>
@@ -3762,6 +3666,164 @@ const CommunicationsPage = () => {
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Message Details Modal */}
+        {isMessageDetailsModalOpen && selectedMessage && (
+          <Dialog open={isMessageDetailsModalOpen} onOpenChange={setIsMessageDetailsModalOpen}>
+            <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {selectedMessage.messageType === 'WhatsApp' && <MessageSquare className="h-5 w-5" />}
+                  {selectedMessage.messageType === 'Email' && <Mail className="h-5 w-5" />}
+                  {selectedMessage.messageType === 'SMS' && <Phone className="h-5 w-5" />}
+                  Message Details
+                </DialogTitle>
+                <DialogDescription>
+                  Complete information about this communication
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                {/* Status Badge */}
+                <div className="flex items-center gap-3">
+                  <Badge 
+                    variant="outline"
+                    className={
+                      selectedMessage.status?.toLowerCase() === 'sent' || selectedMessage.status?.toLowerCase() === 'delivered'
+                        ? "bg-green-100 text-green-800 border-green-200 text-base px-4 py-1"
+                        : selectedMessage.status?.toLowerCase() === 'failed'
+                        ? "bg-red-100 text-red-800 border-red-200 text-base px-4 py-1"
+                        : "bg-yellow-100 text-yellow-800 border-yellow-200 text-base px-4 py-1"
+                    }
+                  >
+                    {selectedMessage.status || 'Unknown'}
+                  </Badge>
+                  {selectedMessage.provider && (
+                    <Badge variant="secondary" className="text-sm">
+                      {selectedMessage.provider}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Basic Information */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Communication ID</Label>
+                    <p className="font-mono text-sm mt-1">{selectedMessage.communicationID || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Channel</Label>
+                    <p className="mt-1">{selectedMessage.messageType || selectedMessage.channel || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Sent Date</Label>
+                    <p className="mt-1">
+                      {selectedMessage.createdAt 
+                        ? new Date(selectedMessage.createdAt).toLocaleString('en-US', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
+                          })
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Cost</Label>
+                    <p className="mt-1">
+                      {selectedMessage.cost && Number(selectedMessage.cost) > 0 
+                        ? `₦${Number(selectedMessage.cost).toFixed(2)}`
+                        : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Subject */}
+                {selectedMessage.subject && (
+                  <div>
+                    <Label className="text-muted-foreground">Subject</Label>
+                    <p className="mt-1 font-medium">{selectedMessage.subject}</p>
+                  </div>
+                )}
+
+                {/* Recipients */}
+                <div>
+                  <Label className="text-muted-foreground">Recipient(s)</Label>
+                  <div className="mt-2 space-y-1">
+                    {selectedMessage.to && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">To:</span>
+                        <span className="font-mono">{selectedMessage.to}</span>
+                      </div>
+                    )}
+                    {selectedMessage.recipientType && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Type:</span>
+                        <Badge variant="outline" className="text-xs">{selectedMessage.recipientType}</Badge>
+                      </div>
+                    )}
+                    {selectedMessage.recipientName && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Name:</span>
+                        <span>{selectedMessage.recipientName}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Message Content */}
+                <div>
+                  <Label className="text-muted-foreground">Message Content</Label>
+                  <div className="mt-2 p-4 bg-muted/30 rounded-md border">
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                      {selectedMessage.message || selectedMessage.body || 'No message content'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* External References */}
+                {(selectedMessage.externalMessageId || selectedMessage.externalId) && (
+                  <div>
+                    <Label className="text-muted-foreground">External Message ID</Label>
+                    <p className="font-mono text-xs mt-1 break-all">
+                      {selectedMessage.externalMessageId || selectedMessage.externalId}
+                    </p>
+                  </div>
+                )}
+
+                {/* Failure Reason */}
+                {selectedMessage.failureReason && (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+                    <Label className="text-red-800 font-semibold">Failure Reason</Label>
+                    <p className="text-red-700 text-sm mt-1">{selectedMessage.failureReason}</p>
+                  </div>
+                )}
+
+                {/* Additional Metadata */}
+                <div className="pt-4 border-t">
+                  <details className="cursor-pointer">
+                    <summary className="text-sm font-medium text-muted-foreground hover:text-foreground">
+                      View Raw Data
+                    </summary>
+                    <pre className="mt-2 p-3 bg-muted/30 rounded text-xs overflow-x-auto">
+                      {JSON.stringify(selectedMessage, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsMessageDetailsModalOpen(false);
+                    setSelectedMessage(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
             </DialogContent>
           </Dialog>
         )}
