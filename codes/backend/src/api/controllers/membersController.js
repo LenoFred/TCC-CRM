@@ -225,16 +225,23 @@ class MembersController extends BaseController {
 
     const stats = {
       total: members.length,
-      active: members.filter(m => m.memberStatus === 'Active').length,
-      inactive: members.filter(m => m.memberStatus === 'Inactive').length,
-      children: members.filter(m => m.memberStatus === 'Child').length,
-      guests: members.filter(m => m.memberStatus === 'Guest').length,
+      active: members.filter(m => (m.memberStatus || m.status) === 'Active').length,
+      inactive: members.filter(m => (m.memberStatus || m.status) === 'Inactive').length,
+      children: members.filter(m => (m.memberStatus || m.status) === 'Child').length,
+      guests: members.filter(m => (m.memberStatus || m.status) === 'Guest').length,
       byGender: {
         male: members.filter(m => m.gender === 'Male').length,
         female: members.filter(m => m.gender === 'Female').length,
         other: members.filter(m => m.gender === 'Other').length,
       },
     };
+
+    // Debug logging
+    console.log('=== MEMBERS STATS DEBUG ===');
+    console.log('Total members:', stats.total);
+    console.log('Active members:', stats.active);
+    console.log('Sample member object:', members[0]);
+    console.log('Member statuses found:', [...new Set(members.map(m => m.memberStatus || m.status))]);
 
     res.json({
       success: true,

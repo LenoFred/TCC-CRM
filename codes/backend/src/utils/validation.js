@@ -197,6 +197,22 @@ const authSchemas = {
  * Communication Schemas
  */
 const communicationSchemas = {
+  create: z.object({
+    message: z.string().min(1, 'Message is required'),
+    channel: z.enum(['sms', 'email', 'whatsapp', 'SMS', 'Email', 'WhatsApp']),
+    memberIds: z.array(z.string()).optional(),
+    familyIds: z.array(z.string()).optional(),
+    groupIds: z.array(z.string()).optional(),
+    manualPhoneNumbers: z.array(z.string()).optional(),
+    manualEmails: z.array(z.string()).optional(),
+    subject: z.string().optional(),
+    scheduledAt: z.string().optional(),
+  }).refine(
+    data => data.memberIds?.length || data.familyIds?.length || data.groupIds?.length || 
+           data.manualPhoneNumbers?.length || data.manualEmails?.length,
+    { message: 'At least one recipient (member, family, group, or manual contact) is required' }
+  ),
+  
   send: z.object({
     recipients: z.array(z.string()).min(1, 'At least one recipient is required'),
     message: z.string().min(1, 'Message is required'),
@@ -210,6 +226,12 @@ const communicationSchemas = {
     channel: z.enum(['SMS', 'Email', 'WhatsApp']),
     scheduledAt: commonSchemas.dateTime,
     subject: z.string().optional(),
+  }),
+  
+  update: z.object({
+    status: z.enum(['sent', 'failed', 'pending', 'scheduled']).optional(),
+    sentAt: z.string().optional(),
+    failureReason: z.string().optional(),
   }),
 };
 
