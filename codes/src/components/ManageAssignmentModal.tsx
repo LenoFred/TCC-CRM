@@ -33,6 +33,10 @@ interface Assignment {
   roleID?: string;
   roleName?: string;
   assignmentStatus?: string;
+  type?: string; // 'Self' or undefined for regular assignments
+  event?: string; // For Self type
+  volunteerName?: string; // For Self type
+  volunteerData?: any; // Full volunteer sheet data for Self type
 }
 
 interface ManageAssignmentModalProps {
@@ -261,32 +265,76 @@ export const ManageAssignmentModal = ({ isOpen, onClose, onSave, assignment }: M
         <div className="space-y-6">
           {/* Assignment Details */}
           <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{assignment.groupName || 'N/A'}</span>
-              {assignment.groupType && (
-                <span className="text-muted-foreground">- {assignment.groupType}</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{assignment.roleName || 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">Assigned:</span>
-              <Badge variant="outline" className="text-xs">
-                {assignment.memberName || 'Unassigned'}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge 
-                variant={assignment.assignmentStatus === 'Completed' ? 'default' : 'secondary'}
-                className={assignment.assignmentStatus === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : ''}
-              >
-                {assignment.assignmentStatus || 'Pending'}
-              </Badge>
-            </div>
+            {assignment.type === 'Self' ? (
+              // Show volunteer sheet details for Self-type assignments
+              <>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    Self-Registered Volunteer
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Department:</span>
+                  <span>{assignment.event || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Name:</span>
+                  <span>{assignment.volunteerName || 'N/A'}</span>
+                </div>
+                {assignment.volunteerData && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Phone:</span>
+                      <span>{assignment.volunteerData.phoneNumber || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Email:</span>
+                      <span className="text-sm">{assignment.volunteerData.email || 'N/A'}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-medium text-sm">Availability:</span>
+                      <span className="text-sm text-muted-foreground pl-6">
+                        {assignment.volunteerData.availability || 'Not specified'}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              // Show regular assignment details for staff-assigned volunteers
+              <>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{assignment.groupName || 'N/A'}</span>
+                  {assignment.groupType && (
+                    <span className="text-muted-foreground">- {assignment.groupType}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">{assignment.roleName || 'N/A'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Assigned:</span>
+                  <Badge variant="outline" className="text-xs">
+                    {assignment.memberName || 'Unassigned'}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge 
+                    variant={assignment.assignmentStatus === 'Completed' ? 'default' : 'secondary'}
+                    className={assignment.assignmentStatus === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : ''}
+                  >
+                    {assignment.assignmentStatus || 'Pending'}
+                  </Badge>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Actions */}

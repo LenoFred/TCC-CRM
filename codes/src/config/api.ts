@@ -362,7 +362,7 @@ export const api = {
     
     update: (id: string, data: any) =>
       apiRequest<any>(`/staff/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         body: JSON.stringify(data),
       }),
     
@@ -373,6 +373,24 @@ export const api = {
       apiRequest<any>(`/staff/${id}/permissions`, {
         method: 'PATCH',
         body: JSON.stringify(permissions),
+      }),
+  },
+
+  // Staff Permissions
+  staffPermissions: {
+    // Get all available permissions in the system
+    getAvailable: () =>
+      apiRequest<{ success: boolean; total: number; permissions: any[]; grouped: Record<string, any[]> }>('/staff-permissions/available'),
+    
+    // Get permissions for a specific staff member
+    getByStaffId: (staffId: string) =>
+      apiRequest<{ success: boolean; staffId: string; total: number; permissions: any[] }>(`/staff-permissions/${staffId}`),
+    
+    // Update permissions for a staff member
+    update: (staffId: string, permissions: string[]) =>
+      apiRequest<{ success: boolean; message: string; staffId: string; updated: number; created: number; totalGranted: number }>(`/staff-permissions/${staffId}`, {
+        method: 'POST',
+        body: JSON.stringify({ permissions }),
       }),
   },
 
@@ -592,6 +610,11 @@ export const api = {
 
   // Volunteer Management
   volunteers: {
+    // Volunteer sheet (form submissions)
+    getAll: (params?: URLSearchParams) =>
+      apiRequest<any[]>(`/volunteers${params ? `?${params}` : ''}`),
+
+    // Volunteer roles
     getRoles: () =>
       apiRequest<any[]>('/volunteer-roles'),
     
@@ -692,6 +715,12 @@ export const api = {
     
     getAllGuests: () =>
       apiRequest<{ success: boolean; data: any[]; count: number }>('/business/guests'),
+  },
+
+  // Settings & Integrations
+  settings: {
+    getIntegrationStatus: () =>
+      apiRequest<{ success: boolean; integrations: any }>('/settings/integrations/status'),
   },
 };
 

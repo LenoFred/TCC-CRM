@@ -35,8 +35,40 @@ const StaffPage = () => {
     setIsLoadingStaff(true);
     setStaffError(null);
     try {
-      const data = await api.staff.getAll();
-      setStaffMembers(data);
+      const response: any = await api.staff.getAll();
+      console.log('Staff data received:', response);
+      // Handle response format - could be array or { success, data }
+      const staffData = response?.data || response || [];
+      
+      // Transform backend field names to frontend field names
+      const transformedStaff = (Array.isArray(staffData) ? staffData : []).map((staff: any) => ({
+        ...staff,
+        id: staff.staffID || staff.id,
+        name: staff.fullName || staff.name,
+        role: staff.staffRole || staff.role,
+        phone: staff.phoneNumber || staff.phone,
+      }));
+
+      // Fetch permission counts for each staff member
+      const staffWithPermissions = await Promise.all(
+        transformedStaff.map(async (staff: any) => {
+          try {
+            const permResponse = await api.staffPermissions.getByStaffId(staff.id.toString());
+            return {
+              ...staff,
+              permissionCount: permResponse.total || 0,
+            };
+          } catch (error) {
+            console.error(`Error fetching permissions for staff ${staff.id}:`, error);
+            return {
+              ...staff,
+              permissionCount: 0,
+            };
+          }
+        })
+      );
+      
+      setStaffMembers(staffWithPermissions);
     } catch (error) {
       console.error('Error fetching staff:', error);
       setStaffError(error.message || 'Failed to load staff members');
@@ -67,11 +99,12 @@ const StaffPage = () => {
   const handleAddStaff = async (staffData: any) => {
     setIsSavingStaff(true);
     try {
-      const newStaff = await api.staff.create(staffData);
-      setStaffMembers([...staffMembers, newStaff]);
+      await api.staff.create(staffData);
+      // Refresh the staff list from backend to get updated data with correct field names
+      await fetchStaff();
       toast({
         title: "Staff Member Added",
-        description: `${newStaff.name} has been successfully added`,
+        description: `${staffData.name} has been successfully added`,
       });
       setIsAddStaffModalOpen(false);
     } catch (error) {
@@ -88,11 +121,11 @@ const StaffPage = () => {
 
   const handleEditStaff = async (staffData: any) => {
     setIsSavingStaff(true);
+    console.log('📤 Sending staff update:', staffData);
     try {
-      await api.staff.update(staffData.id, staffData);
-      setStaffMembers(staffMembers.map(staff =>
-        staff.id === staffData.id ? staffData : staff
-      ));
+      const updatedStaff = await api.staff.update(staffData.id, staffData);
+      // Refresh the staff list from backend to get updated data
+      await fetchStaff();
       toast({
         title: "Staff Member Updated",
         description: `${staffData.name}'s profile has been successfully updated`,
@@ -112,11 +145,13 @@ const StaffPage = () => {
   };
 
   const openProfileModal = (staff: any) => {
+    // Data is already transformed in fetchStaff, just pass it through
     setSelectedStaff(staff);
     setIsProfileModalOpen(true);
   };
 
   const openEditModal = (staff: any) => {
+    // Data is already transformed in fetchStaff, just pass it through
     setEditingStaff(staff);
     setIsEditStaffModalOpen(true);
   };
@@ -158,7 +193,9 @@ const StaffPage = () => {
               {isLoadingStaff ? (
                 <Skeleton className="h-8 w-8" />
               ) : (
-                <div className="text-2xl font-bold text-foreground">{staffMembers.filter(s => s.status === 'Active').length}</div>
+                <div className="text-2xl font-bold text-foreground">
+                  {staffMembers.filter((s: any) => s.status === 'Active' || !s.status).length}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -199,10 +236,11 @@ const StaffPage = () => {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead className="hidden md:table-cell">Email</TableHead>
-                    <TableHead className="hidden lg:table-cell">Role</TableHead>
+                    <TableHead>Staff Role</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="hidden sm:table-cell">Permissions</TableHead>
                     <TableHead className="hidden xl:table-cell">Last Login</TableHead>
-                    <TableHead className="hidden lg:table-cell">Permissions</TableHead>
+                    <TableHead className="hidden lg:table-cell">Updated At</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -212,8 +250,9 @@ const StaffPage = () => {
                       <TableRow key={index}>
                         <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                         <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-48" /></TableCell>
-                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                         <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                        <TableCell className="hidden sm:table-cell"><Skeleton className="h-6 w-12" /></TableCell>
                         <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
                         <TableCell className="hidden lg:table-cell"><Skeleton className="h-6 w-20" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-8 w-16" /></TableCell>
@@ -221,7 +260,7 @@ const StaffPage = () => {
                     ))
                   ) : staffError ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <Alert variant="destructive" className="max-w-md mx-auto">
                           <AlertCircle className="h-4 w-4" />
                           <AlertTitle>Staff Error</AlertTitle>
@@ -242,29 +281,34 @@ const StaffPage = () => {
                     </TableRow>
                   ) : staffMembers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         No staff members found
                       </TableCell>
                     </TableRow>
                   ) : (
                     staffMembers.map((staff) => (
                       <TableRow key={staff.id}>
-                        <TableCell className="font-medium">{staff.name}</TableCell>
-                        <TableCell className="hidden md:table-cell">{staff.email}</TableCell>
-                        <TableCell className="hidden lg:table-cell">{staff.role}</TableCell>
+                        <TableCell className="font-medium">{staff.name || staff.email || 'N/A'}</TableCell>
+                        <TableCell className="hidden md:table-cell">{staff.email || 'N/A'}</TableCell>
+                        <TableCell>{staff.role || 'N/A'}</TableCell>
                         <TableCell>
                           <Badge
                             variant="outline"
-                            className="bg-green-100 text-green-800 border-green-200"
+                            className={staff.status === 'Active' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-gray-100 text-gray-800 border-gray-200'}
                           >
-                            {staff.status}
+                            {staff.status || 'Active'}
                           </Badge>
                         </TableCell>
-                        <TableCell className="hidden xl:table-cell">{staff.lastLogin}</TableCell>
-                        <TableCell className="hidden lg:table-cell">
-                          <Badge variant="secondary">
-                            {staff.permissionCount}
+                        <TableCell className="hidden sm:table-cell">
+                          <Badge variant="secondary" className="font-semibold">
+                            {staff.permissionCount || 0}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
+                          {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                          {staff.updatedAt ? new Date(staff.updatedAt).toLocaleString() : 'N/A'}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

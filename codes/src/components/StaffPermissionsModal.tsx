@@ -11,8 +11,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Shield, User } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Shield, User, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/config/api";
 
 interface StaffMember {
   id: number;
@@ -25,6 +28,14 @@ interface StaffMember {
   permissions?: string[];
 }
 
+interface Permission {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  granted: boolean;
+}
+
 interface StaffPermissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -32,66 +43,129 @@ interface StaffPermissionsModalProps {
   staffMember: StaffMember | null;
 }
 
-const AVAILABLE_PERMISSIONS = [
-  { key: "can_view_members", label: "View Members", description: "Access to member profiles and lists" },
-  { key: "can_edit_members", label: "Edit Members", description: "Create and modify member information" },
-  { key: "can_view_donations", label: "View Donations", description: "Access to donation records" },
-  { key: "can_verify_donations", label: "Verify Donations", description: "Verify and approve donations" },
-  { key: "can_take_attendance", label: "Take Attendance", description: "Check-in members at events" },
-  { key: "can_manage_volunteers", label: "Manage Volunteers", description: "Schedule and manage volunteers" },
-  { key: "can_communicate", label: "Send Communications", description: "Send bulk messages to members" },
-  { key: "can_view_analytics", label: "View Analytics", description: "Access to reports and analytics" },
-  { key: "can_manage_staff", label: "Manage Staff", description: "Add/edit staff and permissions" },
-  { key: "can_access_settings", label: "System Settings", description: "Configure system settings" }
-];
-
 export const StaffPermissionsModal = ({ isOpen, onClose, onSave, staffMember }: StaffPermissionsModalProps) => {
   const { toast } = useToast();
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [groupedPermissions, setGroupedPermissions] = useState<Record<string, Permission[]>>({});
 
   useEffect(() => {
     if (staffMember && isOpen) {
-      // Mock permissions based on staff member for demo
-      const mockPermissions = staffMember.id === 1 ? 
-        ['can_view_members', 'can_edit_members', 'can_manage_staff'] : 
-        ['can_view_members'];
-      setSelectedPermissions(mockPermissions);
-    } else {
-      setSelectedPermissions([]);
+      fetchPermissions();
     }
   }, [staffMember, isOpen]);
 
-  const handlePermissionChange = (permission: string, checked: boolean) => {
-    if (checked) {
-      setSelectedPermissions(prev => [...prev, permission]);
-    } else {
-      setSelectedPermissions(prev => prev.filter(p => p !== permission));
+  const fetchPermissions = async () => {
+    if (!staffMember) return;
+    
+    setIsLoading(true);
+    try {
+      const response = await api.staffPermissions.getByStaffId(staffMember.id.toString());
+      setPermissions(response.permissions);
+      
+      // Group permissions by category
+      const grouped = response.permissions.reduce((acc: Record<string, Permission[]>, perm: Permission) => {
+        if (!acc[perm.category]) {
+          acc[perm.category] = [];
+        }
+        acc[perm.category].push(perm);
+        return acc;
+      }, {});
+      setGroupedPermissions(grouped);
+
+      // Set initially selected permissions
+      const granted = new Set(
+        response.permissions
+          .filter((p: Permission) => p.granted)
+          .map((p: Permission) => p.key)
+      );
+      setSelectedPermissions(granted);
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+      toast({
+        title: "Failed to Load Permissions",
+        description: "Please try again or contact support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSave = () => {
+  const handlePermissionChange = (permission: string, checked: boolean) => {
+    setSelectedPermissions(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(permission);
+      } else {
+        newSet.delete(permission);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (category: string) => {
+    const categoryPermissions = groupedPermissions[category] || [];
+    const categoryKeys = categoryPermissions.map(p => p.key);
+    
+    setSelectedPermissions(prev => {
+      const newSet = new Set(prev);
+      categoryKeys.forEach(key => newSet.add(key));
+      return newSet;
+    });
+  };
+
+  const handleDeselectAll = (category: string) => {
+    const categoryPermissions = groupedPermissions[category] || [];
+    const categoryKeys = categoryPermissions.map(p => p.key);
+    
+    setSelectedPermissions(prev => {
+      const newSet = new Set(prev);
+      categoryKeys.forEach(key => newSet.delete(key));
+      return newSet;
+    });
+  };
+
+  const handleSave = async () => {
     if (!staffMember) return;
 
-    const updatedStaffMember: StaffMember = {
-      ...staffMember,
-      permissions: selectedPermissions
-    };
+    setIsSaving(true);
+    try {
+      await api.staffPermissions.update(staffMember.id.toString(), Array.from(selectedPermissions));
+      
+      const updatedStaffMember: StaffMember = {
+        ...staffMember,
+        permissionCount: selectedPermissions.size,
+        permissions: Array.from(selectedPermissions)
+      };
 
-    onSave(updatedStaffMember);
+      onSave(updatedStaffMember);
 
-    toast({
-      title: "Permissions Updated",
-      description: `${staffMember.name}'s permissions have been updated successfully.`,
-    });
+      toast({
+        title: "Permissions Updated",
+        description: `${staffMember.name}'s permissions have been updated successfully.`,
+      });
 
-    onClose();
+      onClose();
+    } catch (error) {
+      console.error('Error saving permissions:', error);
+      toast({
+        title: "Failed to Update Permissions",
+        description: "Please try again or contact support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!staffMember) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
+      <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-hidden mx-4 sm:mx-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -102,76 +176,103 @@ export const StaffPermissionsModal = ({ isOpen, onClose, onSave, staffMember }: 
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-6">
-          {/* Staff Info */}
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center">
-                <User className="w-6 h-6 text-white" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">{staffMember.name}</h3>
-                <p className="text-sm text-muted-foreground">{staffMember.email}</p>
-                <Badge variant="outline" className="mt-1">{staffMember.role}</Badge>
-              </div>
+        <ScrollArea className="max-h-[60vh] pr-4">
+          {isLoading ? (
+            <div className="space-y-4">
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
             </div>
-          </div>
-
-          {/* Permissions */}
-          <div>
-            <Label className="text-base font-medium mb-4 block">System Permissions</Label>
-            <div className="space-y-4 max-h-96 overflow-y-auto">
-              {AVAILABLE_PERMISSIONS.map((permission) => (
-                <div key={permission.key} className="flex items-start space-x-3 p-3 border rounded-lg">
-                  <Checkbox
-                    id={permission.key}
-                    checked={selectedPermissions.includes(permission.key)}
-                    onCheckedChange={(checked) => 
-                      handlePermissionChange(permission.key, checked as boolean)
-                    }
-                    className="mt-1"
-                  />
+          ) : (
+            <div className="space-y-6">
+              {/* Staff Info */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center">
+                    <User className="w-6 h-6 text-white" />
+                  </div>
                   <div className="flex-1">
-                    <Label htmlFor={permission.key} className="font-medium cursor-pointer">
-                      {permission.label}
-                    </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {permission.description}
-                    </p>
+                    <h3 className="font-semibold">{staffMember.name}</h3>
+                    <p className="text-sm text-muted-foreground">{staffMember.email}</p>
+                    <Badge variant="outline" className="mt-1">{staffMember.role}</Badge>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-primary">{selectedPermissions.size}</p>
+                    <p className="text-xs text-muted-foreground">Permissions</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Current Permissions Summary */}
-          <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-            <Label className="text-sm font-medium text-primary">
-              Selected Permissions ({selectedPermissions.length})
-            </Label>
-            <div className="flex flex-wrap gap-1 mt-2">
-              {selectedPermissions.length > 0 ? (
-                selectedPermissions.map((perm) => {
-                  const permission = AVAILABLE_PERMISSIONS.find(p => p.key === perm);
-                  return (
-                    <Badge key={perm} variant="secondary" className="text-xs">
-                      {permission?.label}
-                    </Badge>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">No permissions selected</p>
-              )}
+              {/* Permissions by Category */}
+              {Object.keys(groupedPermissions).sort().map(category => {
+                const categoryPerms = groupedPermissions[category];
+                const allSelected = categoryPerms.every(p => selectedPermissions.has(p.key));
+                const someSelected = categoryPerms.some(p => selectedPermissions.has(p.key));
+
+                return (
+                  <div key={category} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-base">{category}</h3>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleSelectAll(category)}
+                          disabled={allSelected}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          All
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeselectAll(category)}
+                          disabled={!someSelected}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          None
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {categoryPerms.map((permission) => (
+                        <div
+                          key={permission.key}
+                          className="flex items-start space-x-3 p-3 rounded-md hover:bg-muted/50 transition-colors"
+                        >
+                          <Checkbox
+                            id={permission.key}
+                            checked={selectedPermissions.has(permission.key)}
+                            onCheckedChange={(checked) => 
+                              handlePermissionChange(permission.key, checked as boolean)
+                            }
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <Label htmlFor={permission.key} className="font-medium cursor-pointer">
+                              {permission.label}
+                            </Label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {permission.description}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        </div>
+          )}
+        </ScrollArea>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>
-            Save Permissions
+          <Button onClick={handleSave} disabled={isLoading || isSaving}>
+            {isSaving ? "Saving..." : "Save Permissions"}
           </Button>
         </DialogFooter>
       </DialogContent>

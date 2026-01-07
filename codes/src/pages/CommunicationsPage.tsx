@@ -1708,9 +1708,9 @@ const CommunicationsPage = () => {
                               const filtered = (Array.isArray(staff) ? staff : [])
                                 .filter((staffMember: any) => {
                                   if (!searchTerm) return true;
-                                  const name = (staffMember?.name || '').toLowerCase();
+                                  const name = (staffMember?.fullName || staffMember?.name || '').toLowerCase();
                                   const email = (staffMember?.email || '').toLowerCase();
-                                  const role = (staffMember?.role || '').toLowerCase();
+                                  const role = (staffMember?.staffRole || staffMember?.role || '').toLowerCase();
                                   return name.includes(searchTerm) || email.includes(searchTerm) || role.includes(searchTerm);
                                 });
                               console.log('Filtered staff:', { searchTerm, totalStaff: staff.length, filteredCount: filtered.length });
@@ -1740,13 +1740,13 @@ const CommunicationsPage = () => {
                                     htmlFor={`staff-${staffId}`}
                                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex-1"
                                   >
-                                    {staffMember.name || 'Unnamed Staff'}
+                                    {staffMember.fullName || staffMember.name || 'Unnamed Staff'}
                                     {staffMember.email && (
                                       <span className="text-xs text-muted-foreground ml-1">({staffMember.email})</span>
                                     )}
                                   </label>
                                   <Badge variant="outline" className="text-xs">
-                                    {staffMember.role || 'Staff'}
+                                    {staffMember.staffRole || staffMember.role || 'Staff'}
                                   </Badge>
                                 </div>
                               );
@@ -2227,8 +2227,12 @@ const CommunicationsPage = () => {
                           let recipientData: any = {
                             message: messageContent,
                             channel: communicationChannel,
-                            emailProvider: communicationChannel === 'email' ? emailProvider : undefined
                           };
+
+                          // Only add emailProvider if channel is email
+                          if (communicationChannel === 'email') {
+                            recipientData.emailProvider = emailProvider;
+                          }
 
                           // Send all selected recipients from all categories (not just current category)
                           
@@ -2294,6 +2298,8 @@ const CommunicationsPage = () => {
                           if (manualPhoneNumbers.length > 0) {
                             recipientData.manualPhoneNumbers = manualPhoneNumbers;
                           }
+
+                          console.log('📤 Sending communication with data:', recipientData);
 
                           await api.communications.send(recipientData);
                           
@@ -2947,7 +2953,7 @@ const CommunicationsPage = () => {
                               <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-2">
                                 {staff.filter((staffMember: any) => {
                                   const searchTerm = staffSearch.toLowerCase();
-                                  return !searchTerm || (staffMember?.name || '').toLowerCase().includes(searchTerm);
+                                  return !searchTerm || (staffMember?.fullName || staffMember?.name || '').toLowerCase().includes(searchTerm);
                                 }).map((staffMember: any) => {
                                   const staffId = String(staffMember.id || staffMember.staffID || staffMember.x);
                                   return (
@@ -2964,9 +2970,9 @@ const CommunicationsPage = () => {
                                         }}
                                       />
                                       <label htmlFor={`staff-${staffId}`} className="text-sm flex-1 cursor-pointer">
-                                        {staffMember.name || 'Unnamed Staff'}
+                                        {staffMember.fullName || staffMember.name || 'Unnamed Staff'}
                                       </label>
-                                      <Badge variant="outline" className="text-xs">{staffMember.role || 'Staff'}</Badge>
+                                      <Badge variant="outline" className="text-xs">{staffMember.staffRole || staffMember.role || 'Staff'}</Badge>
                                     </div>
                                   );
                                 })}

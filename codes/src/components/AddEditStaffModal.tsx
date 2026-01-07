@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,15 +29,42 @@ interface AddEditStaffModalProps {
 
 export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }: AddEditStaffModalProps) {
   const { toast } = useToast();
+  
+  // Initialize form data when modal opens or staffMember changes
   const [formData, setFormData] = useState<Partial<StaffMember>>({
-    name: staffMember?.name || "",
-    email: staffMember?.email || "",
-    role: staffMember?.role || "",
-    status: staffMember?.status || "Active",
-    phone: staffMember?.phone || "",
-    jobTitle: staffMember?.jobTitle || "",
-    appointmentDate: staffMember?.appointmentDate || "",
+    name: "",
+    email: "",
+    role: "",
+    status: "Active",
+    phone: "",
+    jobTitle: "",
+    appointmentDate: "",
   });
+
+  // Update form data when staffMember changes
+  useEffect(() => {
+    if (staffMember && mode === 'edit') {
+      setFormData({
+        name: staffMember.name || "",
+        email: staffMember.email || "",
+        role: staffMember.role || "",
+        status: staffMember.status || "Active",
+        phone: staffMember.phone || "",
+        jobTitle: staffMember.jobTitle || "",
+        appointmentDate: staffMember.appointmentDate || "",
+      });
+    } else if (mode === 'add') {
+      setFormData({
+        name: "",
+        email: "",
+        role: "",
+        status: "Active",
+        phone: "",
+        jobTitle: "",
+        appointmentDate: "",
+      });
+    }
+  }, [staffMember, mode]);
 
   const handleSave = () => {
     if (!formData.name || !formData.email || !formData.role) {

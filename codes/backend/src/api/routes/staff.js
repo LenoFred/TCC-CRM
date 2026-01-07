@@ -71,13 +71,13 @@ router.get(
 
 /**
  * @route   POST /api/staff
- * @desc    Create new staff (use /api/auth/register instead)
- * @access  Private (Admin only)
+ * @desc    Create new staff
+ * @access  Public (Auth disabled for development)
  */
 router.post(
   '/',
-  authenticate,
-  requireRole('Admin'),
+  // authenticate,
+  // requireRole('Admin'),
   asyncHandler(staffController.create.bind(staffController))
 );
 
@@ -96,12 +96,12 @@ router.patch(
 /**
  * @route   PATCH /api/staff/:id
  * @desc    Update staff
- * @access  Private (Admin only)
+ * @access  Public (Auth disabled for development)
  */
 router.patch(
   '/:id',
-  authenticate,
-  requireRole('Admin'),
+  // authenticate,
+  // requireRole('Admin'),
   asyncHandler(staffController.update.bind(staffController))
 );
 

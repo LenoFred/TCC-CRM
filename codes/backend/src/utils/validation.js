@@ -203,14 +203,19 @@ const communicationSchemas = {
     memberIds: z.array(z.string()).optional(),
     familyIds: z.array(z.string()).optional(),
     groupIds: z.array(z.string()).optional(),
+    staffIds: z.array(z.string()).optional(),
+    guestIds: z.array(z.string()).optional(),
+    volunteerTeamIds: z.array(z.string()).optional(),
     manualPhoneNumbers: z.array(z.string()).optional(),
     manualEmails: z.array(z.string()).optional(),
     subject: z.string().optional(),
+    emailProvider: z.string().optional(),
     scheduledAt: z.string().optional(),
   }).refine(
     data => data.memberIds?.length || data.familyIds?.length || data.groupIds?.length || 
+           data.staffIds?.length || data.guestIds?.length || data.volunteerTeamIds?.length ||
            data.manualPhoneNumbers?.length || data.manualEmails?.length,
-    { message: 'At least one recipient (member, family, group, or manual contact) is required' }
+    { message: 'At least one recipient (member, family, group, staff, guest, volunteer, or manual contact) is required' }
   ),
   
   send: z.object({

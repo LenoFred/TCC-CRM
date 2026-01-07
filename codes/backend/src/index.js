@@ -21,15 +21,18 @@ const groupMembersRoutes = require('./api/routes/groupMembers');
 const gatheringsRoutes = require('./api/routes/gatherings');
 const attendanceRoutes = require('./api/routes/attendance');
 const donationsRoutes = require('./api/routes/donations');
+const volunteersRoutes = require('./api/routes/volunteers');
 const volunteerRolesRoutes = require('./api/routes/volunteerRoles');
 const volunteerAssignmentsRoutes = require('./api/routes/volunteerAssignments');
 const supportRequestsRoutes = require('./api/routes/supportRequests');
 const staffRoutes = require('./api/routes/staff');
+const staffPermissionsRoutes = require('./api/routes/staffPermissions');
 const communicationsRoutes = require('./api/routes/communications');
 const templatesRoutes = require('./api/routes/templates'); // NEW: Template-based messaging
 const formsRoutes = require('./api/routes/forms'); // NEW: Form ingestion endpoints
 const businessLogicRoutes = require('./api/routes/businessLogic');
 const analyticsRoutes = require('./api/routes/analytics');
+const settingsRoutes = require('./api/routes/settings'); // NEW: Settings and integrations
 
 // Create Express app
 const app = express();
@@ -178,15 +181,18 @@ app.use('/api/group-members', groupMembersRoutes);
 app.use('/api/gatherings', gatheringsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/donations', donationsRoutes);
+app.use('/api/volunteers', volunteersRoutes);
 app.use('/api/volunteer-roles', volunteerRolesRoutes);
 app.use('/api/volunteer-assignments', volunteerAssignmentsRoutes);
 app.use('/api/support-requests', supportRequestsRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/staff-permissions', staffPermissionsRoutes);
 app.use('/api/communications', communicationsRoutes);
 app.use('/api/templates', templatesRoutes); // NEW: Template management API
 app.use('/api/forms', formsRoutes); // NEW: Form ingestion API
 app.use('/api/business', businessLogicRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/settings', settingsRoutes); // NEW: Settings and integrations API
 
 // ============================================
 // Serve Frontend (Production)

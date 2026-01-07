@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Mail, Phone, Calendar, Shield, Settings } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { User, Mail, Phone, Calendar, Shield, Settings, Check } from "lucide-react";
 import { StaffPermissionsModal } from "./StaffPermissionsModal";
+import { api } from "@/config/api";
 
 interface StaffMember {
   id: number;
@@ -17,7 +19,8 @@ interface StaffMember {
   phone?: string;
   jobTitle?: string;
   appointmentDate?: string;
-  lastLogin: string;
+  lastLogin?: string;
+  updatedAt?: string;
   permissionCount: number;
 }
 
@@ -30,12 +33,41 @@ interface StaffProfileModalProps {
 
 export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: StaffProfileModalProps) {
   const [isPermissionsModalOpen, setIsPermissionsModalOpen] = useState(false);
+  const [grantedPermissions, setGrantedPermissions] = useState<any[]>([]);
+  const [isLoadingPermissions, setIsLoadingPermissions] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && staffMember) {
+      fetchGrantedPermissions();
+    }
+  }, [isOpen, staffMember]);
+
+  const fetchGrantedPermissions = async () => {
+    if (!staffMember) return;
+    
+    setIsLoadingPermissions(true);
+    try {
+      const response = await api.staffPermissions.getByStaffId(staffMember.id.toString());
+      const granted = response.permissions.filter((p: any) => p.granted);
+      setGrantedPermissions(granted);
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+      setGrantedPermissions([]);
+    } finally {
+      setIsLoadingPermissions(false);
+    }
+  };
 
   if (!staffMember) return null;
 
   const handleEditProfile = () => {
     onEdit(staffMember);
     onClose();
+  };
+
+  const handlePermissionsSaved = (updatedStaff: any) => {
+    // Refresh permissions list
+    fetchGrantedPermissions();
   };
 
   return (
@@ -49,7 +81,7 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
               </div>
               <div>
                 <h3 className="text-lg font-semibold">{staffMember.name}</h3>
-                <p className="text-sm text-muted-foreground">{staffMember.role}</p>
+                <p className="text-sm text-muted-foreground">{staffMember.role || 'Staff Member'}</p>
               </div>
             </DialogTitle>
           </DialogHeader>
@@ -112,11 +144,11 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm text-muted-foreground">Staff Role</Label>
-                      <p className="font-medium">{staffMember.role}</p>
+                      <p className="font-medium">{staffMember.role || 'N/A'}</p>
                     </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">Job Title</Label>
-                      <p className="font-medium">{staffMember.jobTitle || staffMember.role}</p>
+                      <p className="font-medium">{staffMember.jobTitle || staffMember.role || 'N/A'}</p>
                     </div>
                   </div>
                   
@@ -130,8 +162,17 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
                     </div>
                     <div>
                       <Label className="text-sm text-muted-foreground">Last Login</Label>
-                      <p className="font-medium">{staffMember.lastLogin}</p>
+                      <p className="font-medium text-xs">
+                        {staffMember.lastLogin ? new Date(staffMember.lastLogin).toLocaleString() : 'Never'}
+                      </p>
                     </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Last Updated</Label>
+                    <p className="font-medium text-xs">
+                      {staffMember.updatedAt ? new Date(staffMember.updatedAt).toLocaleString() : 'N/A'}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -150,7 +191,7 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
                     <div>
                       <p className="font-medium">Current Permissions</p>
                       <p className="text-sm text-muted-foreground">
-                        This staff member has {staffMember.permissionCount} permissions assigned
+                        This staff member has {grantedPermissions.length} permissions assigned
                       </p>
                     </div>
                     <Button onClick={() => setIsPermissionsModalOpen(true)}>
@@ -158,9 +199,39 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
                     </Button>
                   </div>
                   
-                  <Badge variant="outline" className="mr-2 mb-2">
-                    {staffMember.permissionCount} permissions active
-                  </Badge>
+                  {isLoadingPermissions ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                      <Skeleton className="h-8 w-full" />
+                    </div>
+                  ) : grantedPermissions.length > 0 ? (
+                    <div className="space-y-3 max-h-80 overflow-y-auto">
+                      {grantedPermissions.map((permission) => (
+                        <div
+                          key={permission.key}
+                          className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg"
+                        >
+                          <div className="mt-0.5">
+                            <Check className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{permission.label}</p>
+                            <p className="text-xs text-muted-foreground">{permission.description}</p>
+                            <Badge variant="outline" className="mt-1 text-xs">
+                              {permission.category}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Shield className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No permissions assigned yet</p>
+                      <p className="text-sm">Click "Manage Permissions" to get started</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -181,10 +252,7 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
       <StaffPermissionsModal
         isOpen={isPermissionsModalOpen}
         onClose={() => setIsPermissionsModalOpen(false)}
-        onSave={(updatedStaff) => {
-          // Handle permission updates
-          console.log("Permissions updated:", updatedStaff);
-        }}
+        onSave={handlePermissionsSaved}
         staffMember={staffMember}
       />
     </>
