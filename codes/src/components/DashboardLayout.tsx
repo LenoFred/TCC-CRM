@@ -9,7 +9,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         
@@ -19,7 +19,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             <SidebarTrigger className="mr-4" />
             
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-semibold text-primary truncate">TCC CRM</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-primary truncate">TCC Church</h1>
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">

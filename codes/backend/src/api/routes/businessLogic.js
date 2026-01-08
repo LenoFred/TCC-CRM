@@ -124,10 +124,13 @@ router.get(
       const sheetsService = require('../../services/sheetsService');
       
       // Fetch all required data
-      const [members, families, groups] = await Promise.all([
+      const [members, families, groups, donations, gatherings, staff] = await Promise.all([
         sheetsService.getSheetObjects('Members'),
         sheetsService.getSheetObjects('Families'),
         sheetsService.getSheetObjects('Groups'),
+        sheetsService.getSheetObjects('Donations'),
+        sheetsService.getSheetObjects('Gatherings'),
+        sheetsService.getSheetObjects('Staff'),
       ]);
       
       // Calculate stats
@@ -136,6 +139,25 @@ router.get(
       const guestMembers = members.filter(m => m.status === 'Guest').length;
       const totalFamilies = families.length;
       const totalGroups = groups.filter(g => g.isActive === 'true' || g.isActive === true).length;
+      const totalDonations = donations.length;
+      const activeStaff = staff.filter(s => s.status === 'Active').length;
+      
+      // Get upcoming gatherings (from today onwards, sorted by date, max 5)
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+      const upcomingEvents = gatherings
+        .filter(g => g.gatheringDate && g.gatheringDate >= today)
+        .sort((a, b) => {
+          const dateA = new Date(a.gatheringDate);
+          const dateB = new Date(b.gatheringDate);
+          return dateA.getTime() - dateB.getTime();
+        })
+        .slice(0, 5)
+        .map(g => ({
+          gatheringID: g.gatheringID,
+          gatheringName: g.gatheringName,
+          gatheringDate: g.gatheringDate,
+          gatheringType: g.gatheringType,
+        }));
       
       res.status(200).json({
         success: true,
@@ -145,6 +167,9 @@ router.get(
           guestMembers,
           totalFamilies,
           totalGroups,
+          totalDonations,
+          activeStaff,
+          upcomingEvents,
         },
       });
     } catch (error) {
@@ -165,24 +190,27 @@ router.get(
   async (req, res, next) => {
     try {
       const sheetsService = require('../../services/sheetsService');
-      const { limit = 20 } = req.query;
+      const { limit = 10 } = req.query;
       
       // Fetch recent data from various sheets
-      const [members, families, attendance, donations, volunteerAssignments] = await Promise.all([
+      const [members, guests, families, gatherings, volunteerAssignments, staff] = await Promise.all([
         sheetsService.getSheetObjects('Members'),
+        sheetsService.getSheetObjects('Guest'),
         sheetsService.getSheetObjects('Families'),
-        sheetsService.getSheetObjects('Attendance'),
-        sheetsService.getSheetObjects('Donations'),
+        sheetsService.getSheetObjects('Gatherings'),
         sheetsService.getSheetObjects('VolunteerAssignments'),
+        sheetsService.getSheetObjects('Staff'),
       ]);
       
       const activities = [];
       
       console.log('=== ACTIVITY TRACKING DEBUG ===');
       console.log('Total members:', members.length);
-      console.log('Members with updatedAt:', members.filter(m => m.updatedAt).length);
-      console.log('Sample member with updatedAt:', members.find(m => m.updatedAt));
-      console.log('Sample member fields:', members[0] ? Object.keys(members[0]) : 'No members');
+      console.log('Total guests:', guests.length);
+      console.log('Total families:', families.length);
+      console.log('Total gatherings:', gatherings.length);
+      console.log('Total volunteer assignments:', volunteerAssignments.length);
+      console.log('Total staff:', staff.length);
       
       // Add member registrations - use createdAt or joinDate as fallback
       members
@@ -194,10 +222,10 @@ router.get(
           
           activities.push({
             id: `member-create-${m.memberID}`,
-            type: m.status === 'Guest' ? 'Guest Visit' : 'Member Registration',
-            description: `${m.firstName} ${m.lastName} ${m.status === 'Guest' ? 'visited' : 'registered'}`,
+            type: 'Member Registration',
+            description: `${m.firstName} ${m.lastName} registered`,
             timestamp: fullTimestamp,
-            icon: m.status === 'Guest' ? 'UserPlus' : 'UserCheck',
+            icon: 'UserCheck',
             memberName: `${m.firstName} ${m.lastName}`,
           });
         });
@@ -212,9 +240,6 @@ router.get(
       });
       
       console.log('Members qualifying for update activity:', membersWithUpdates.length);
-      if (membersWithUpdates.length > 0) {
-        console.log('Sample update:', membersWithUpdates[0]);
-      }
       
       membersWithUpdates.forEach(m => {
         activities.push({
@@ -226,6 +251,23 @@ router.get(
           memberName: `${m.firstName} ${m.lastName}`,
         });
       });
+      
+      // Add guest visits - use Date column
+      guests
+        .filter(g => g.Date || g.date)
+        .forEach(g => {
+          const timestamp = g.Date || g.date;
+          const fullTimestamp = timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`;
+          
+          activities.push({
+            id: `guest-visit-${g.guestID || g.id}`,
+            type: 'Guest Visit',
+            description: `${g.firstName || g.name || 'Guest'} ${g.lastName || ''} visited`,
+            timestamp: fullTimestamp,
+            icon: 'UserPlus',
+            memberName: `${g.firstName || g.name || 'Guest'} ${g.lastName || ''}`,
+          });
+        });
       
       // Add family activities
       families
@@ -246,52 +288,72 @@ router.get(
           });
         });
       
-      // Add attendance check-ins
-      attendance
-        .filter(a => a.createdAt || a.attendanceDate)
-        .forEach(a => {
-          const member = members.find(m => m.memberID === a.memberID);
-          activities.push({
-            id: `attendance-${a.attendanceID}`,
-            type: 'Attendance Check-in',
-            description: `${member ? `${member.firstName} ${member.lastName}` : 'Member'} checked in to ${a.serviceName || a.eventType}`,
-            timestamp: a.createdAt || a.attendanceDate,
-            icon: 'CheckCircle',
-            memberName: member ? `${member.firstName} ${member.lastName}` : 'Unknown',
-          });
-        });
-      
-      // Add donations - use createdAt or donationDate or date
-      donations
-        .filter(d => d.createdAt || d.donationDate || d.date)
-        .forEach(d => {
-          const member = members.find(m => m.memberID === d.memberID);
-          const timestamp = d.createdAt || d.donationDate || d.date;
+      // Add gatherings - use gatheringDate
+      gatherings
+        .filter(g => g.gatheringDate || g.date)
+        .forEach(g => {
+          const timestamp = g.gatheringDate || g.date;
           const fullTimestamp = timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`;
           
           activities.push({
-            id: `donation-${d.donationID}`,
-            type: 'Donation',
-            description: `${member ? `${member.firstName} ${member.lastName}` : 'Member'} donated ₦${parseFloat(d.amount || 0).toLocaleString()} (${d.fund || d.category || 'General'})`,
+            id: `gathering-${g.gatheringID}`,
+            type: 'Event Created',
+            description: `New Event Created: ${g.gatheringName || g.name || 'Untitled Event'}`,
             timestamp: fullTimestamp,
-            icon: 'DollarSign',
-            memberName: member ? `${member.firstName} ${member.lastName}` : 'Unknown',
-            status: d.status || d.verificationStatus,
+            icon: 'Calendar',
+            memberName: g.gatheringName || 'Event',
           });
         });
       
-      // Add volunteer assignments
+      // Add volunteer assignments - use assignmentDate
       volunteerAssignments
-        .filter(v => v.assignedDate)
+        .filter(v => v.assignmentDate || v.date)
         .forEach(v => {
           const member = members.find(m => m.memberID === v.memberID);
+          const timestamp = v.assignmentDate || v.date;
+          const fullTimestamp = timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`;
+          
           activities.push({
-            id: `volunteer-${v.assignmentID}`,
+            id: `volunteer-${v.assignmentID || v.id}`,
             type: 'Volunteer Assignment',
             description: `${member ? `${member.firstName} ${member.lastName}` : 'Member'} assigned to volunteer role`,
-            timestamp: v.assignedDate,
+            timestamp: fullTimestamp,
             icon: 'Heart',
             memberName: member ? `${member.firstName} ${member.lastName}` : 'Unknown',
+          });
+        });
+      
+      // Add staff login activities - use lastLogin
+      staff
+        .filter(s => s.lastLogin)
+        .forEach(s => {
+          const timestamp = s.lastLogin;
+          const fullTimestamp = timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`;
+          
+          activities.push({
+            id: `staff-login-${s.staffID}-${s.lastLogin}`,
+            type: 'Staff Login',
+            description: `${s.firstName} ${s.lastName} logged in`,
+            timestamp: fullTimestamp,
+            icon: 'UserCheck',
+            memberName: `${s.firstName} ${s.lastName}`,
+          });
+        });
+      
+      // Add staff profile updates - use updatedAt
+      staff
+        .filter(s => s.updatedAt)
+        .forEach(s => {
+          const timestamp = s.updatedAt;
+          const fullTimestamp = timestamp.includes('T') ? timestamp : `${timestamp}T00:00:00Z`;
+          
+          activities.push({
+            id: `staff-update-${s.staffID}-${s.updatedAt}`,
+            type: 'Staff Update',
+            description: `${s.firstName} ${s.lastName}'s profile was updated`,
+            timestamp: fullTimestamp,
+            icon: 'UserCheck',
+            memberName: `${s.firstName} ${s.lastName}`,
           });
         });
       

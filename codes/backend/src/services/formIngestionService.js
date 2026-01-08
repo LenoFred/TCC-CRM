@@ -612,21 +612,24 @@ class FormIngestionService {
           /**
            * Volunteer Sheet Structure (6 columns):
            * [0] VolunteerID, [1] FullName, [2] PhoneNumber, [3] Email,
-           * [4] DepartmentOfInterest, [5] Availability
+           * [4] DepartmentOfInterest, [5] Availability, [6] Date
            */
+          const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
           const volunteerData = [
             this.generateId('VOL', 'volunteer'), // [0] VolunteerID - AUTO
             formData.FullName,                   // [1] FullName - FORM
             formData.PhoneNumber,                // [2] PhoneNumber - FORM
             formData.Email,                      // [3] Email - FORM
             formData.DepartmentOfInterest,       // [4] DepartmentOfInterest - FORM
-            formData.Availability                // [5] Availability - FORM
+            formData.Availability,               // [5] Availability - FORM
+            currentDate,                         // [6] Date - AUTO (YYYY-MM-DD)
+            'Scheduled'                          // [7] Status - AUTO (default)
           ];
 
           // ⚠️ CRITICAL: Route to Volunteer sheet (NOT VolunteerAssignments)
           await this.sheets.spreadsheets.values.append({
             spreadsheetId: this.MAIN_SHEET_ID,
-            range: 'Volunteer!A:F',
+            range: 'Volunteer!A:H',
             valueInputOption: 'RAW',
             resource: { values: [volunteerData] }
           });

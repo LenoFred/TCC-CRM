@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, Plus, Calendar, UserCheck, Settings, AlertCircle, RefreshCw } from "lucide-react";
+import { Users, Plus, Calendar, UserCheck, Settings, AlertCircle, RefreshCw, Filter, MessageSquare, CheckCircle, XCircle } from "lucide-react";
 import { api } from "@/config/api";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,15 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -53,6 +62,14 @@ const VolunteersPage = () => {
   const [rolesError, setRolesError] = useState(null);
   const [assignmentsError, setAssignmentsError] = useState(null);
   const [pastAssignmentsError, setPastAssignmentsError] = useState(null);
+
+  // Bulk selection state
+  const [selectedAssignmentIDs, setSelectedAssignmentIDs] = useState<string[]>([]);
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isPerformingAction, setIsPerformingAction] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageText, setMessageText] = useState('');
 
   // Past Volunteers Filters
   const [pastVolunteerFilters, setPastVolunteerFilters] = useState({
@@ -100,18 +117,23 @@ const VolunteersPage = () => {
         a.assignmentStatus === 'Scheduled'
       );
 
-      // Transform volunteer sheet data to look like assignments with type="Self"
-      const selfAssignments = volunteersData.map((volunteer: any) => ({
-        assignmentID: volunteer.volunteerID,
-        type: 'Self',
-        event: volunteer.departmentOfInterest || 'N/A',
-        roleName: volunteer.departmentOfInterest || 'N/A',
-        volunteerName: volunteer.fullName || 'N/A',
-        assignmentStatus: 'Scheduled',
-        assignedDate: volunteer.date || new Date().toISOString().split('T')[0],
-        // Store full volunteer data for the modal
-        volunteerData: volunteer,
-      }));
+      // Transform volunteer sheet data - ONLY Scheduled status
+      const selfAssignments = volunteersData
+        .filter((volunteer: any) => 
+          (volunteer.status === 'Scheduled' || volunteer.Status === 'Scheduled')
+        )
+        .map((volunteer: any) => ({
+          assignmentID: volunteer.volunteerID,
+          type: 'Self',
+          event: volunteer.departmentOfInterest || 'N/A',
+          roleName: volunteer.departmentOfInterest || 'N/A',
+          volunteerName: volunteer.fullName || 'N/A',
+          status: volunteer.status || volunteer.Status || 'Scheduled',
+          assignmentStatus: volunteer.status || volunteer.Status || 'Scheduled',
+          assignedDate: volunteer.date || new Date().toISOString().split('T')[0],
+          // Store full volunteer data for the modal
+          volunteerData: volunteer,
+        }));
 
       // Merge both arrays: regular assignments + self-assignments
       const allAssignments = [...scheduledAssignments, ...selfAssignments];
@@ -241,6 +263,168 @@ const VolunteersPage = () => {
       });
     } finally {
       setIsSavingRole(false);
+    }
+  };
+
+  // Bulk selection handlers
+  const handleSelectAll = () => {
+    if (selectedAssignmentIDs.length === filteredAssignments.length) {
+      setSelectedAssignmentIDs([]);
+    } else {
+      setSelectedAssignmentIDs(filteredAssignments.map((a: any) => a.assignmentID || a.id));
+    }
+  };
+
+  const handleSelectAssignment = (assignmentID: string) => {
+    setSelectedAssignmentIDs(prev =>
+      prev.includes(assignmentID)
+        ? prev.filter(id => id !== assignmentID)
+        : [...prev, assignmentID]
+    );
+  };
+
+  const filteredAssignments = upcomingAssignments.filter((assignment: any) => {
+    if (roleFilter === 'all') return true;
+    return assignment.roleID === roleFilter || assignment.roleName === roleFilter;
+  });
+
+  const selectedAssignments = upcomingAssignments.filter((a: any) => 
+    selectedAssignmentIDs.includes(a.assignmentID || a.id)
+  );
+
+  const handleBulkMarkAsConfirmed = async () => {
+    setIsPerformingAction(true);
+    try {
+      for (const assignmentID of selectedAssignmentIDs) {
+        const assignment = upcomingAssignments.find((a: any) => (a.assignmentID || a.id) === assignmentID);
+        if (!assignment) continue;
+
+        if (assignment.type === 'Self') {
+          // Update Status in Volunteer sheet
+          await api.volunteers.update(assignment.volunteerID, { status: 'Scheduled' });
+        } else {
+          // Update AssignmentStatus in VolunteerAssignments sheet
+          await api.volunteers.updateAssignment(assignmentID, { assignmentStatus: 'Scheduled' });
+        }
+      }
+
+      toast({
+        title: "Assignments Confirmed",
+        description: `${selectedAssignmentIDs.length} assignment(s) marked as confirmed`,
+      });
+
+      setSelectedAssignmentIDs([]);
+      await fetchAssignments();
+    } catch (error) {
+      console.error('Error confirming assignments:', error);
+      toast({
+        title: "Failed to Confirm",
+        description: "Please try again or contact support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPerformingAction(false);
+    }
+  };
+
+  const handleBulkCancelAssignment = async () => {
+    if (!confirm(`Are you sure you want to cancel ${selectedAssignmentIDs.length} assignment(s)?`)) {
+      return;
+    }
+
+    setIsPerformingAction(true);
+    try {
+      for (const assignmentID of selectedAssignmentIDs) {
+        const assignment = upcomingAssignments.find((a: any) => (a.assignmentID || a.id) === assignmentID);
+        if (!assignment) continue;
+
+        if (assignment.type === 'Self') {
+          // Update Status in Volunteer sheet
+          await api.volunteers.update(assignment.volunteerID, { status: 'Cancelled' });
+        } else {
+          // Update AssignmentStatus in VolunteerAssignments sheet
+          await api.volunteers.updateAssignment(assignmentID, { assignmentStatus: 'Cancelled' });
+        }
+      }
+
+      toast({
+        title: "Assignments Cancelled",
+        description: `${selectedAssignmentIDs.length} assignment(s) cancelled successfully`,
+      });
+
+      setSelectedAssignmentIDs([]);
+      await fetchAssignments();
+    } catch (error) {
+      console.error('Error cancelling assignments:', error);
+      toast({
+        title: "Failed to Cancel",
+        description: "Please try again or contact support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPerformingAction(false);
+    }
+  };
+
+  const handleOpenSendMessage = () => {
+    setShowMessageModal(true);
+    setMessageText('');
+  };
+
+  const handleSendBulkMessage = async () => {
+    if (!messageText.trim()) {
+      toast({
+        title: "Message Required",
+        description: "Please enter a message to send",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSendingMessage(true);
+    try {
+      // Get phone numbers of selected volunteers
+      const phoneNumbers = selectedAssignments
+        .map((a: any) => {
+          if (a.type === 'Self') {
+            return a.phone || a.phoneNumber;
+          } else {
+            // For staff-assigned, we'd need member's phone - placeholder for now
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      if (phoneNumbers.length === 0) {
+        toast({
+          title: "No Phone Numbers",
+          description: "Selected volunteers don't have phone numbers",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Send messages (placeholder - implement based on your messaging service)
+      console.log('Sending message to:', phoneNumbers);
+      console.log('Message:', messageText);
+
+      toast({
+        title: "Messages Sent",
+        description: `Message sent to ${phoneNumbers.length} volunteer(s)`,
+      });
+
+      setShowMessageModal(false);
+      setMessageText('');
+      setSelectedAssignmentIDs([]);
+    } catch (error) {
+      console.error('Error sending messages:', error);
+      toast({
+        title: "Failed to Send",
+        description: "Please try again or contact support",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -432,10 +616,51 @@ const VolunteersPage = () => {
           <TabsContent value="assignments" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <UserCheck className="h-5 w-5" />
-                  Upcoming Assignments
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <UserCheck className="h-5 w-5" />
+                    Upcoming Assignments
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    {selectedAssignmentIDs.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={isPerformingAction}>
+                            Actions ({selectedAssignmentIDs.length})
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={handleBulkMarkAsConfirmed}>
+                            <CheckCircle className="mr-2 h-4 w-4" />
+                            Mark as Confirmed
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={handleBulkCancelAssignment}>
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Cancel Assignment
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={handleOpenSendMessage}>
+                            <MessageSquare className="mr-2 h-4 w-4" />
+                            Send Message
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    <Select value={roleFilter} onValueChange={setRoleFilter}>
+                      <SelectTrigger className="w-[180px]">
+                        <Filter className="mr-2 h-4 w-4" />
+                        <SelectValue placeholder="Filter by role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Roles</SelectItem>
+                        {volunteerRoles.map((role: any) => (
+                          <SelectItem key={role.roleID || role.id} value={role.roleID || role.id}>
+                            {role.roleName || role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border">
@@ -443,6 +668,12 @@ const VolunteersPage = () => {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-[50px]">
+                            <Checkbox
+                              checked={selectedAssignmentIDs.length === filteredAssignments.length && filteredAssignments.length > 0}
+                              onCheckedChange={handleSelectAll}
+                            />
+                          </TableHead>
                           <TableHead className="w-[20%] min-w-[120px]">Event</TableHead>
                           <TableHead className="w-[15%] min-w-[100px]">Type</TableHead>
                           <TableHead className="w-[20%] min-w-[120px]">Role</TableHead>
@@ -455,6 +686,7 @@ const VolunteersPage = () => {
                       {isLoadingAssignments ? (
                         Array.from({ length: 5 }).map((_, index) => (
                           <TableRow key={index}>
+                            <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                             <TableCell><Skeleton className="h-4 w-24" /></TableCell>
@@ -465,7 +697,7 @@ const VolunteersPage = () => {
                         ))
                       ) : assignmentsError ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">
+                          <TableCell colSpan={7} className="text-center py-8">
                             <Alert variant="destructive" className="max-w-md mx-auto">
                               <AlertCircle className="h-4 w-4" />
                               <AlertTitle>Assignments Error</AlertTitle>
@@ -484,15 +716,21 @@ const VolunteersPage = () => {
                             </Alert>
                           </TableCell>
                         </TableRow>
-                      ) : upcomingAssignments.length === 0 ? (
+                      ) : filteredAssignments.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            No upcoming assignments found
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            {roleFilter === 'all' ? 'No upcoming assignments found' : 'No assignments found for selected role'}
                           </TableCell>
                         </TableRow>
                       ) : (
-                        upcomingAssignments.map((assignment: any) => (
+                        filteredAssignments.map((assignment: any) => (
                           <TableRow key={assignment.assignmentID}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedAssignmentIDs.includes(assignment.assignmentID || assignment.id)}
+                                onCheckedChange={() => handleSelectAssignment(assignment.assignmentID || assignment.id)}
+                              />
+                            </TableCell>
                             <TableCell className="font-medium truncate max-w-[200px]">
                               {assignment.type === 'Self' 
                                 ? assignment.event 
@@ -513,10 +751,12 @@ const VolunteersPage = () => {
                             </TableCell>
                             <TableCell className="truncate">
                               <Badge
-                                variant={assignment.status === 'Completed' ? 'default' : 'secondary'}
-                                className={assignment.status === 'Completed' ? 'bg-green-100 text-green-800 border-green-200' : ''}
+                                variant={assignment.status === 'Completed' || assignment.status === 'Complete' ? 'default' : 'secondary'}
+                                className={assignment.status === 'Completed' || assignment.status === 'Complete' ? 'bg-green-100 text-green-800 border-green-200' : ''}
                               >
-                                {assignment.status || 'Pending'}
+                                {assignment.type === 'Self' 
+                                  ? (assignment.status || assignment.Status || 'Scheduled')
+                                  : (assignment.assignmentStatus || 'Scheduled')}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
@@ -790,6 +1030,45 @@ const VolunteersPage = () => {
           }}
           assignment={selectedAssignment}
         />
+
+        {/* Send Bulk Message Modal */}
+        <Dialog open={showMessageModal} onOpenChange={setShowMessageModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send Message to Selected Volunteers</DialogTitle>
+              <DialogDescription>
+                Send a message to {selectedAssignmentIDs.length} selected volunteer(s)
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="message">Message</Label>
+                <Textarea
+                  id="message"
+                  placeholder="Type your message here..."
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  rows={5}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowMessageModal(false)}
+                disabled={isSendingMessage}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSendBulkMessage}
+                disabled={isSendingMessage || !messageText.trim()}
+              >
+                {isSendingMessage ? "Sending..." : "Send Message"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

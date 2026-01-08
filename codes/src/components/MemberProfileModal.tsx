@@ -222,7 +222,7 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
                 <p className="text-sm">
-                  {member.dateOfBirth ? new Date(member.dateOfBirth).toLocaleDateString() : 'Not provided'}
+                  {(member.dateOfBirth || member.dOB) ? new Date(member.dateOfBirth || member.dOB).toLocaleDateString() : 'Not provided'}
                 </p>
               </div>
               <div>
