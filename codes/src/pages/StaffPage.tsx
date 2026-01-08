@@ -240,7 +240,6 @@ const StaffPage = () => {
                     <TableHead>Status</TableHead>
                     <TableHead className="hidden sm:table-cell">Permissions</TableHead>
                     <TableHead className="hidden xl:table-cell">Last Login</TableHead>
-                    <TableHead className="hidden lg:table-cell">Updated At</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -254,13 +253,12 @@ const StaffPage = () => {
                         <TableCell><Skeleton className="h-6 w-16" /></TableCell>
                         <TableCell className="hidden sm:table-cell"><Skeleton className="h-6 w-12" /></TableCell>
                         <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
-                        <TableCell className="hidden lg:table-cell"><Skeleton className="h-6 w-20" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-8 w-16" /></TableCell>
                       </TableRow>
                     ))
                   ) : staffError ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={7} className="text-center py-8">
                         <Alert variant="destructive" className="max-w-md mx-auto">
                           <AlertCircle className="h-4 w-4" />
                           <AlertTitle>Staff Error</AlertTitle>
@@ -281,7 +279,7 @@ const StaffPage = () => {
                     </TableRow>
                   ) : staffMembers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         No staff members found
                       </TableCell>
                     </TableRow>
@@ -306,9 +304,6 @@ const StaffPage = () => {
                         </TableCell>
                         <TableCell className="hidden xl:table-cell text-xs text-muted-foreground">
                           {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
-                          {staff.updatedAt ? new Date(staff.updatedAt).toLocaleString() : 'N/A'}
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

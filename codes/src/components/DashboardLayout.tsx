@@ -9,17 +9,17 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-background">
         <AppSidebar />
         
         <div className="flex-1 flex flex-col">
           {/* Header */}
-          <header className="h-auto min-h-16 border-b border-border bg-card shadow-soft flex flex-wrap items-center px-4 sm:px-6 py-3">
+          <header className="sticky top-0 z-40 h-auto min-h-16 border-b border-border bg-card shadow-soft flex flex-wrap items-center px-4 sm:px-6 py-3">
             <SidebarTrigger className="mr-4" />
             
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-semibold text-primary truncate">TCC CRM</h1>
+              <h1 className="text-xl sm:text-2xl font-semibold text-primary truncate">TCC Church</h1>
             </div>
             
             <div className="flex items-center space-x-2 sm:space-x-4">

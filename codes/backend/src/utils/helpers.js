@@ -94,6 +94,11 @@ const sheetsToObjects = (data) => {
       // Convert header to camelCase
       const camelKey = header.charAt(0).toLowerCase() + header.slice(1);
       obj[camelKey] = row[index] || '';
+      
+      // Special mapping for DOB -> dateOfBirth for better frontend compatibility
+      if (header === 'DOB') {
+        obj['dateOfBirth'] = row[index] || '';
+      }
     });
     return obj;
   });
