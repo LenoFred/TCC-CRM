@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { useGuests, useDonationVerification } from "@/hooks/useBusinessLogic";
 import { dashboardService } from "@/services/businessLogicService";
 import {
@@ -34,6 +35,7 @@ import {
 export function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   
   // Use business logic hooks
   const { fetchGuests, fetchStats, guests, stats, loading: guestsLoading, error: guestsError } = useGuests();
@@ -189,7 +191,9 @@ export function Dashboard() {
       <div className="bg-gradient-hero rounded-2xl p-8 text-white shadow-large">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome back, Pastor John</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              Welcome back, {user?.staffRole || 'Staff'} {user?.fullName || user?.firstName || 'User'}
+            </h1>
             <p className="text-lg opacity-90">Here's what's happening at TCC today</p>
           </div>
           <div className="text-right opacity-90">

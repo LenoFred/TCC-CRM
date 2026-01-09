@@ -149,6 +149,141 @@ class AuthService {
   }
 
   /**
+   * Find staff details by username in Details sheet
+   * @param {string} username - Staff username
+   * @returns {Promise<object|null>} Details object with staffID or null
+   */
+  async findDetailsByUsername(username) {
+    try {
+      const detailsData = await sheetsService.getSheetData(sheetsService.SHEETS.DETAILS);
+      
+      logger.info('Details sheet data retrieved', { 
+        rowCount: detailsData.length,
+        headers: detailsData.length > 0 ? detailsData[0] : [],
+        username 
+      });
+      
+      if (detailsData.length === 0) {
+        logger.error('Details sheet is empty');
+        return null;
+      }
+
+      const headers = detailsData[0];
+      const rows = detailsData.slice(1);
+
+      const usernameIndex = headers.findIndex(h => 
+        h.toLowerCase() === 'username'
+      );
+
+      if (usernameIndex === -1) {
+        logger.error('Username column not found in Details sheet', { headers });
+        return null;
+      }
+
+      logger.info('Searching for username', { 
+        username, 
+        usernameIndex,
+        availableUsernames: rows.map(r => r[usernameIndex]).filter(Boolean)
+      });
+
+      const detailsRow = rows.find(row => 
+        row[usernameIndex] && row[usernameIndex].toLowerCase() === username.toLowerCase()
+      );
+
+      if (!detailsRow) {
+        logger.error('Username not found in Details sheet', { 
+          username,
+          availableUsernames: rows.map(r => r[usernameIndex]).filter(Boolean)
+        });
+        return null;
+      }
+
+      // Convert to object
+      const details = {};
+      headers.forEach((header, index) => {
+        const camelKey = header.charAt(0).toLowerCase() + header.slice(1);
+        details[camelKey] = detailsRow[index] || '';
+      });
+
+      return details;
+    } catch (error) {
+      logger.error('Error finding details by username', { error: error.message, username });
+      throw error;
+    }
+  }
+
+  /**
+   * Find staff member by staffID
+   * @param {string} staffID - Staff ID
+   * @returns {Promise<object|null>} Staff object or null
+   */
+  async findStaffById(staffID) {
+    try {
+      const staffData = await sheetsService.getSheetData(sheetsService.SHEETS.STAFF);
+      
+      if (staffData.length === 0) {
+        return null;
+      }
+
+      const headers = staffData[0];
+      const rows = staffData.slice(1);
+
+      const staffIDIndex = headers.findIndex(h => 
+        h.toLowerCase() === 'staffid'
+      );
+
+      if (staffIDIndex === -1) {
+        logger.error('staffID column not found in Staff sheet');
+        return null;
+      }
+
+      const staffRow = rows.find(row => 
+        row[staffIDIndex] === staffID
+      );
+
+      if (!staffRow) {
+        return null;
+      }
+
+      // Convert to object
+      const staff = {};
+      headers.forEach((header, index) => {
+        const camelKey = header.charAt(0).toLowerCase() + header.slice(1);
+        staff[camelKey] = staffRow[index] || '';
+      });
+
+      return staff;
+    } catch (error) {
+      logger.error('Error finding staff by ID', { error: error.message, staffID });
+      throw error;
+    }
+  }
+
+  /**
+   * Update LastLogin timestamp for staff member
+   * @param {string} staffID - Staff ID
+   * @returns {Promise<void>}
+   */
+  async updateLastLogin(staffID) {
+    try {
+      // Update LastLogin with current timestamp using updateRow
+      const now = new Date().toISOString();
+      
+      await sheetsService.updateRow(
+        sheetsService.SHEETS.STAFF,
+        'StaffID',
+        staffID,
+        { LastLogin: now }
+      );
+
+      logger.info('LastLogin updated', { staffID, timestamp: now });
+    } catch (error) {
+      logger.error('Error updating LastLogin', { error: error.message, staffID });
+      // Don't throw - login should succeed even if LastLogin update fails
+    }
+  }
+
+  /**
    * Get staff member with their member profile
    * @param {string} staffId - Staff ID
    * @returns {Promise<object|null>} Combined staff and member data
@@ -201,11 +336,11 @@ class AuthService {
   }
 
   /**
-   * Get staff permissions
-   * @param {string} staffMemberId - Staff's member ID
+   * Get staff permissions from StaffPermissions sheet
+   * @param {string} staffID - Staff ID from Staff sheet
    * @returns {Promise<Array<string>>} Array of permission keys
    */
-  async getStaffPermissions(staffMemberId) {
+  async getStaffPermissions(staffID) {
     try {
       const permissionsData = await sheetsService.getSheetData(
         sheetsService.SHEETS.STAFF_PERMISSIONS
@@ -218,84 +353,125 @@ class AuthService {
       const headers = permissionsData[0];
       const rows = permissionsData.slice(1);
 
-      const staffMemberIdIndex = headers.findIndex(h => 
-        h.toLowerCase() === 'staffmemberid' || h === 'StaffMemberID'
+      const staffIDIndex = headers.findIndex(h => 
+        h.toLowerCase() === 'staffid'
       );
       const permissionKeyIndex = headers.findIndex(h => 
-        h.toLowerCase() === 'permissionkey' || h === 'PermissionKey'
+        h.toLowerCase() === 'permissionkey'
       );
       const hasAccessIndex = headers.findIndex(h => 
-        h.toLowerCase() === 'hasaccess' || h === 'HasAccess'
+        h.toLowerCase() === 'hasaccess'
       );
+
+      if (staffIDIndex === -1 || permissionKeyIndex === -1 || hasAccessIndex === -1) {
+        logger.error('Required columns not found in StaffPermissions sheet');
+        return [];
+      }
 
       const permissions = rows
         .filter(row => 
-          row[staffMemberIdIndex] === staffMemberId && 
+          row[staffIDIndex] === staffID && 
           (row[hasAccessIndex] === 'TRUE' || row[hasAccessIndex] === 'true' || row[hasAccessIndex] === true)
         )
-        .map(row => row[permissionKeyIndex]);
+        .map(row => ({
+          permissionKey: row[permissionKeyIndex],
+          hasAccess: true
+        }));
+
+      logger.info('Staff permissions retrieved', { 
+        staffID, 
+        permissionsCount: permissions.length,
+        permissions: permissions.map(p => p.permissionKey)
+      });
 
       return permissions;
     } catch (error) {
-      logger.error('Error getting staff permissions', { error: error.message, staffMemberId });
+      logger.error('Error getting staff permissions', { error: error.message, staffID });
       return [];
     }
   }
 
   /**
    * Authenticate user and generate tokens
-   * @param {string} email - User email
+   * @param {string} username - Username
    * @param {string} password - User password
+   * @param {string} loginType - Login type ('Admin' or 'Staff')
    * @returns {Promise<object>} Authentication result with tokens and user data
    */
-  async login(email, password) {
+  async login(username, password, loginType) {
     try {
-      // Find staff by email
-      const staff = await this.findStaffByEmail(email);
+      // Find details by username (Details sheet contains username and password)
+      const details = await this.findDetailsByUsername(username);
 
-      if (!staff) {
-        logAuthEvent('LOGIN_FAILED', email, { reason: 'User not found' });
-        throw new Error('Invalid email or password');
+      if (!details) {
+        logAuthEvent('LOGIN_FAILED', username, { reason: 'User not found' });
+        throw new Error('Invalid username or password. Please check your credentials and try again.');
       }
 
       // Check if password field exists
-      if (!staff.password && !staff.passwordHash) {
-        logAuthEvent('LOGIN_FAILED', email, { reason: 'No password set' });
+      if (!details.password) {
+        logAuthEvent('LOGIN_FAILED', username, { reason: 'No password set' });
         throw new Error('Account not properly configured. Please contact administrator.');
       }
 
       // Compare password
-      const passwordHash = staff.passwordHash || staff.password;
-      const isPasswordValid = await this.comparePassword(password, passwordHash);
+      const isPasswordValid = await this.comparePassword(password, details.password);
 
       if (!isPasswordValid) {
-        logAuthEvent('LOGIN_FAILED', email, { reason: 'Invalid password' });
-        throw new Error('Invalid email or password');
+        logAuthEvent('LOGIN_FAILED', username, { reason: 'Invalid password' });
+        throw new Error('Invalid username or password. Please check your credentials and try again.');
+      }
+
+      // Get staff information from Staff sheet using staffID
+      const staff = await this.findStaffById(details.staffID);
+
+      if (!staff) {
+        logAuthEvent('LOGIN_FAILED', username, { reason: 'Staff record not found' });
+        throw new Error('Account not properly configured. Please contact administrator.');
       }
 
       // Check if account is active
       if (staff.status && staff.status.toLowerCase() !== 'active') {
-        logAuthEvent('LOGIN_FAILED', email, { reason: 'Inactive account' });
+        logAuthEvent('LOGIN_FAILED', username, { reason: 'Inactive account' });
         throw new Error('Account is not active. Please contact administrator.');
       }
 
-      // Get permissions
-      const permissions = await this.getStaffPermissions(staff.memberId || staff.memberID);
+      // Validate loginType matches staff Role
+      const userRole = staff.role || 'Staff';
+      if (loginType && loginType !== userRole) {
+        logAuthEvent('LOGIN_FAILED', username, { 
+          reason: 'Role mismatch', 
+          expectedRole: loginType, 
+          actualRole: userRole 
+        });
+        const message = loginType === 'Admin' 
+          ? 'You are not an Admin. Please use the Staff Login form.'
+          : 'You are not a Staff member. Please use the Admin Login form.';
+        throw new Error(message);
+      }
 
-      // Generate tokens
+      // Get staffID for permissions lookup
+      const staffID = staff.staffID || staff.staffId;
+
+      // Get permissions from StaffPermissions sheet
+      const permissions = await this.getStaffPermissions(staffID);
+
+      // Update LastLogin in Staff sheet
+      await this.updateLastLogin(staffID);
+
+      // Generate tokens - use role column from Staff sheet
       const tokenPayload = {
-        userId: staff.staffId || staff.staffID || staff.id,
-        email: staff.email,
-        memberId: staff.memberId || staff.memberID,
-        role: staff.jobTitle || staff.position || 'staff',
+        userId: staffID,
+        email: staff.email || '',
+        role: staff.role || 'Staff', // Use role column from Staff sheet (Staff or Admin)
       };
 
       const accessToken = this.generateAccessToken(tokenPayload);
       const refreshToken = this.generateRefreshToken({ userId: tokenPayload.userId });
 
-      logAuthEvent('LOGIN_SUCCESS', tokenPayload.userId, { email });
+      logAuthEvent('LOGIN_SUCCESS', tokenPayload.userId, { username });
 
-      // Return user data without password
+      // Return user data without password - include staffRole and fullName
       const { password: _, passwordHash: __, ...userWithoutPassword } = staff;
 
       return {
@@ -304,11 +480,13 @@ class AuthService {
         refreshToken,
         user: {
           ...userWithoutPassword,
-          permissions,
+          staffRole: staff.staffRole || staff.jobTitle || '',
+          fullName: staff.fullName || `${staff.firstName || ''} ${staff.lastName || ''}`.trim(),
         },
+        permissions, // Return permissions at top level for frontend
       };
     } catch (error) {
-      logger.error('Login error', { error: error.message, email });
+      logger.error('Login error', { error: error.message, username });
       throw error;
     }
   }
@@ -335,15 +513,17 @@ class AuthService {
         throw new Error('Account is no longer active');
       }
 
-      // Get permissions
-      const permissions = await this.getStaffPermissions(staff.memberId || staff.memberID);
+      // Get staffID for permissions lookup
+      const staffID = staff.staffID || staff.staffId;
 
-      // Generate new access token
+      // Get permissions from StaffPermissions sheet
+      const permissions = await this.getStaffPermissions(staffID);
+
+      // Generate new access token - use role column from Staff sheet
       const tokenPayload = {
-        userId: staff.staffId || staff.staffID || staff.id,
-        email: staff.email,
-        memberId: staff.memberId || staff.memberID,
-        role: staff.jobTitle || staff.position || 'staff',
+        userId: staffID,
+        email: staff.email || '',
+        role: staff.role || 'Staff', // Use role column from Staff sheet (Staff or Admin)
       };
 
       const accessToken = this.generateAccessToken(tokenPayload);
@@ -353,10 +533,8 @@ class AuthService {
       return {
         success: true,
         accessToken,
-        user: {
-          ...staff,
-          permissions,
-        },
+        user: staff,
+        permissions, // Return permissions at top level for frontend
       };
     } catch (error) {
       logger.error('Token refresh error', { error: error.message });
@@ -467,6 +645,34 @@ class AuthService {
       return true;
     } catch (error) {
       logger.error('Password change error', { error: error.message, userId });
+      throw error;
+    }
+  }
+
+  /**
+   * Reset staff password (Admin only)
+   * @param {string} staffId - Staff ID
+   * @param {string} newPassword - New password
+   * @returns {Promise<boolean>} Success status
+   */
+  async resetStaffPassword(staffId, newPassword) {
+    try {
+      // Hash new password
+      const newPasswordHash = await this.hashPassword(newPassword);
+
+      // Update password in Details sheet
+      await sheetsService.updateRow(
+        sheetsService.SHEETS.DETAILS || 'Details',
+        'StaffID',
+        staffId,
+        { Password: newPasswordHash, UpdatedAt: new Date().toISOString() }
+      );
+
+      logAuthEvent('PASSWORD_RESET_BY_ADMIN', staffId);
+
+      return true;
+    } catch (error) {
+      logger.error('Password reset error', { error: error.message, staffId });
       throw error;
     }
   }

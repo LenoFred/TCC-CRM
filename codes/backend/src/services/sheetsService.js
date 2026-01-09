@@ -39,6 +39,7 @@ class SheetsService {
       VOLUNTEER_ASSIGNMENTS: 'VolunteerAssignments',
       SUPPORT_REQUESTS: 'SupportRequests',
       STAFF: 'Staff',
+      DETAILS: 'Details',
       STAFF_PERMISSIONS: 'StaffPermissions',
       BRANCHES: 'Branches',
       COMMUNICATIONS: 'Communications',

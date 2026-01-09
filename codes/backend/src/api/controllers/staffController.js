@@ -7,6 +7,8 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const bcrypt = require('bcryptjs');
+const authService = require('../../services/authService');
 
 class StaffController extends BaseController {
   constructor() {
@@ -29,6 +31,7 @@ class StaffController extends BaseController {
       'PhoneNumber',
       'LastLogin',
       'UpdatedAt',
+      'Role',
     ];
   }
 
@@ -46,6 +49,26 @@ class StaffController extends BaseController {
       throw new ApiError(400, 'Email already in use');
     }
 
+    // Check if username already exists (if provided)
+    if (data.username) {
+      const detailsData = await sheetsService.getSheetObjects(sheetsService.SHEETS.DETAILS);
+      const existingUsername = detailsData.find(
+        (d) => d.username?.toLowerCase() === data.username?.toLowerCase()
+      );
+      if (existingUsername) {
+        throw new ApiError(400, 'Username already in use');
+      }
+    }
+
+    // Validate that username, password, and permissions are provided for new staff
+    if (!data.username || !data.password) {
+      throw new ApiError(400, 'Username and password are required');
+    }
+
+    if (!data.permissions || !Array.isArray(data.permissions) || data.permissions.length === 0) {
+      throw new ApiError(400, 'At least one permission is required');
+    }
+
     return {
       staffID: generateId('STF'),
       jobTitle: data.jobTitle || data.role || 'Staff',
@@ -57,7 +80,85 @@ class StaffController extends BaseController {
       phoneNumber: data.phone || data.phoneNumber || '',
       lastLogin: '', // Will be populated when staff logs in
       updatedAt: new Date().toISOString(), // Track creation time with full timestamp
+      // Store credentials and permissions temporarily for processing after staff creation
+      _username: data.username,
+      _password: data.password,
+      _permissions: data.permissions,
+      _userRole: data.userRole || 'Staff',
     };
+  }
+
+  /**
+   * Override create to handle credentials and permissions
+   */
+  async create(req, res) {
+    try {
+      const createData = await this.prepareCreateData(req.body, req.user);
+      
+      // Extract credentials and permissions
+      const username = createData._username;
+      const password = createData._password;
+      const permissions = createData._permissions;
+      const staffID = createData.staffID;
+      const userRole = createData._userRole;
+
+      // Remove temporary fields before creating staff record
+      delete createData._username;
+      delete createData._password;
+      delete createData._permissions;
+      delete createData._userRole;
+
+      // Add role to the staff record
+      createData.role = userRole;
+
+      // 1. Create staff record in Staff sheet
+      const headers = this.getDefaultHeaders();
+      const row = headers.map(header => {
+        const camelKey = header.charAt(0).toLowerCase() + header.slice(1);
+        return createData[camelKey] !== undefined 
+          ? String(createData[camelKey])
+          : '';
+      });
+
+      await sheetsService.appendSheetData(this.sheetName, [row]);
+
+      // 2. Create credentials in Details sheet
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const detailID = generateId('DETAIL');
+      const detailsRow = [
+        detailID,
+        staffID,
+        username,
+        hashedPassword,
+        new Date().toISOString(),
+        new Date().toISOString(),
+      ];
+      await sheetsService.appendSheetData(sheetsService.SHEETS.DETAILS, [detailsRow]);
+
+      // 3. Create permissions in StaffPermissions sheet
+      const permissionRows = permissions.map((permissionKey) => [
+        generateId('PRM'),
+        staffID,
+        permissionKey,
+        'TRUE', // HasAccess
+      ]);
+      await sheetsService.appendSheetData(sheetsService.SHEETS.STAFF_PERMISSIONS, permissionRows);
+
+      console.log(`✅ Staff created successfully: ${staffID} with ${permissions.length} permissions`);
+
+      res.status(201).json({
+        success: true,
+        message: `${createData.fullName} created successfully`,
+        data: {
+          ...createData,
+          username,
+          permissionsCount: permissions.length,
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error creating staff:', error);
+      throw error;
+    }
   }
 
   applyFilters(data, filters) {

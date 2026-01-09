@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import { LoginPage } from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
@@ -26,23 +28,29 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/members" element={<MembersPage />} />
-          <Route path="/families" element={<FamiliesPage />} />
-          <Route path="/groups" element={<GroupsPage />} />
-          <Route path="/donations" element={<DonationsPage />} />
-          <Route path="/attendance" element={<AttendancePage />} />
-          <Route path="/volunteers" element={<VolunteersPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/communications" element={<CommunicationsPage />} />
-          <Route path="/branches" element={<BranchesPage />} />
-          <Route path="/staff" element={<StaffPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            
+            {/* Protected Routes */}
+            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/members" element={<ProtectedRoute requiredPermission="can_view_members"><MembersPage /></ProtectedRoute>} />
+            <Route path="/families" element={<ProtectedRoute requiredPermission="can_view_families"><FamiliesPage /></ProtectedRoute>} />
+            <Route path="/groups" element={<ProtectedRoute requiredPermission="can_view_groups"><GroupsPage /></ProtectedRoute>} />
+            <Route path="/donations" element={<ProtectedRoute requiredPermission="can_view_donations"><DonationsPage /></ProtectedRoute>} />
+            <Route path="/attendance" element={<ProtectedRoute requiredPermission="can_view_attendance"><AttendancePage /></ProtectedRoute>} />
+            <Route path="/volunteers" element={<ProtectedRoute requiredPermission="can_view_volunteers"><VolunteersPage /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute requiredPermission="can_view_reports"><AnalyticsPage /></ProtectedRoute>} />
+            <Route path="/communications" element={<ProtectedRoute requiredPermission="can_view_communications"><CommunicationsPage /></ProtectedRoute>} />
+            <Route path="/branches" element={<ProtectedRoute requiredPermission="can_view_branches"><BranchesPage /></ProtectedRoute>} />
+            <Route path="/staff" element={<ProtectedRoute requiredPermission="can_view_staff"><StaffPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+            
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

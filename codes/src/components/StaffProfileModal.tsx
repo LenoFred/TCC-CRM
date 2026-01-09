@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -84,6 +84,9 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
                 <p className="text-sm text-muted-foreground">{staffMember.role || 'Staff Member'}</p>
               </div>
             </DialogTitle>
+            <DialogDescription>
+              View and manage staff member profile, permissions, and account details
+            </DialogDescription>
           </DialogHeader>
           
           <Tabs defaultValue="profile" className="w-full">
