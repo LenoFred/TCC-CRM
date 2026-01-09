@@ -11,6 +11,8 @@ tcc-crm-backend-121789771aad.json
 !package-lock.json
 !tsconfig*.json
 !components.json
+!vercel.json
+!**/vercel.json
 
 # Environment Variables
 .env
