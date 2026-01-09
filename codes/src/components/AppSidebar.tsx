@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Users, 
@@ -13,12 +13,14 @@ import {
   Building2,
   ChevronDown,
   Home,
-  UsersRound
+  UsersRound,
+  LogOut
 } from "lucide-react";
 
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -28,55 +30,69 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { usePermission } from "@/hooks/usePermission";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
 
 const navigationItems = [
   {
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-    description: "Overview & metrics"
+    description: "Overview & metrics",
+    resource: "dashboard", // Always visible
+    alwaysVisible: true
   },
   {
     title: "Members",
     url: "/members",
     icon: Users,
-    description: "Membership management"
+    description: "Membership management",
+    resource: "members"
   },
   {
     title: "Families",
     url: "/families",
     icon: Home,
-    description: "Family units"
+    description: "Family units",
+    resource: "families"
   },
   {
     title: "Groups",
     url: "/groups",
     icon: UsersRound,
-    description: "Departments & ministries"
+    description: "Departments & ministries",
+    resource: "groups"
   },
   {
     title: "Attendance",
     url: "/attendance",
     icon: Calendar,
-    description: "Event check-ins"
+    description: "Event check-ins",
+    resource: "attendance"
   },
   {
     title: "Volunteers",
     url: "/volunteers",
     icon: UserCheck,
-    description: "Volunteer scheduling"
+    description: "Volunteer scheduling",
+    resource: "volunteers"
   },
   {
     title: "Analytics",
     url: "/analytics",
     icon: BarChart3,
-    description: "Reports & insights"
+    description: "Reports & insights",
+    resource: "reports",
+    customPermission: "can_generate_reports" // Custom permission for analytics
   },
   {
     title: "Communications",
     url: "/communications",
     icon: MessageSquare,
-    description: "Bulk messaging"
+    description: "Bulk messaging",
+    resource: "communications"
   },
 ];
 
@@ -85,35 +101,57 @@ const adminItems = [
     title: "Staff Management",
     url: "/staff",
     icon: Shield,
-    description: "User permissions"
+    description: "User permissions",
+    resource: "staff"
   },
   {
     title: "Donations",
     url: "/donations",
     icon: Heart,
-    description: "Donation tracking"
+    description: "Donation tracking",
+    resource: "donations"
   },
   {
     title: "Branches",
     url: "/branches",
     icon: Building2,
-    description: "Church locations"
+    description: "Church locations",
+    resource: "branches"
   },
   {
     title: "Settings",
     url: "/settings",
     icon: Settings,
-    description: "System configuration"
+    description: "System configuration",
+    resource: "settings",
+    alwaysVisible: true
   }
 ];
 
 export function AppSidebar() {
   const { state, setOpen } = useSidebar();
   const location = useLocation();
+  const navigate = useNavigate();
   const collapsed = state === "collapsed";
+  const { canView, hasPermission } = usePermission();
+  const { logout, user } = useAuth();
+  const { toast } = useToast();
+
+  // Filter navigation items by permissions
+  const visibleNavigationItems = navigationItems.filter(item => {
+    if (item.alwaysVisible) return true;
+    if (item.customPermission) return hasPermission(item.customPermission);
+    return canView(item.resource);
+  });
+
+  const visibleAdminItems = adminItems.filter(item => {
+    if (item.alwaysVisible) return true;
+    if (item.customPermission) return hasPermission(item.customPermission);
+    return canView(item.resource);
+  });
 
   // Check if any admin page is active to determine initial state
-  const isAdminPageActive = adminItems.some(item => {
+  const isAdminPageActive = visibleAdminItems.some(item => {
     if (item.url === "/") {
       return location.pathname === "/";
     }
@@ -122,6 +160,15 @@ export function AppSidebar() {
 
   // State for administration section collapse (always start open by default)
   const [adminOpen, setAdminOpen] = useState(true);
+
+  const handleLogout = () => {
+    logout();
+    toast({
+      title: 'Logged Out',
+      description: 'You have been successfully logged out.',
+    });
+    navigate('/login');
+  };
 
   // Prevent sidebar from expanding when clicking navigation items
   const handleNavClick = (e: React.MouseEvent) => {
@@ -156,7 +203,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border bg-sidebar">
-      <SidebarContent className={`bg-sidebar ${collapsed ? 'flex flex-col justify-evenly' : ''}`}>
+      <SidebarContent className={`bg-sidebar ${collapsed ? 'overflow-y-auto scrollbar-thin' : ''}`}>
         {/* Church Logo/Brand */}
         {!collapsed && (
           <div className="p-6 border-b border-sidebar-border">
@@ -173,29 +220,34 @@ export function AppSidebar() {
         )}
 
         {/* Main Navigation */}
-        <SidebarGroup className={collapsed ? '' : 'mt-2'}>
-          <SidebarGroupLabel className="text-sidebar-foreground/70 font-medium mb-1">
-            Main Menu
-          </SidebarGroupLabel>
+        <SidebarGroup className={collapsed ? 'py-2' : 'mt-2'}>
+          {!collapsed && (
+            <SidebarGroupLabel className="text-sidebar-foreground/70 font-medium mb-1">
+              Main Menu
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
-            <SidebarMenu className="gap-3">
-              {navigationItems.map((item) => (
+            <SidebarMenu className={collapsed ? 'gap-1' : 'gap-3'}>
+              {visibleNavigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
                     asChild 
                     isActive={isActive(item.url)}
                     tooltip={collapsed ? item.title : undefined}
+                    className={collapsed ? 'py-2' : ''}
                   >
                     <NavLink 
                       to={item.url}
                       onClick={handleNavClick}
                       className={`flex items-center gap-3 ${getNavClassName(item.url)}`}
                     >
-                      <item.icon className="w-5 h-5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{item.title}</div>
-                        <div className="text-xs opacity-70 truncate">{item.description}</div>
-                      </div>
+                      <item.icon className={collapsed ? 'w-4 h-4 flex-shrink-0' : 'w-5 h-5 flex-shrink-0'} />
+                      {!collapsed && (
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{item.title}</div>
+                          <div className="text-xs opacity-70 truncate">{item.description}</div>
+                        </div>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -204,45 +256,77 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Admin Section */}
-        <SidebarGroup>
-          <Collapsible open={adminOpen} onOpenChange={setAdminOpen} className="group/collapsible">
-            <SidebarGroupLabel asChild className="text-sidebar-foreground/70 font-medium">
-              <CollapsibleTrigger className="flex w-full items-center justify-between hover:bg-sidebar-accent/50 rounded-lg px-2 py-1.5 transition-colors">
-                <span>Administration</span>
-                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${adminOpen ? '' : '-rotate-90'}`} />
-              </CollapsibleTrigger>
-            </SidebarGroupLabel>
-            <CollapsibleContent>
-              <SidebarGroupContent>
-                <SidebarMenu className="gap-3">
-                  {adminItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        isActive={isActive(item.url)}
-                        tooltip={collapsed ? item.title : undefined}
-                      >
-                        <NavLink 
-                          to={item.url} 
-                          onClick={handleNavClick}
-                          className={`flex items-center gap-3 ${getNavClassName(item.url)}`}
+        {/* Admin Section - Only show if user has access to at least one admin item */}
+        {visibleAdminItems.length > 0 && (
+          <SidebarGroup className={collapsed ? 'py-2' : ''}>
+            <Collapsible open={adminOpen} onOpenChange={setAdminOpen} className="group/collapsible">
+              {!collapsed && (
+                <SidebarGroupLabel asChild className="text-sidebar-foreground/70 font-medium">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between hover:bg-sidebar-accent/50 rounded-lg px-2 py-1.5 transition-colors">
+                    <span>Administration</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${adminOpen ? '' : '-rotate-90'}`} />
+                  </CollapsibleTrigger>
+                </SidebarGroupLabel>
+              )}
+              <CollapsibleContent>
+                <SidebarGroupContent>
+                  <SidebarMenu className={collapsed ? 'gap-1' : 'gap-3'}>
+                    {visibleAdminItems.map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton 
+                          asChild 
+                          isActive={isActive(item.url)}
+                          tooltip={collapsed ? item.title : undefined}
+                          className={collapsed ? 'py-2' : ''}
                         >
-                          <item.icon className="w-5 h-5 flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{item.title}</div>
-                            <div className="text-xs opacity-70 truncate">{item.description}</div>
-                          </div>
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </CollapsibleContent>
-          </Collapsible>
-        </SidebarGroup>
-      </SidebarContent>
-    </Sidebar>
+                          <NavLink 
+                            to={item.url} 
+                            onClick={handleNavClick}
+                            className={`flex items-center gap-3 ${getNavClassName(item.url)}`}
+                          >
+                            <item.icon className={collapsed ? 'w-4 h-4 flex-shrink-0' : 'w-5 h-5 flex-shrink-0'} />
+                            {!collapsed && (
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{item.title}</div>
+                                <div className="text-xs opacity-70 truncate">{item.description}</div>
+                              </div>
+                            )}
+                          </NavLink>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </CollapsibleContent>
+            </Collapsible>
+          </SidebarGroup>
+        )}
+      </SidebarContent>      
+      {/* Footer with Logout */}
+      <SidebarFooter className={`border-t border-sidebar-border ${collapsed ? 'p-2' : 'p-4'}`}>
+        {!collapsed && (
+          <div className="flex items-center gap-3 mb-2">
+            {user && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {user.firstName} {user.lastName}
+                </p>
+                <p className="text-xs text-sidebar-foreground/70 truncate">
+                  {user.role || 'Staff'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={handleLogout}
+          size={collapsed ? "sm" : "default"}
+        >
+          <LogOut className={collapsed ? 'w-4 h-4' : 'w-4 h-4 mr-2'} />
+          {!collapsed && "Logout"}
+        </Button>
+      </SidebarFooter>    </Sidebar>
   );
 }

@@ -95,8 +95,8 @@ export const apiRequest = async <T>(
 export const api = {
   // Authentication
   auth: {
-    login: (credentials: { email: string; password: string }) =>
-      apiRequest<{ token: string; user: any; permissions: string[] }>('/auth/login', {
+    login: (credentials: { username: string; password: string }) =>
+      apiRequest<{ accessToken: string; refreshToken: string; user: any; permissions: any[] }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(credentials),
       }),
@@ -104,8 +104,26 @@ export const api = {
     logout: () =>
       apiRequest<void>('/auth/logout', { method: 'POST' }),
     
-    refresh: () =>
-      apiRequest<{ token: string }>('/auth/refresh', { method: 'POST' }),
+    refresh: (refreshToken: string) =>
+      apiRequest<{ accessToken: string }>('/auth/refresh', { 
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      }),
+    
+    me: () =>
+      apiRequest<{ user: any; permissions: any[] }>('/auth/me', { method: 'GET' }),
+    
+    hashPassword: (password: string) =>
+      apiRequest<{ hashedPassword: string }>('/auth/hash-password', {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      }),
+    
+    resetPassword: (staffId: string, newPassword: string) =>
+      apiRequest<{ success: boolean; message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ staffId, newPassword }),
+      }),
   },
 
   // Metrics

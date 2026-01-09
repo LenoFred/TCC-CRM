@@ -18,12 +18,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { AddEditMemberModal } from "@/components/AddEditMemberModal";
+import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/config/api";
 
 const MembersPage = () => {
-  const { toast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();  const { canEdit } = usePermission();  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMember, setSelectedMember] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -278,10 +278,12 @@ const MembersPage = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Members</h1>
             <p className="text-sm sm:text-base text-muted-foreground">Manage church membership records</p>
           </div>
-          <Button className="gap-2 w-full sm:w-auto" onClick={handleAddMember} disabled={isLoadingMembers}>
-            <UserPlus className="h-4 w-4" />
-            Add New Member
-          </Button>
+          {canEdit('members') && (
+            <Button className="gap-2 w-full sm:w-auto" onClick={handleAddMember} disabled={isLoadingMembers}>
+              <UserPlus className="h-4 w-4" />
+              Add New Member
+            </Button>
+          )}
         </div>
 
         {/* Stats Cards */}

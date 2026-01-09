@@ -48,8 +48,12 @@ const ID_PREFIXES = {
   // Staff & Permissions
   STAFF: 'STF',
   STF: 'STF', // Alias
+  DETAIL: 'DTL',
+  DTL: 'DTL', // Alias
+  DET: 'DTL', // Legacy alias
   STAFF_PERMISSION: 'PRM',
   PRM: 'PRM', // Alias
+  PERM: 'PRM', // Legacy alias
   
   // Organization
   BRANCH: 'BRN',

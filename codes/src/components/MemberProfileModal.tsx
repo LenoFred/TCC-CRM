@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { usePermission } from "@/hooks/usePermission";
 import { useToast } from "@/hooks/use-toast";
 
 interface Member {
@@ -50,6 +51,7 @@ interface MemberProfileModalProps {
 
 export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberProfileModalProps) => {
   const { toast } = useToast();
+  const { canEdit } = usePermission();
   const [attendance, setAttendance] = useState([]);
   const [donations, setDonations] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -174,14 +176,16 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <DialogTitle className="text-2xl font-bold">{member.name}</DialogTitle>
           <div className="flex gap-2">
-            <Button
-              onClick={() => onEdit(member)}
-              className="gap-2"
-              size="sm"
-            >
-              <Edit className="h-4 w-4" />
-              Edit Profile
-            </Button>
+            {canEdit('members') && (
+              <Button
+                onClick={() => onEdit(member)}
+                className="gap-2"
+                size="sm"
+              >
+                <Edit className="h-4 w-4" />
+                Edit Profile
+              </Button>
+            )}
             <Button
               onClick={onClose}
               variant="ghost"

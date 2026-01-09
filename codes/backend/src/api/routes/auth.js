@@ -88,4 +88,26 @@ router.post(
   asyncHandler(authController.registerStaff)
 );
 
+/**
+ * @route   POST /api/auth/hash-password
+ * @desc    Generate bcrypt hash for a password (Admin only)
+ * @access  Private (Admin only)
+ */
+router.post(
+  '/hash-password',
+  authenticate,
+  asyncHandler(authController.hashPassword)
+);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset staff member password (Admin only)
+ * @access  Private (Admin only)
+ */
+router.post(
+  '/reset-password',
+  authenticate,
+  asyncHandler(authController.resetPassword)
+);
+
 module.exports = router;

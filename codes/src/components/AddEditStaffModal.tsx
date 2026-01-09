@@ -1,22 +1,29 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { Shield, Eye, EyeOff } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ManageStaffPermissionsModal } from "@/components/ManageStaffPermissionsModal";
 
 interface StaffMember {
   id?: number;
   name: string;
   email: string;
-  role: string;
+  role: string; // Job title (Pastor, Secretary, etc.)
+  userRole?: string; // Access level (Admin/Staff)
   status: string;
   phone?: string;
   jobTitle?: string;
   appointmentDate?: string;
   lastLogin: string;
   permissionCount: number;
+  username?: string;
+  password?: string;
+  permissions?: string[];
 }
 
 interface AddEditStaffModalProps {
@@ -30,15 +37,22 @@ interface AddEditStaffModalProps {
 export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }: AddEditStaffModalProps) {
   const { toast } = useToast();
   
+  const [tempPermissions, setTempPermissions] = useState<string[]>([]);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
   // Initialize form data when modal opens or staffMember changes
   const [formData, setFormData] = useState<Partial<StaffMember>>({
     name: "",
     email: "",
     role: "",
+    userRole: "Staff", // Default to Staff
     status: "Active",
     phone: "",
     jobTitle: "",
     appointmentDate: "",
+    username: "",
+    password: "",
   });
 
   // Update form data when staffMember changes
@@ -48,50 +62,82 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
         name: staffMember.name || "",
         email: staffMember.email || "",
         role: staffMember.role || "",
+        userRole: staffMember.userRole || "Staff",
         status: staffMember.status || "Active",
         phone: staffMember.phone || "",
         jobTitle: staffMember.jobTitle || "",
         appointmentDate: staffMember.appointmentDate || "",
+        username: staffMember.username || "",
+        password: "", // Never pre-fill password for security
       });
+      setTempPermissions(staffMember.permissions || []);
     } else if (mode === 'add') {
       setFormData({
         name: "",
         email: "",
         role: "",
+        userRole: "Staff",
         status: "Active",
         phone: "",
         jobTitle: "",
         appointmentDate: "",
+        username: "",
+        password: "",
       });
+      setTempPermissions([]);
     }
-  }, [staffMember, mode]);
+  }, [staffMember, mode, isOpen]);
 
   const handleSave = () => {
+    // Validation
     if (!formData.name || !formData.email || !formData.role) {
       toast({
-        title: "Validation Error",
-        description: "Please fill in all required fields.",
+        title: "Missing Required Fields",
+        description: "Please fill in Name, Email, and Staff Role",
         variant: "destructive",
       });
       return;
     }
 
-    const staffData: StaffMember = {
+    // Only validate username/password for new staff
+    if (mode === 'add') {
+      if (!formData.username || !formData.password) {
+        toast({
+          title: "Missing Credentials",
+          description: "Username and password are required for new staff",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (formData.password.length < 6) {
+        toast({
+          title: "Weak Password",
+          description: "Password must be at least 6 characters",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (tempPermissions.length === 0) {
+        toast({
+          title: "No Permissions Selected",
+          description: "Please assign at least one permission to this staff member",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Include permissions in the save data
+    const staffData = {
       ...formData,
+      permissions: tempPermissions,
       id: staffMember?.id || Date.now(),
-      name: formData.name!,
-      email: formData.email!,
-      role: formData.role!,
-      status: formData.status!,
-      lastLogin: staffMember?.lastLogin || new Date().toISOString().split('T')[0],
-      permissionCount: staffMember?.permissionCount || 0,
-      phone: formData.phone || "",
-      jobTitle: formData.jobTitle || formData.role,
-      appointmentDate: formData.appointmentDate || new Date().toISOString().split('T')[0],
     };
 
     onSave(staffData);
-    
+
     toast({
       title: mode === 'add' ? "Staff Added" : "Staff Updated",
       description: `${formData.name} has been ${mode === 'add' ? 'added' : 'updated'} successfully.`,
@@ -104,20 +150,31 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
       name: "",
       email: "",
       role: "",
+      userRole: "Staff",
       status: "Active",
       phone: "",
       jobTitle: "",
       appointmentDate: "",
+      username: "",
+      password: "",
     });
+    setTempPermissions([]);
+  };
+
+  const handlePermissionsUpdate = (permissions: string[]) => {
+    setTempPermissions(permissions);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {mode === 'add' ? 'Add New Staff Member' : `Edit Staff: ${staffMember?.name}`}
           </DialogTitle>
+          <DialogDescription>
+            {mode === 'add' ? 'Create a new staff account with login credentials and permissions' : 'Update staff member information'}
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -164,6 +221,21 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
               </Select>
             </div>
             <div>
+              <Label htmlFor="userRole">Access Level *</Label>
+              <Select value={formData.userRole} onValueChange={(value) => setFormData({ ...formData, userRole: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select access level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Admin">Admin (Full Access)</SelectItem>
+                  <SelectItem value="Staff">Staff (Limited Access)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <Label htmlFor="status">Status</Label>
               <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
                 <SelectTrigger>
@@ -176,9 +248,6 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
                 </SelectContent>
               </Select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="phone">Phone Number</Label>
               <Input
@@ -188,6 +257,9 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
                 placeholder="Enter phone number"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="jobTitle">Job Title</Label>
               <Input
@@ -197,17 +269,91 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
                 placeholder="Enter job title"
               />
             </div>
+            <div>
+              <Label htmlFor="appointmentDate">Appointment Date</Label>
+              <Input
+                id="appointmentDate"
+                type="date"
+                value={formData.appointmentDate}
+                onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
+              />
+            </div>
           </div>
 
-          <div>
-            <Label htmlFor="appointmentDate">Appointment Date</Label>
-            <Input
-              id="appointmentDate"
-              type="date"
-              value={formData.appointmentDate}
-              onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-            />
-          </div>
+          {/* Login Credentials Section - Only show when adding new staff */}
+          {mode === 'add' && (
+            <>
+              <div className="border-t pt-4 mt-4">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Login Credentials
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="username">Username *</Label>
+                    <Input
+                      id="username"
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      placeholder="Enter username"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="password">Password *</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        placeholder="Min. 6 characters"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permissions Section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      Permissions
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      At least one permission is required
+                    </p>
+                  </div>
+                  <Badge variant={tempPermissions.length > 0 ? "default" : "secondary"}>
+                    {tempPermissions.length} Selected
+                  </Badge>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowPermissionsModal(true)}
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Manage Permissions
+                </Button>
+              </div>
+            </>
+          )}
         </div>
 
         <DialogFooter>
@@ -219,6 +365,14 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Permissions Modal */}
+      <ManageStaffPermissionsModal
+        isOpen={showPermissionsModal}
+        onClose={() => setShowPermissionsModal(false)}
+        selectedPermissions={tempPermissions}
+        onUpdate={handlePermissionsUpdate}
+      />
     </Dialog>
   );
 }

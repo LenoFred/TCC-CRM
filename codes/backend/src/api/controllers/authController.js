@@ -12,9 +12,9 @@ const { ApiError } = require('../../middlewares/errorHandler');
  * POST /api/auth/login
  */
 const login = async (req, res) => {
-  const { email, password } = req.body;
+  const { username, password, loginType } = req.body;
 
-  const result = await authService.login(email, password);
+  const result = await authService.login(username, password, loginType);
 
   // Set refresh token as httpOnly cookie for security
   res.cookie('refreshToken', result.refreshToken, {
@@ -28,6 +28,7 @@ const login = async (req, res) => {
     success: true,
     accessToken: result.accessToken,
     user: result.user,
+    permissions: result.permissions, // Include permissions for frontend
   });
 };
 
@@ -67,6 +68,7 @@ const refresh = async (req, res) => {
     success: true,
     accessToken: result.accessToken,
     user: result.user,
+    permissions: result.permissions, // Include permissions for frontend
   });
 };
 
@@ -155,6 +157,54 @@ const validateToken = async (req, res) => {
   });
 };
 
+/**
+ * Hash password handler (Admin only)
+ * POST /api/auth/hash-password
+ */
+const hashPassword = async (req, res) => {
+  if (!req.user || req.user.role?.toLowerCase() !== 'admin') {
+    throw new ApiError('Admin access required', 403);
+  }
+
+  const { password } = req.body;
+
+  if (!password) {
+    throw new ApiError('Password is required', 400);
+  }
+
+  const hashedPassword = await authService.hashPassword(password);
+
+  res.json({
+    success: true,
+    hashedPassword,
+  });
+};
+
+/**
+ * Reset password handler (Admin only)
+ * POST /api/auth/reset-password
+ */
+const resetPassword = async (req, res) => {
+  if (!req.user || req.user.role?.toLowerCase() !== 'admin') {
+    throw new ApiError('Admin access required', 403);
+  }
+
+  const { staffId, newPassword } = req.body;
+
+  if (!staffId || !newPassword) {
+    throw new ApiError('Staff ID and new password are required', 400);
+  }
+
+  await authService.resetStaffPassword(staffId, newPassword);
+
+  logAuthEvent('PASSWORD_RESET', staffId, req.user.userId);
+
+  res.json({
+    success: true,
+    message: 'Password reset successfully',
+  });
+};
+
 module.exports = {
   login,
   logout,
@@ -163,4 +213,6 @@ module.exports = {
   changePassword,
   registerStaff,
   validateToken,
+  hashPassword,
+  resetPassword,
 };
