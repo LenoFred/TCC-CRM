@@ -141,37 +141,14 @@ const AttendancePage = () => {
         console.log('Gathering keys:', Object.keys(gatheringsData[0]));
       }
       
-      // Filter gatherings for today with time window (5 hours before to 7 hours after)
+      // Filter gatherings for today - show all gatherings for the entire day
       const now = new Date();
       const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
       
       const filteredGatherings = gatheringsData
         .filter(gathering => {
-          // Check if date matches today
-          if (gathering.gatheringDate !== today) {
-            return false;
-          }
-          
-          // If no time specified, include it
-          if (!gathering.gatheringTime) {
-            return true;
-          }
-          
-          try {
-            // Parse gathering time (assumes format like "10:00 AM" or "14:00")
-            const timeStr = gathering.gatheringTime.trim();
-            const gatheringDateTime = new Date(`${gathering.gatheringDate}T${convertTo24Hour(timeStr)}`);
-            
-            // Calculate time window: 5 hours before to 7 hours after
-            const fiveHoursBefore = new Date(gatheringDateTime.getTime() - (5 * 60 * 60 * 1000));
-            const sevenHoursAfter = new Date(gatheringDateTime.getTime() + (7 * 60 * 60 * 1000));
-            
-            // Check if current time is within the window
-            return now >= fiveHoursBefore && now <= sevenHoursAfter;
-          } catch (error) {
-            console.error('Error parsing gathering time:', error);
-            return true; // Include if time parsing fails
-          }
+          // Show all gatherings that match today's date
+          return gathering.gatheringDate === today;
         })
         .map(gathering => ({
           ...gathering,
@@ -266,7 +243,10 @@ const AttendancePage = () => {
     if (selectedEventForCheckIn) {
       setIsLoadingCheckIn(true);
       try {
-        await api.events.checkin(selectedEventForCheckIn.id, { memberIds: [memberId] });
+        await api.attendance.checkIn({
+          memberID: memberId.toString(),
+          gatheringID: selectedEventForCheckIn.gatheringID,
+        });
         setCheckedInMembers(new Set([...checkedInMembers, memberId]));
         setSearchTerm(""); // Clear search after check-in
         toast({

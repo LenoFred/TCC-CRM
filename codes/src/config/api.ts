@@ -212,6 +212,12 @@ export const api = {
       const timestamp = Date.now();
       return apiRequest<{gatheringID: string; total: number; attendance: any[]}>(`/attendance/gathering/${gatheringID}?_t=${timestamp}`);
     },
+
+    checkIn: (data: { memberID: string; gatheringID: string }) =>
+      apiRequest<{ message: string; data: any }>('/attendance/check-in', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 
   // Group Members

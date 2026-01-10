@@ -195,7 +195,14 @@ export const GroupProfileModal = ({
       
       const transformedGatherings: Activity[] = await Promise.all(transformedGatheringsPromises);
       
-      setGatherings(transformedGatherings);
+      // Sort by date (latest first)
+      const sortedGatherings = transformedGatherings.sort((a, b) => {
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        return dateB - dateA; // Descending order (latest first)
+      });
+      
+      setGatherings(sortedGatherings);
     } catch (error: any) {
       console.error('Error fetching gatherings:', error);
       setGatheringsError(error.message || 'Failed to load gatherings');

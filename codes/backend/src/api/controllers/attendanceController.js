@@ -246,24 +246,72 @@ class AttendanceController extends BaseController {
   async checkIn(req, res) {
     const { gatheringID, memberID } = req.body;
 
+    console.log('=== CHECK-IN DEBUG ===');
+    console.log('Request body:', req.body);
+    console.log('Sheet name:', this.sheetName);
+
     if (!gatheringID || !memberID) {
       throw new ApiError(400, 'Gathering ID and Member ID are required');
     }
 
-    const attendanceData = {
-      gatheringID,
-      memberID,
-      checkInTime: new Date().toISOString(),
-      status: 'Present',
-      checkInMethod: req.body.checkInMethod || 'Manual',
-      notes: req.body.notes || '',
-    };
-
-    const result = await this.create(
-      { body: attendanceData, user: req.user },
-      res
+    // Validate gathering exists
+    const gatherings = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GATHERINGS
     );
-    return result;
+    const gathering = gatherings.find((g) => g.gatheringID === gatheringID);
+    if (!gathering) {
+      throw new ApiError(404, 'Gathering not found');
+    }
+
+    // Validate member exists
+    const members = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.MEMBERS
+    );
+    const member = members.find((m) => m.memberID === memberID);
+    if (!member) {
+      throw new ApiError(404, 'Member not found');
+    }
+
+    // Check if already checked in
+    const attendanceData = await sheetsService.getSheetObjects(this.sheetName);
+    console.log('Current attendance records:', attendanceData.length);
+    
+    const existingCheckIn = attendanceData.find(
+      (a) => a.gatheringID === gatheringID && a.memberID === memberID
+    );
+
+    if (existingCheckIn) {
+      throw new ApiError(400, 'Member already checked in for this gathering');
+    }
+
+    // Create attendance record
+    const attendanceID = generateId('ATT');
+    const newRow = [attendanceID, memberID, gatheringID];
+
+    console.log('Attempting to append row:', newRow);
+    console.log('To sheet:', this.sheetName);
+
+    try {
+      // Append directly to sheet
+      const result = await sheetsService.appendSheetData(this.sheetName, [newRow]);
+      console.log('Append result:', result);
+      
+      sheetsService.invalidateCache(this.sheetName);
+
+      logger.info('Check-in successful', { attendanceID, memberID, gatheringID });
+
+      res.json({
+        message: 'Check-in successful',
+        data: {
+          attendanceID,
+          memberID,
+          gatheringID,
+        },
+      });
+    } catch (error) {
+      console.error('=== APPEND ERROR ===', error);
+      throw error;
+    }
   }
 
   /**

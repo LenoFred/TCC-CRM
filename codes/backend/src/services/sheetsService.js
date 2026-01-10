@@ -205,9 +205,14 @@ class SheetsService {
     const appendData = async () => {
       if (!this.sheets) await this.initializeAuth();
 
+      // For Attendance sheet, only use columns A:C to avoid appending to wrong columns
+      const range = sheetName === 'Attendance' 
+        ? `${sheetName}!A:C`
+        : `${sheetName}!A:Z`;
+
       const response = await this.sheets.spreadsheets.values.append({
         spreadsheetId: this.spreadsheetId,
-        range: `${sheetName}!A:Z`,
+        range: range,
         valueInputOption: 'RAW',
         resource: { values: data },
       });

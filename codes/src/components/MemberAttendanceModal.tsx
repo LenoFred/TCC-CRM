@@ -227,7 +227,6 @@ export const MemberAttendanceModal = ({
                             <TableHead>Type</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Check-In Time</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -247,18 +246,6 @@ export const MemberAttendanceModal = ({
                                     {record.status}
                                   </Badge>
                                 </div>
-                              </TableCell>
-                              <TableCell>
-                                {record.checkInTime ? (
-                                  <span className="text-sm text-muted-foreground">
-                                    {new Date(`2024-01-01T${record.checkInTime}`).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </span>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">-</span>
-                                )}
                               </TableCell>
                             </TableRow>
                           ))}
