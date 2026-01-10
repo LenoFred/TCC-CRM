@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { logger } = require('../../utils/logger');
 
 class AttendanceController extends BaseController {
   constructor() {
@@ -124,34 +125,81 @@ class AttendanceController extends BaseController {
       (a) => a.gatheringID === gatheringID
     );
 
-    // Get member details
+    // Get member and guest details
     const membersData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.MEMBERS
     );
+    const guestsData = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.GUEST
+    );
 
-    const attendanceWithMembers = attendance.map((a) => {
+    logger.info('Attendance lookup details:', {
+      gatheringID,
+      attendanceCount: attendance.length,
+      membersCount: membersData.length,
+      guestsCount: guestsData.length,
+      sampleMember: membersData[0],
+      sampleGuest: guestsData[0]
+    });
+
+    const attendanceWithDetails = attendance.map((a) => {
+      // Try to find as member first
       const member = membersData.find((m) => m.memberID === a.memberID);
+      if (member) {
+        logger.info('Found member:', {
+          memberID: member.memberID,
+          name: `${member.firstName} ${member.lastName}`,
+          phoneNumber: member.phoneNumber
+        });
+        return {
+          ...a,
+          member: {
+            memberID: member.memberID,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            email: member.email,
+            phoneNumber: member.phoneNumber,
+            type: 'member'
+          },
+        };
+      }
+      
+      // Try to find as guest
+      const guest = guestsData.find((g) => g.guestID === a.memberID);
+      if (guest) {
+        logger.info('Found guest:', {
+          guestID: guest.guestID,
+          name: guest.name,
+          phone: guest.phone
+        });
+        return {
+          ...a,
+          member: {
+            memberID: guest.guestID,
+            firstName: guest.name ? guest.name.split(' ')[0] : 'Guest',
+            lastName: guest.name ? guest.name.split(' ').slice(1).join(' ') : '',
+            email: guest.email,
+            phoneNumber: guest.phone,
+            type: 'guest'
+          },
+        };
+      }
+      
+      // Not found in either sheet
+      logger.warn('Attendee not found in Members or Guest sheets:', { memberID: a.memberID });
       return {
         ...a,
-        member: member
-          ? {
-              memberID: member.memberID,
-              firstName: member.firstName,
-              lastName: member.lastName,
-              email: member.email,
-              phone: member.phone,
-            }
-          : null,
+        member: null,
       };
     });
 
     res.json({
       gatheringID,
-      total: attendanceWithMembers.length,
-      present: attendanceWithMembers.filter(
+      total: attendanceWithDetails.length,
+      present: attendanceWithDetails.filter(
         (a) => a.status?.toLowerCase() === 'present'
       ).length,
-      attendance: attendanceWithMembers,
+      attendance: attendanceWithDetails,
     });
   }
 

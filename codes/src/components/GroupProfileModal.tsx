@@ -79,6 +79,7 @@ export const GroupProfileModal = ({
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'activities'>('overview');
   const [isCreateActivityOpen, setIsCreateActivityOpen] = useState(false);
+  const [selectedMemberID, setSelectedMemberID] = useState<string>("");
   const [selectedMemberName, setSelectedMemberName] = useState<string>("");
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [isActivityAttendanceModalOpen, setIsActivityAttendanceModalOpen] = useState(false);
@@ -455,6 +456,7 @@ export const GroupProfileModal = ({
                           variant="outline"
                           size="sm"
                           onClick={() => {
+                            setSelectedMemberID(member.memberID);
                             setSelectedMemberName(`${member.firstName} ${member.lastName}`);
                             setIsAttendanceModalOpen(true);
                           }}
@@ -593,11 +595,14 @@ export const GroupProfileModal = ({
         />
 
         <MemberAttendanceModal
+          memberID={selectedMemberID}
           memberName={selectedMemberName}
+          groupID={group.id}
           groupName={group.name}
           isOpen={isAttendanceModalOpen}
           onClose={() => {
             setIsAttendanceModalOpen(false);
+            setSelectedMemberID("");
             setSelectedMemberName("");
           }}
         />

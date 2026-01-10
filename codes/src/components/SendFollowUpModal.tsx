@@ -7,10 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Send, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { api } from "@/config/api";
 
 interface Member {
   id: number;
   name: string;
+  phone?: string;
+  email?: string;
   lastAttended: string;
 }
 
@@ -21,16 +24,25 @@ interface Guest {
   email: string;
 }
 
+interface Attendee {
+  id: number | string;
+  name: string;
+  phone: string;
+  email: string;
+  type: 'member' | 'guest';
+}
+
 interface SendFollowUpModalProps {
   isOpen: boolean;
   onClose: () => void;
   absentMembers?: Member[];
+  attendees?: Attendee[];
   guests?: Guest[];
   eventName: string;
 }
 
-export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests = [], eventName }: SendFollowUpModalProps) {
-  const [recipientType, setRecipientType] = useState<'absent' | 'guests'>('absent');
+export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], attendees = [], guests = [], eventName }: SendFollowUpModalProps) {
+  const [recipientType, setRecipientType] = useState<'absent' | 'attendees' | 'guests'>('absent');
   const [message, setMessage] = useState(`Hi [Name],\n\nWe missed you at ${eventName}. We hope you're doing well and look forward to seeing you soon.\n\nBlessings,\nTCC Team`);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -40,25 +52,78 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests 
   useEffect(() => {
     if (recipientType === 'absent') {
       setSelectedMembers(absentMembers.map(m => String(m.id)));
+    } else if (recipientType === 'attendees') {
+      setSelectedMembers(attendees.map(a => String(a.id)));
     } else {
       setSelectedMembers(guests.map(g => g.guestID));
     }
-  }, [recipientType, absentMembers, guests]);
+  }, [recipientType, absentMembers, attendees, guests]);
 
   const handleSend = async () => {
     setIsSending(true);
     try {
-      // API call would go here
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Prepare recipients with personalized messages
+      const recipientsList = selectedMembers.map(id => {
+        let recipient: any = null;
+        let name = '';
+        let phone = '';
+        let email = '';
+
+        if (recipientType === 'absent') {
+          recipient = absentMembers.find(m => String(m.id) === id);
+          name = recipient?.name || '';
+          phone = recipient?.phone || '';
+          email = recipient?.email || '';
+        } else if (recipientType === 'attendees') {
+          recipient = attendees.find(a => String(a.id) === id);
+          name = recipient?.name || '';
+          phone = recipient?.phone || '';
+          email = recipient?.email || '';
+        } else {
+          recipient = guests.find(g => g.guestID === id);
+          name = recipient?.name || '';
+          phone = recipient?.phone || '';
+          email = recipient?.email || '';
+        }
+
+        // Personalize message by replacing [Name] with actual name
+        const personalizedMessage = message.replace(/\[Name\]/g, name);
+
+        return {
+          id,
+          name,
+          phone,
+          email,
+          message: personalizedMessage
+        };
+      });
+
+      // Send via communications API with WhatsApp-first, SMS fallback
+      await api.communications.send({
+        channel: 'whatsapp', // Try WhatsApp first
+        smsChannelFallback: true, // Enable SMS fallback
+        recipientType: 'custom',
+        recipients: recipientsList,
+        message: message, // Template message
+        personalizedMessages: recipientsList.map(r => ({
+          id: r.id,
+          message: r.message,
+          phone: r.phone
+        })),
+        context: 'follow-up',
+        eventName: eventName
+      });
+
       toast({
         title: "Follow-up Messages Sent",
-        description: `Successfully sent messages to ${selectedMembers.length} members`,
+        description: `Successfully sent messages to ${selectedMembers.length} recipient${selectedMembers.length !== 1 ? 's' : ''} via WhatsApp/SMS`,
       });
       onClose();
     } catch (error) {
+      console.error('Error sending follow-up:', error);
       toast({
         title: "Error",
-        description: "Failed to send follow-up messages",
+        description: error instanceof Error ? error.message : "Failed to send follow-up messages",
         variant: "destructive",
       });
     } finally {
@@ -74,7 +139,7 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests 
     );
   };
 
-  const currentRecipients = recipientType === 'absent' ? absentMembers : guests;
+  const currentRecipients = recipientType === 'absent' ? absentMembers : recipientType === 'attendees' ? attendees : guests;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -90,12 +155,13 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests 
           {/* Recipient Type Selection */}
           <div className="space-y-2">
             <Label>Send To</Label>
-            <Select value={recipientType} onValueChange={(value: 'absent' | 'guests') => setRecipientType(value)}>
+            <Select value={recipientType} onValueChange={(value: 'absent' | 'attendees' | 'guests') => setRecipientType(value)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="absent">Absent Members ({absentMembers.length})</SelectItem>
+                <SelectItem value="attendees">Attendees ({attendees.length})</SelectItem>
                 <SelectItem value="guests">Guests ({guests.length})</SelectItem>
               </SelectContent>
             </Select>
@@ -129,6 +195,24 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests 
                       </Badge>
                     </label>
                   ))
+                ) : recipientType === 'attendees' ? (
+                  attendees.map((attendee) => (
+                    <label
+                      key={attendee.id}
+                      className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-2 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedMembers.includes(String(attendee.id))}
+                        onChange={() => toggleRecipient(String(attendee.id))}
+                        className="rounded"
+                      />
+                      <span className="flex-1">{attendee.name}</span>
+                      <Badge variant="default" className="text-xs">
+                        {attendee.type === 'member' ? 'Member' : 'Guest'}
+                      </Badge>
+                    </label>
+                  ))
                 ) : (
                   guests.map((guest) => (
                     <label
@@ -150,7 +234,7 @@ export function SendFollowUpModal({ isOpen, onClose, absentMembers = [], guests 
                 )}
                 {currentRecipients.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    No {recipientType === 'absent' ? 'absent members' : 'guests'} to show
+                    No {recipientType === 'absent' ? 'absent members' : recipientType === 'attendees' ? 'attendees' : 'guests'} to show
                   </p>
                 )}
               </div>

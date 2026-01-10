@@ -333,10 +333,10 @@ router.get(
           activities.push({
             id: `staff-login-${s.staffID}-${s.lastLogin}`,
             type: 'Staff Login',
-            description: `${s.firstName} ${s.lastName} logged in`,
+            description: `${s.fullName || s.FullName || 'Staff'} logged in`,
             timestamp: fullTimestamp,
             icon: 'UserCheck',
-            memberName: `${s.firstName} ${s.lastName}`,
+            memberName: s.fullName || s.FullName || 'Staff',
           });
         });
       
@@ -350,10 +350,10 @@ router.get(
           activities.push({
             id: `staff-update-${s.staffID}-${s.updatedAt}`,
             type: 'Staff Update',
-            description: `${s.firstName} ${s.lastName}'s profile was updated`,
+            description: `${s.fullName || s.FullName || 'Staff'}'s profile was updated`,
             timestamp: fullTimestamp,
             icon: 'UserCheck',
-            memberName: `${s.firstName} ${s.lastName}`,
+            memberName: s.fullName || s.FullName || 'Staff',
           });
         });
       

@@ -36,8 +36,11 @@ interface Member {
   memberID: string;
   firstName: string;
   lastName: string;
+  phoneNumber?: string;
+  email?: string;
   checkInTime: string;
   status?: string;
+  type?: 'member' | 'guest';
 }
 
 interface GroupGatheringAttendanceModalProps {
@@ -79,14 +82,24 @@ export const GroupGatheringAttendanceModal = ({
       // The API returns { gatheringID, total, attendance: [...] }
       const attendanceData = response.attendance || [];
       
+      console.log('Sample attendance record:', attendanceData[0]);
+      
       // Transform the data to match our interface
-      const transformedAttendees: Member[] = attendanceData.map((record: any) => ({
-        memberID: record.memberID,
-        firstName: record.member?.firstName || 'Unknown',
-        lastName: record.member?.lastName || 'Member',
-        checkInTime: record.checkInTime || '',
-        status: record.status || 'Present'
-      }));
+      const transformedAttendees: Member[] = attendanceData.map((record: any) => {
+        console.log('Transforming record:', record);
+        return {
+          memberID: record.memberID,
+          firstName: record.member?.firstName || 'Unknown',
+          lastName: record.member?.lastName || 'Person',
+          phoneNumber: record.member?.phoneNumber || '',
+          email: record.member?.email || '',
+          checkInTime: record.checkInTime || '',
+          status: record.status || 'Present',
+          type: record.member?.type || 'member'
+        };
+      });
+      
+      console.log('Transformed attendees:', transformedAttendees);
       
       setAttendees(transformedAttendees);
     } catch (error: any) {
@@ -200,25 +213,37 @@ export const GroupGatheringAttendanceModal = ({
                   key={attendee.memberID}
                   className="flex items-center justify-between p-3 rounded-lg border bg-card"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1">
                     <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                       <span className="text-sm font-medium text-primary">
                         {attendee.firstName[0]}{attendee.lastName[0]}
                       </span>
                     </div>
-                    <div>
-                      <p className="font-medium">{attendee.firstName} {attendee.lastName}</p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{attendee.firstName} {attendee.lastName}</p>
+                        <Badge variant={attendee.type === 'guest' ? 'secondary' : 'default'} className="text-xs">
+                          {attendee.type === 'guest' ? 'Guest' : 'Member'}
+                        </Badge>
+                      </div>
                       <p className="text-sm text-muted-foreground">
                         {attendee.status || 'Present'}
                       </p>
                     </div>
                   </div>
-                  <Badge variant="secondary">
-                    {attendee.checkInTime ? new Date(`2024-01-01T${attendee.checkInTime}`).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }) : 'N/A'}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge variant="secondary">
+                      {attendee.phoneNumber || 'N/A'}
+                    </Badge>
+                    {attendee.checkInTime && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(`2024-01-01T${attendee.checkInTime}`).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
               

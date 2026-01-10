@@ -590,6 +590,9 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+
+    getIntegrationStatus: () =>
+      apiRequest<{ success: boolean; integrations: any }>('/settings/integrations/status'),
   },
 
   // Schema
@@ -650,9 +653,6 @@ export const api = {
     
     deleteRole: (id: string) =>
       apiRequest<void>(`/volunteer-roles/${id}`, { method: 'DELETE' }),
-    
-    getAll: (params?: URLSearchParams) =>
-      apiRequest<any[]>(`/volunteers${params ? `?${params}` : ''}`),
 
     assign: (data: any) =>
       apiRequest<any>('/volunteers/assign', {
@@ -735,11 +735,6 @@ export const api = {
       apiRequest<{ success: boolean; data: any[]; count: number }>('/business/guests'),
   },
 
-  // Settings & Integrations
-  settings: {
-    getIntegrationStatus: () =>
-      apiRequest<{ success: boolean; integrations: any }>('/settings/integrations/status'),
-  },
 };
 
 export default api;
