@@ -45,9 +45,23 @@ class CommunicationsController extends BaseController {
   /**
    * Create/send new communication (Override base create method)
    * SIMPLE & CLEAN: Extract contacts based on channel, send one by one
+   * SUPPORTS: Personalized messages and WhatsApp-first with SMS fallback
    */
   async create(req, res) {
-    const { message, channel, memberIds, familyIds, groupIds, staffIds, manualPhoneNumbers, manualEmails, subject, emailProvider } = req.body;
+    const { 
+      message, 
+      channel, 
+      memberIds, 
+      familyIds, 
+      groupIds, 
+      staffIds, 
+      manualPhoneNumbers, 
+      manualEmails, 
+      subject, 
+      emailProvider,
+      personalizedMessages,
+      smsChannelFallback 
+    } = req.body;
 
     logger.info('=== COMMUNICATIONS CREATE START ===', {
       channel,
@@ -57,6 +71,8 @@ class CommunicationsController extends BaseController {
       staffIds,
       manualPhones: manualPhoneNumbers,
       manualEmails,
+      hasPersonalizedMessages: !!personalizedMessages,
+      smsChannelFallback,
       fullBody: req.body
     });
 
@@ -243,38 +259,85 @@ class CommunicationsController extends BaseController {
       }
 
       // STEP 4: Send messages IN PARALLEL (bulk sending for better performance)
-      const results = { success: [], failed: [], total: recipientsToSend.length };
+      const results = { success: [], failed: [], total: recipientsToSend.length, whatsappSuccess: 0, smsFallback: 0 };
 
       // Create array of promises for parallel execution
       const sendPromises = recipientsToSend.map(async (recipient) => {
         try {
-          logger.info(`Sending ${normalizedChannel} to ${recipient.contact}...`);
+          // Get personalized message if available
+          let messageToSend = message;
+          if (personalizedMessages && Array.isArray(personalizedMessages)) {
+            const personalizedMsg = personalizedMessages.find(pm => 
+              String(pm.id) === String(recipient.memberId) || 
+              pm.phone === recipient.contact
+            );
+            if (personalizedMsg && personalizedMsg.message) {
+              messageToSend = personalizedMsg.message;
+            }
+          }
+
+          logger.info(`Sending ${normalizedChannel} to ${recipient.contact}...`, {
+            hasPersonalizedMessage: messageToSend !== message,
+            smsChannelFallback
+          });
 
           if (normalizedChannel === 'sms') {
-            await communicationService.sendSMS(recipient.contact, message, {
+            await communicationService.sendSMS(recipient.contact, messageToSend, {
               recipientID: recipient.memberId,
               sentBy: req.user?.memberID || 'System'
             });
+            logger.info(`✓ Sent SMS to ${recipient.contact}`);
+            return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'sms' };
+
           } else if (normalizedChannel === 'email') {
             await communicationService.sendEmail(
               recipient.contact,
               subject || 'Message from TCC-CRM',
-              message,
+              messageToSend,
               {
                 recipientID: recipient.memberId,
                 sentBy: req.user?.memberID || 'System',
                 emailProvider: emailProvider || 'gmail'
               }
             );
-          } else if (normalizedChannel === 'whatsapp') {
-            await communicationService.sendWhatsApp(recipient.contact, message, {
-              recipientID: recipient.memberId,
-              sentBy: req.user?.memberID || 'System'
-            });
-          }
+            logger.info(`✓ Sent Email to ${recipient.contact}`);
+            return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'email' };
 
-          logger.info(`✓ Sent to ${recipient.contact}`);
-          return { success: true, recipient: recipient.contact, name: recipient.name };
+          } else if (normalizedChannel === 'whatsapp') {
+            // WhatsApp-first with SMS fallback logic
+            try {
+              await communicationService.sendWhatsApp(recipient.contact, messageToSend, {
+                recipientID: recipient.memberId,
+                sentBy: req.user?.memberID || 'System'
+              });
+              logger.info(`✓ Sent WhatsApp to ${recipient.contact}`);
+              results.whatsappSuccess++;
+              return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'whatsapp' };
+            } catch (whatsappError) {
+              // If WhatsApp fails and SMS fallback is enabled, try SMS
+              if (smsChannelFallback) {
+                logger.warn(`WhatsApp failed for ${recipient.contact}, trying SMS fallback`, { error: whatsappError.message });
+                try {
+                  await communicationService.sendSMS(recipient.contact, messageToSend, {
+                    recipientID: recipient.memberId,
+                    sentBy: req.user?.memberID || 'System'
+                  });
+                  logger.info(`✓ Sent SMS (fallback) to ${recipient.contact}`);
+                  results.smsFallback++;
+                  return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'sms-fallback' };
+                } catch (smsError) {
+                  logger.error(`✗ Both WhatsApp and SMS failed for ${recipient.contact}`, { 
+                    whatsappError: whatsappError.message, 
+                    smsError: smsError.message 
+                  });
+                  throw new Error(`WhatsApp: ${whatsappError.message}, SMS: ${smsError.message}`);
+                }
+              } else {
+                // No fallback, throw WhatsApp error
+                throw whatsappError;
+              }
+            }
+          }
 
         } catch (error) {
           logger.error(`✗ Failed to send to ${recipient.contact}`, { error: error.message });
@@ -288,7 +351,7 @@ class CommunicationsController extends BaseController {
       // Categorize results
       sendResults.forEach(result => {
         if (result.success) {
-          results.success.push({ recipient: result.recipient, name: result.name });
+          results.success.push({ recipient: result.recipient, name: result.name, channel: result.channel });
         } else {
           results.failed.push({ recipient: result.recipient, name: result.name, error: result.error });
         }
@@ -297,7 +360,9 @@ class CommunicationsController extends BaseController {
       logger.info('=== COMMUNICATIONS CREATE COMPLETE ===', {
         total: results.total,
         sent: results.success.length,
-        failed: results.failed.length
+        failed: results.failed.length,
+        whatsappSuccess: results.whatsappSuccess,
+        smsFallback: results.smsFallback
       });
 
       res.status(201).json({
@@ -308,6 +373,8 @@ class CommunicationsController extends BaseController {
           total: results.total,
           sent: results.success.length,
           failed: results.failed.length,
+          whatsappSuccess: results.whatsappSuccess || 0,
+          smsFallback: results.smsFallback || 0,
           details: { success: results.success, failed: results.failed }
         }
       });

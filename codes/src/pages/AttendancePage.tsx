@@ -62,6 +62,7 @@ const AttendancePage = () => {
   const [membersError, setMembersError] = useState(null);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState("");
   const [upcomingGatheringsSearch, setUpcomingGatheringsSearch] = useState("");
+  const [gatheringDirectorySearch, setGatheringDirectorySearch] = useState("");
   const [upcomingGatherings, setUpcomingGatherings] = useState([]);
   const [selectedGatheringToEdit, setSelectedGatheringToEdit] = useState<any>(null);
 
@@ -503,9 +504,33 @@ const AttendancePage = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Search Bar for Gatherings */}
+              <div className="space-y-2">
+                <Label>Search Gatherings</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search by gathering name..."
+                    value={gatheringDirectorySearch}
+                    onChange={(e) => setGatheringDirectorySearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                {gatheringDirectorySearch.trim() && (
+                  <p className="text-xs text-muted-foreground">
+                    {allGatherings.filter(g => {
+                      const searchLower = gatheringDirectorySearch.toLowerCase();
+                      const name = (g.gatheringName || '').toLowerCase();
+                      return name.includes(searchLower);
+                    }).length} gathering(s) found
+                  </p>
+                )}
+              </div>
+
               {/* Gathering Selection by Month */}
               <div className="space-y-2">
-                <Label>Select Gathering</Label>
+                <Label>Select Gathering {gatheringDirectorySearch.trim() && '(Filtered)'}</Label>
                 <Select 
                   value={selectedAttendanceForView?.gatheringID || ''} 
                   onValueChange={async (value) => {
@@ -549,8 +574,27 @@ const AttendancePage = () => {
                   </SelectTrigger>
                   <SelectContent>
                     {(() => {
+                      // Filter gatherings based on search query (name only)
+                      const filteredGatherings = allGatherings.filter(gathering => {
+                        if (!gatheringDirectorySearch.trim()) return true;
+                        
+                        const searchLower = gatheringDirectorySearch.toLowerCase();
+                        const name = (gathering.gatheringName || '').toLowerCase();
+                        
+                        return name.includes(searchLower);
+                      });
+
+                      // Show message if no results
+                      if (filteredGatherings.length === 0) {
+                        return (
+                          <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                            No gatherings found matching "{gatheringDirectorySearch}"
+                          </div>
+                        );
+                      }
+
                       // Group gatherings by month
-                      const groupedByMonth = allGatherings.reduce((acc, gathering) => {
+                      const groupedByMonth = filteredGatherings.reduce((acc, gathering) => {
                         if (!gathering.gatheringDate) return acc;
                         const date = new Date(gathering.gatheringDate);
                         const monthKey = date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
@@ -726,7 +770,7 @@ const AttendancePage = () => {
                                   return {
                                     ...attendance,
                                     name: member ? `${member.firstName || ''} ${member.lastName || ''}`.trim() : 'Unknown Member',
-                                    phone: member?.phone || 'N/A',
+                                    phone: member?.phoneNumber || member?.phone || 'N/A',
                                     email: member?.email || 'N/A',
                                     type: 'Member'
                                   };
@@ -1181,6 +1225,8 @@ const AttendancePage = () => {
                 .map(m => ({
                   id: m.memberID,
                   name: `${m.firstName} ${m.lastName}`,
+                  phone: m.phoneNumber || m.phone,
+                  email: m.email,
                   lastAttended: "2024-08-31"
                 }))
             : members
@@ -1188,8 +1234,41 @@ const AttendancePage = () => {
                 .map(m => ({
                   id: m.memberID,
                   name: `${m.firstName} ${m.lastName}`,
+                  phone: m.phoneNumber || m.phone,
+                  email: m.email,
                   lastAttended: "2024-08-31"
                 }))
+          }
+          attendees={attendanceRecords
+            .filter(a => {
+              // Check if it's a member (not a guest)
+              const isMember = members.find(m => m.memberID === a.memberID);
+              return isMember;
+            })
+            .map(a => {
+              const member = members.find(m => m.memberID === a.memberID);
+              return {
+                id: member?.memberID || a.memberID,
+                name: `${member?.firstName || ''} ${member?.lastName || ''}`.trim(),
+                phone: member?.phoneNumber || member?.phone || '',
+                email: member?.email || '',
+                type: 'member'
+              };
+            })
+            .concat(
+              attendanceRecords
+                .filter(a => guestRecords.find(g => g.guestID === a.memberID))
+                .map(a => {
+                  const guest = guestRecords.find(g => g.guestID === a.memberID);
+                  return {
+                    id: guest?.guestID || a.memberID,
+                    name: guest?.name || 'Unknown Guest',
+                    phone: guest?.phone || '',
+                    email: guest?.email || '',
+                    type: 'guest'
+                  };
+                })
+            )
           }
           guests={attendanceRecords
             .filter(a => guestRecords.find(g => g.guestID === a.memberID))
