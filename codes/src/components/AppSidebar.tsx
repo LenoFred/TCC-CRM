@@ -129,11 +129,12 @@ const adminItems = [
 ];
 
 export function AppSidebar() {
-  const { state, setOpen, isMobile } = useSidebar();
+  const { state, setOpen, isMobile, openMobile } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
   // On mobile, always show text (never collapse). On desktop, use the collapsed state.
-  const collapsed = isMobile ? false : state === "collapsed";
+  // Also check if mobile sidebar is open (openMobile) - if so, never collapse
+  const collapsed = (isMobile || openMobile) ? false : state === "collapsed";
   const { canView, hasPermission } = usePermission();
   const { logout, user } = useAuth();
   const { toast } = useToast();
