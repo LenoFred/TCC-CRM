@@ -1167,6 +1167,9 @@ const CommunicationsPage = () => {
     // Count manual phone numbers
     count += manualPhoneNumbers.length;
 
+    // Count manual emails
+    count += manualEmails.length;
+
     return count;
   };
 
@@ -2297,6 +2300,11 @@ const CommunicationsPage = () => {
                           // Add manual phone numbers if any
                           if (manualPhoneNumbers.length > 0) {
                             recipientData.manualPhoneNumbers = manualPhoneNumbers;
+                          }
+
+                          // Add manual emails if any
+                          if (manualEmails.length > 0) {
+                            recipientData.manualEmails = manualEmails;
                           }
 
                           console.log('📤 Sending communication with data:', recipientData);
