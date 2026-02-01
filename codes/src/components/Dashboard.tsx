@@ -38,7 +38,7 @@ import {
 export function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const typedUser = (user as unknown as { staffRole?: string; fullName?: string; firstName?: string; role?: string }) || {};
   const staffRole = typedUser.staffRole || typedUser.role || 'Staff';
   const displayName = typedUser.fullName || typedUser.firstName || 'User';
@@ -226,10 +226,19 @@ export function Dashboard() {
       <div className="bg-gradient-hero rounded-2xl p-8 text-white shadow-large">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">
-              Welcome back, {staffRole} {displayName}
-            </h1>
-            <p className="text-lg opacity-90">Here's what's happening at TCC today</p>
+            {authLoading ? (
+              <>
+                <Skeleton className="h-10 w-64 mb-2 bg-white/20" />
+                <Skeleton className="h-6 w-96 bg-white/20" />
+              </>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold mb-2">
+                  Welcome back, {staffRole} {displayName}
+                </h1>
+                <p className="text-lg opacity-90">Here's what's happening at TCC today</p>
+              </>
+            )}
           </div>
           <div className="text-right opacity-90">
             <p className="text-sm">Today's Date</p>

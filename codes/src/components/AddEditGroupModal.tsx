@@ -323,6 +323,26 @@ export const AddEditGroupModal = ({
       });
       return;
     }
+
+    // Validate that an assistant leader is selected
+    if (!selectedAssistantLeader) {
+      toast({
+        title: "Validation Error",
+        description: "Please select an assistant leader for the group.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that a pastor is selected
+    if (!selectedPastor) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a pastor for the group.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Validate that at least one member is added (only for new group creation)
     if (!isEdit && selectedMembers.length === 0) {
