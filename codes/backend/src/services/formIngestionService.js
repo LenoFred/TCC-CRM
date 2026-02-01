@@ -140,11 +140,17 @@ class FormIngestionService {
   async ingestAllForms() {
     console.log('\n🔄 Starting form ingestion cycle...');
     
-    // Check if service is initialized
+    // Auto-initialize if not already initialized (for serverless environments like Vercel)
     if (!this.sheets) {
-      console.error('❌ CRITICAL: FormIngestionService not initialized - this.sheets is null');
-      console.error('❌ This means initialize() was never called or it failed');
-      throw new Error('FormIngestionService not initialized. Please call initialize() first.');
+      console.warn('FormIngestionService not initialized - attempting auto-initialization...');
+      try {
+        await this.initialize();
+        console.info('Auto-initialization successful');
+      } catch (error) {
+        console.error('CRITICAL: Auto-initialization failed');
+        console.error('Error details:', error.message);
+        throw new Error(`FormIngestionService auto-initialization failed: ${error.message}`);
+      }
     }
     
     const timestamp = new Date().toISOString();
