@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGuests, useDonationVerification } from "@/hooks/useBusinessLogic";
 import { dashboardService } from "@/services/businessLogicService";
 import api from "@/config/api";
+import { cacheInvalidationService } from "@/utils/cacheInvalidation";
 import {
   Users,
   Heart,
@@ -194,14 +195,19 @@ export function Dashboard() {
     setIsIngestingForms(true);
     try {
       const res: any = await api.forms.ingestAll();
-      toast({
-        title: "Form ingestion triggered",
-        description: res?.message || "Pulling latest form responses now."
-      });
-
+      
       // Hard refresh of dashboard data so new ingested rows are visible immediately
       await fetchDashboardData();
       await fetchRecentActivities();
+      
+      // Clear IndexedDB cache and broadcast refresh event to all components
+      await cacheInvalidationService.invalidateMembersCaches();
+      
+      // Show subtle success toast
+      toast({
+        title: "Data Updated",
+        description: `Form ingestion complete. New data loaded.`,
+      });
     } catch (error: any) {
       toast({
         title: "Form ingestion failed",

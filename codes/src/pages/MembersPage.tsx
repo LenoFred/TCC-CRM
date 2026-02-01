@@ -28,6 +28,7 @@ import { AddEditMemberModal } from "@/components/AddEditMemberModal";
 import { usePermission } from "@/hooks/usePermission";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/use-toast";
+import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { api } from "@/config/api";
 
 const MembersPage = () => {
@@ -179,6 +180,13 @@ const MembersPage = () => {
     
     return () => clearInterval(interval);
   }, []);
+
+  // Subscribe to cache invalidation events (e.g., after form ingest)
+  useDataRefresh({
+    onRefresh: fetchMembers,
+    types: ['members', 'all'],
+    debug: false,
+  });
 
   const filteredMembers = members.filter(member => {
     if (!member) return false;
