@@ -52,7 +52,7 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
+  authenticate,
   // requireRole('Admin'),
   asyncHandler(staffController.getAll.bind(staffController))
 );
@@ -76,7 +76,7 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
+  authenticate,
   // requireRole('Admin'),
   asyncHandler(staffController.create.bind(staffController))
 );
@@ -100,7 +100,7 @@ router.patch(
  */
 router.patch(
   '/:id',
-  // authenticate,
+  authenticate,
   // requireRole('Admin'),
   asyncHandler(staffController.update.bind(staffController))
 );

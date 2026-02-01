@@ -29,8 +29,8 @@ router.get(
  */
 router.get(
   '/gathering/:gatheringID',
-  // authenticate,
-  // requirePermission('can_view_attendance'),
+  authenticate,
+  requirePermission('can_view_attendance'),
   asyncHandler(attendanceController.getByGathering.bind(attendanceController))
 );
 
@@ -41,8 +41,8 @@ router.get(
  */
 router.get(
   '/member/:memberID',
-  // authenticate,
-  // requirePermission('can_view_attendance'),
+  authenticate,
+  requirePermission('can_view_attendance'),
   asyncHandler(attendanceController.getByMember.bind(attendanceController))
 );
 
@@ -53,8 +53,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_attendance'),
+  authenticate,
+  requirePermission('can_view_attendance'),
   asyncHandler(attendanceController.getAll.bind(attendanceController))
 );
 

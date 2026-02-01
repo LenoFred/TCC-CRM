@@ -360,10 +360,13 @@ class GuestTrackingService {
   }
 
   /**
-   * Get guest statistics
+   * Get guest statistics with real-time conversion rate calculation
    */
   async getGuestStats() {
     const guests = await this.getAllGuests();
+    const members = await sheetsService.getSheetObjects(
+      sheetsService.SHEETS.MEMBERS
+    );
     const attendanceData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.ATTENDANCE
     );
@@ -392,14 +395,89 @@ class GuestTrackingService {
       return joinDate >= thirtyDaysAgo;
     }).length;
 
+    // Calculate real-time conversion rate by matching guests to members
+    const convertedGuests = this.matchGuestsToMembers(guests, members);
+    const conversionRate = totalGuests > 0 
+      ? parseFloat(((convertedGuests.length / totalGuests) * 100).toFixed(1))
+      : 0;
+
     return {
       totalGuests,
       firstTimeGuests,
       returningGuests,
       recentGuests,
       totalGuestAttendance: guestAttendance.length,
-      conversionRate: 0, // TODO: Calculate from historical data
+      convertedGuests: convertedGuests.length,
+      conversionRate,
+      convertedGuestDetails: convertedGuests.slice(0, 10), // Last 10 conversions for reference
     };
+  }
+
+  /**
+   * Match guests to members by phone number + name
+   * Returns list of guests who have been converted to members
+   */
+  matchGuestsToMembers(guests, members) {
+    const convertedGuests = [];
+
+    // Normalize phone number for comparison (remove spaces, dashes, +)
+    const normalizePhone = (phone) => {
+      if (!phone) return '';
+      return phone.toString().replace(/[\s\-+()]/g, '').trim();
+    };
+
+    // Normalize name for comparison (lowercase, trim)
+    const normalizeName = (name) => {
+      if (!name) return '';
+      return name.toString().toLowerCase().trim();
+    };
+
+    guests.forEach((guest) => {
+      const guestPhone = normalizePhone(guest.phone);
+      const guestFirstName = normalizeName(guest.firstName);
+      const guestLastName = normalizeName(guest.lastName);
+
+      // Check if this guest has been converted to a member
+      const matchedMember = members.find((member) => {
+        const memberPhone = normalizePhone(member.phone || member.phoneNumber);
+        const memberFirstName = normalizeName(member.firstName);
+        const memberLastName = normalizeName(member.lastName);
+
+        // Match by phone number (primary matching)
+        const phoneMatch = guestPhone && memberPhone && guestPhone === memberPhone;
+
+        // Match by first name OR last name (secondary matching)
+        const nameMatch = 
+          (guestFirstName && memberFirstName && guestFirstName === memberFirstName) ||
+          (guestLastName && memberLastName && guestLastName === memberLastName);
+
+        // Consider converted if phone matches, or both phone and name match
+        // This handles cases where phone might be slightly different but names match
+        return phoneMatch || (phoneMatch && nameMatch);
+      });
+
+      if (matchedMember) {
+        convertedGuests.push({
+          guestID: guest.memberID,
+          guestName: `${guest.firstName} ${guest.lastName}`,
+          guestPhone: guest.phone,
+          memberID: matchedMember.memberID,
+          memberName: `${matchedMember.firstName} ${matchedMember.lastName}`,
+          guestJoinDate: guest.joinDate,
+          memberJoinDate: matchedMember.joinDate,
+        });
+      }
+    });
+
+    logger.info('Guest to member conversion calculated', {
+      totalGuests: guests.length,
+      convertedCount: convertedGuests.length,
+      conversionRate: guests.length > 0 
+        ? `${((convertedGuests.length / guests.length) * 100).toFixed(1)}%`
+        : '0%',
+    });
+
+    return convertedGuests;
   }
 }
 

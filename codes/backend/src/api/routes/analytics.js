@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const analyticsController = require('../controllers/analyticsController');
 const { asyncHandler } = require('../../middlewares/errorHandler');
-// const { authenticate, requirePermission } = require('../../middlewares/auth');
+const { authenticate, requirePermission } = require('../../middlewares/auth');
 
 /**
  * @route   POST /api/analytics/generate-report
@@ -16,8 +16,8 @@ const { asyncHandler } = require('../../middlewares/errorHandler');
  */
 router.post(
   '/generate-report',
-  // authenticate,
-  // requirePermission('can_view_reports'),
+  authenticate,
+  requirePermission('can_view_reports'),
   asyncHandler(analyticsController.generateReport.bind(analyticsController))
 );
 
@@ -28,8 +28,8 @@ router.post(
  */
 router.get(
   '/sheet-columns/:sheetName',
-  // authenticate,
-  // requirePermission('can_view_reports'),
+  authenticate,
+  requirePermission('can_view_reports'),
   asyncHandler(analyticsController.getSheetColumns.bind(analyticsController))
 );
 
@@ -40,8 +40,8 @@ router.get(
  */
 router.get(
   '/summary-stats',
-  // authenticate,
-  // requirePermission('can_view_reports'),
+  authenticate,
+  requirePermission('can_view_reports'),
   asyncHandler(analyticsController.getSummaryStats.bind(analyticsController))
 );
 
@@ -52,8 +52,8 @@ router.get(
  */
 router.post(
   '/export',
-  // authenticate,
-  // requirePermission('can_view_reports'),
+  authenticate,
+  requirePermission('can_view_reports'),
   asyncHandler(analyticsController.exportReport.bind(analyticsController))
 );
 

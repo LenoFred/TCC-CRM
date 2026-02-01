@@ -84,6 +84,8 @@ export const usePermission = () => {
     canDelete,
     isAdmin,
     showUnauthorizedMessage,
+    enforce: (permissionKey: string, action: string, resource: string) =>
+      checkAndNotify(permissionKey, action, resource),
     checkAndNotify,
   };
 };

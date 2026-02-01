@@ -40,8 +40,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_volunteers'),
+  authenticate,
+  requirePermission('can_view_volunteers'),
   asyncHandler(volunteerRolesController.getAll.bind(volunteerRolesController))
 );
 
@@ -64,8 +64,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_manage_volunteers'),
+  authenticate,
+  requirePermission('can_manage_volunteers'),
   asyncHandler(volunteerRolesController.create.bind(volunteerRolesController))
 );
 
@@ -76,8 +76,8 @@ router.post(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_manage_volunteers'),
+  authenticate,
+  requirePermission('can_manage_volunteers'),
   asyncHandler(volunteerRolesController.update.bind(volunteerRolesController))
 );
 

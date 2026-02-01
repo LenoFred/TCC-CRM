@@ -1,4 +1,11 @@
 // API Configuration for TCC CRM
+import {
+  getCachedResponse,
+  cacheResponse,
+  isIndexedDBAvailable,
+} from '../utils/indexedDB';
+import { addToQueue } from '../utils/offlineQueue';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (
   process.env.NODE_ENV === 'production'
     ? 'https://tcc-crm-backend.vercel.app/api'
@@ -21,24 +28,72 @@ export const apiConfig = {
 
 // JWT token management
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('auth_token');
+  return localStorage.getItem('tcc_access_token');
 };
 
 export const setAuthToken = (token: string): void => {
-  localStorage.setItem('auth_token', token);
+  localStorage.setItem('tcc_access_token', token);
 };
 
 export const removeAuthToken = (): void => {
-  localStorage.removeItem('auth_token');
+  localStorage.removeItem('tcc_access_token');
 };
 
-// Enhanced fetch wrapper with CORS support and authentication
+// Enhanced fetch wrapper with CORS support, authentication, and offline support
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {},
-  retries = 2
+  retries = 2,
+  cacheMaxAge: number = 5 * 60 * 1000 // 5 minutes default
 ): Promise<T> => {
   const token = getAuthToken();
+  const method = options.method?.toUpperCase() || 'GET';
+  const isWriteOperation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+  
+  // Debug log for authentication
+  if (!token && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    console.warn(`[API] No auth token found for ${method} ${endpoint}`);
+    console.log('[API] Token from localStorage:', token);
+  }
+  
+  // Check if offline and handle accordingly
+  if (!navigator.onLine) {
+    console.log(`[API] Offline detected for ${method} ${endpoint}`);
+    
+    // For GET requests, try to return cached data
+    if (method === 'GET' && isIndexedDBAvailable()) {
+      const cached = await getCachedResponse<T>(endpoint);
+      if (cached) {
+        console.log(`[API] Returning cached data for ${endpoint} (offline)`);
+        return cached;
+      }
+      throw new Error('No cached data available offline');
+    }
+    
+    // For write operations, queue them
+    if (isWriteOperation) {
+      const body = options.body ? JSON.parse(options.body as string) : {};
+      const resource = endpoint.split('/')[1] || 'unknown'; // Extract resource from endpoint
+      
+      const operationId = await addToQueue({
+        type: method === 'POST' ? 'create' : method === 'DELETE' ? 'delete' : 'update',
+        resource,
+        endpoint,
+        method,
+        data: body,
+        token: token || undefined,
+      });
+      
+      console.log(`[API] Operation queued (${operationId}): ${method} ${endpoint}`);
+      
+      // Return a special response indicating queued status
+      return {
+        _queued: true,
+        _operationId: operationId,
+        ...body, // Include the original data for optimistic UI updates
+      } as T;
+    }
+  }
   
   const config: RequestInit = {
     ...options,
@@ -51,12 +106,8 @@ export const apiRequest = async <T>(
     mode: 'cors', // Explicitly set CORS mode
   };
 
-  // Add cache-busting timestamp for GET requests
+  // Build URL (remove cache-busting for cached requests)
   let url = `${API_BASE_URL}${endpoint}`;
-  if (!options.method || options.method.toUpperCase() === 'GET') {
-    const separator = endpoint.includes('?') ? '&' : '?';
-    url += `${separator}_t=${Date.now()}`;
-  }
   
   try {
     const response = await fetch(url, config);
@@ -74,7 +125,7 @@ export const apiRequest = async <T>(
       const delay = retryAfter * 1000 || (3 - retries) * 1000; // Exponential backoff
       console.log(`Rate limited (429). Retrying after ${delay}ms... (${retries} retries left)`);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return apiRequest<T>(endpoint, options, retries - 1);
+      return apiRequest<T>(endpoint, options, retries - 1, cacheMaxAge);
     }
     
     // Handle other HTTP errors
@@ -83,10 +134,27 @@ export const apiRequest = async <T>(
       throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
     }
     
-    // Return JSON response
-    return await response.json();
+    // Parse JSON response
+    const data = await response.json();
+    
+    // Cache successful GET responses
+    if (method === 'GET' && response.ok && isIndexedDBAvailable()) {
+      await cacheResponse(endpoint, data, cacheMaxAge);
+    }
+    
+    return data;
   } catch (error) {
     console.error('API Request Error:', error);
+    
+    // If network error and GET request, try cache as last resort
+    if (method === 'GET' && isIndexedDBAvailable()) {
+      const cached = await getCachedResponse<T>(endpoint);
+      if (cached) {
+        console.log(`[API] Network error, returning stale cache for ${endpoint}`);
+        return cached;
+      }
+    }
+    
     throw error;
   }
 };
@@ -267,6 +335,9 @@ export const api = {
     getAll: (params?: URLSearchParams) =>
       apiRequest<{success: boolean; data: any[]}>(`/groups${params ? `?${params}` : ''}`),
 
+    getForPermissions: () =>
+      apiRequest<{success: boolean; data: any[]}>('/groups/for-permissions'),
+
     getById: (id: string) =>
       apiRequest<{success: boolean; data: any}>(`/groups/${id}`),
 
@@ -408,13 +479,13 @@ export const api = {
     
     // Get permissions for a specific staff member
     getByStaffId: (staffId: string) =>
-      apiRequest<{ success: boolean; staffId: string; total: number; permissions: any[] }>(`/staff-permissions/${staffId}`),
+      apiRequest<{ success: boolean; staffId: string; total: number; permissions: any[]; groupPermissions?: string[] }>(`/staff-permissions/${staffId}`),
     
     // Update permissions for a staff member
-    update: (staffId: string, permissions: string[]) =>
-      apiRequest<{ success: boolean; message: string; staffId: string; updated: number; created: number; totalGranted: number }>(`/staff-permissions/${staffId}`, {
+    update: (staffId: string, payload: { permissions: string[]; groupPermissions?: string[] }) =>
+      apiRequest<{ success: boolean; message: string; staffId: string; updated: number; created: number; totalGranted: number; groupPermissionsGranted?: number }>(`/staff-permissions/${staffId}`, {
         method: 'POST',
-        body: JSON.stringify({ permissions }),
+        body: JSON.stringify(payload),
       }),
   },
 
@@ -526,6 +597,49 @@ export const api = {
     
     deleteScheduled: (id: string) =>
       apiRequest<void>(`/communications/scheduled/${id}`, { method: 'DELETE' }),
+
+    // Automated messages
+    getAutomations: () =>
+      apiRequest<{success: boolean; data: any[]; total: number}>('/communications/automations'),
+
+    getAutomationById: (id: string) =>
+      apiRequest<{success: boolean; data: any}>(`/communications/automations/${id}`),
+
+    createAutomation: (data: any) =>
+      apiRequest<{success: boolean; message: string; data?: any; warning?: string}>('/communications/automations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    updateAutomation: (id: string, data: any) =>
+      apiRequest<{success: boolean; message: string; warning?: string}>(`/communications/automations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+
+    toggleAutomation: (id: string, enabled: boolean) =>
+      apiRequest<{success: boolean; message: string}>(`/communications/automations/${id}/toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ enabled }),
+      }),
+
+    testAutomation: (id: string, testRecipient: string) =>
+      apiRequest<{success: boolean; message: string}>(`/communications/automations/${id}/test`, {
+        method: 'POST',
+        body: JSON.stringify({ testRecipient }),
+      }),
+
+    deleteAutomation: (id: string) =>
+      apiRequest<void>(`/communications/automations/${id}`, { method: 'DELETE' }),
+
+    getPendingToday: () =>
+      apiRequest<{success: boolean; data: any[]; total: number}>('/communications/automations/pending/today'),
+
+    getPendingWeek: () =>
+      apiRequest<{success: boolean; data: any[]; total: number}>('/communications/automations/pending/week'),
+
+    getFailedAutomations: () =>
+      apiRequest<{success: boolean; data: any[]; total: number}>('/communications/automations/failed'),
   },
 
   // Analytics
@@ -599,6 +713,19 @@ export const api = {
 
     getIntegrationStatus: () =>
       apiRequest<{ success: boolean; integrations: any }>('/settings/integrations/status'),
+  },
+
+  // Forms / Ingestion
+  forms: {
+    ingestAll: () =>
+      apiRequest<{ success: boolean; message: string; results: any }>('/forms/ingest/all', {
+        method: 'POST',
+      }),
+
+    startPolling: () =>
+      apiRequest<{ success: boolean; message: string }>('/forms/polling/start', {
+        method: 'POST',
+      }),
   },
 
   // Schema

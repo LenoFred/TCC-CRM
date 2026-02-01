@@ -16,8 +16,8 @@ const { asyncHandler } = require('../../middlewares/errorHandler');
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.getAll.bind(templatesController))
 );
 
@@ -28,8 +28,8 @@ router.get(
  */
 router.get(
   '/stats',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.getStats.bind(templatesController))
 );
 
@@ -40,8 +40,8 @@ router.get(
  */
 router.get(
   '/channel/:channel',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.getByChannel.bind(templatesController))
 );
 
@@ -52,8 +52,8 @@ router.get(
  */
 router.get(
   '/audience/:audience',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.getByAudience.bind(templatesController))
 );
 
@@ -64,8 +64,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.getById.bind(templatesController))
 );
 
@@ -76,8 +76,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_create_communications'),
+  authenticate,
+  requirePermission('can_create_communications'),
   asyncHandler(templatesController.create.bind(templatesController))
 );
 
@@ -88,8 +88,8 @@ router.post(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_update_communications'),
+  authenticate,
+  requirePermission('can_update_communications'),
   asyncHandler(templatesController.update.bind(templatesController))
 );
 
@@ -100,8 +100,8 @@ router.patch(
  */
 router.post(
   '/:id/deactivate',
-  // authenticate,
-  // requirePermission('can_delete_communications'),
+  authenticate,
+  requirePermission('can_delete_communications'),
   asyncHandler(templatesController.deactivate.bind(templatesController))
 );
 
@@ -112,8 +112,8 @@ router.post(
  */
 router.post(
   '/:id/preview',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(templatesController.renderPreview.bind(templatesController))
 );
 

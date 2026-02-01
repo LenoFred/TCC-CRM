@@ -43,9 +43,11 @@ import { AddEditRoleModal } from "@/components/AddEditRoleModal";
 import { VolunteerSchedulingModal } from "@/components/VolunteerSchedulingModal";
 import { ManageAssignmentModal } from "@/components/ManageAssignmentModal";
 import { useToast } from "@/hooks/use-toast";
+import { usePermission } from "@/hooks/usePermission";
 
 const VolunteersPage = () => {
   const { toast } = useToast();
+  const { canEdit, hasPermission } = usePermission();
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
   const [isEditRoleModalOpen, setIsEditRoleModalOpen] = useState(false);
   const [isSchedulingModalOpen, setIsSchedulingModalOpen] = useState(false);
@@ -437,7 +439,7 @@ const VolunteersPage = () => {
             <h1 className="text-3xl font-bold text-foreground">Volunteers</h1>
             <p className="text-muted-foreground">Manage volunteer roles and scheduling</p>
           </div>
-          <Button className="gap-2" onClick={() => setIsSchedulingModalOpen(true)}>
+          <Button className="gap-2" onClick={() => setIsSchedulingModalOpen(true)} disabled={!hasPermission('can_manage_volunteers')}>
             <Plus className="h-4 w-4" />
             Schedule Volunteers
           </Button>
@@ -513,7 +515,7 @@ const VolunteersPage = () => {
                     <Settings className="h-5 w-5" />
                     Volunteer Roles
                   </CardTitle>
-                  <Button variant="outline" className="gap-2" onClick={() => setIsAddRoleModalOpen(true)} disabled={isLoadingRoles}>
+                  <Button variant="outline" className="gap-2" onClick={() => setIsAddRoleModalOpen(true)} disabled={isLoadingRoles || !canEdit('volunteers')}>
                     <Plus className="h-4 w-4" />
                     Add Role
                   </Button>
@@ -558,7 +560,7 @@ const VolunteersPage = () => {
                       <div className="text-center py-8 text-muted-foreground">
                         <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
                         <p>No volunteer roles found</p>
-                        <Button className="mt-4" onClick={() => setIsAddRoleModalOpen(true)}>
+                        <Button className="mt-4" onClick={() => setIsAddRoleModalOpen(true)} disabled={!canEdit('volunteers')}>
                           <Plus className="h-4 w-4 mr-2" />
                           Create First Role
                         </Button>

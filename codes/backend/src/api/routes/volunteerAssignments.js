@@ -40,8 +40,8 @@ router.get(
  */
 router.get(
   '/role/:roleID',
-  // authenticate,
-  // requirePermission('can_view_volunteers'),
+  authenticate,
+  requirePermission('can_view_volunteers'),
   asyncHandler(volunteerAssignmentsController.getByRole.bind(volunteerAssignmentsController))
 );
 
@@ -52,8 +52,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_volunteers'),
+  authenticate,
+  requirePermission('can_view_volunteers'),
   asyncHandler(volunteerAssignmentsController.getAll.bind(volunteerAssignmentsController))
 );
 
@@ -64,8 +64,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_volunteers'),
+  authenticate,
+  requirePermission('can_view_volunteers'),
   asyncHandler(volunteerAssignmentsController.getById.bind(volunteerAssignmentsController))
 );
 
@@ -76,8 +76,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_manage_volunteers'),
+  authenticate,
+  requirePermission('can_manage_volunteers'),
   asyncHandler(volunteerAssignmentsController.create.bind(volunteerAssignmentsController))
 );
 
@@ -100,8 +100,8 @@ router.patch(
  */
 router.put(
   '/:id',
-  // authenticate,
-  // requirePermission('can_manage_volunteers'),
+  authenticate,
+  requirePermission('can_manage_volunteers'),
   asyncHandler(volunteerAssignmentsController.update.bind(volunteerAssignmentsController))
 );
 
@@ -112,8 +112,8 @@ router.put(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_manage_volunteers'),
+  authenticate,
+  requirePermission('can_manage_volunteers'),
   asyncHandler(volunteerAssignmentsController.update.bind(volunteerAssignmentsController))
 );
 

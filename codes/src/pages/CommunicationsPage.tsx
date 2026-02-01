@@ -366,12 +366,18 @@ const CommunicationsPage = () => {
   const [isAutomatedModalOpen, setIsAutomatedModalOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<any | null>(null);
   const [isViewAutomationsModalOpen, setIsViewAutomationsModalOpen] = useState(false);
-  const [automatedConfigs, setAutomatedConfigs] = useState<any[]>([
-    { id: 1, name: 'Birthday Messages', type: 'birthday', enabled: true, channel: 'whatsapp,email', triggerTime: '09:00' },
-    { id: 2, name: 'Volunteer Assignment Notifications', type: 'volunteer', enabled: true, channel: 'whatsapp,sms', triggerTime: 'instant' },
-    { id: 3, name: 'New Guest Welcome Messages', type: 'guest_welcome', enabled: true, channel: 'whatsapp,email', triggerTime: 'same_day' },
-    { id: 4, name: 'Absent Member Follow-up', type: 'absent_followup', enabled: false, channel: 'phone,sms', triggerTime: '3_weeks' }
-  ]);
+  const [automatedConfigs, setAutomatedConfigs] = useState<any[]>([]);
+  const [isLoadingAutomations, setIsLoadingAutomations] = useState(false);
+  const [isBirthdayWarningOpen, setIsBirthdayWarningOpen] = useState(false);
+  const [pendingAutomationData, setPendingAutomationData] = useState<any>(null);
+  const [isTestAutomationOpen, setIsTestAutomationOpen] = useState(false);
+  const [testingAutomation, setTestingAutomation] = useState<any | null>(null);
+  const [testRecipient, setTestRecipient] = useState("");
+  const [isPendingAutomationsOpen, setIsPendingAutomationsOpen] = useState(false);
+  const [pendingAutomations, setPendingAutomations] = useState<any[]>([]);
+  const [pendingView, setPendingView] = useState<"today" | "week">("today");
+  const [isFailedAutomationsOpen, setIsFailedAutomationsOpen] = useState(false);
+  const [failedAutomations, setFailedAutomations] = useState<any[]>([]);
 
   // Analytics state
   const [analytics, setAnalytics] = useState<any>(null);
@@ -935,11 +941,10 @@ const CommunicationsPage = () => {
   };
 
   // Handle automation toggle
-  const handleToggleAutomation = async (automationId: number, enabled: boolean) => {
+  const handleToggleAutomation = async (automationId: string, enabled: boolean) => {
     try {
-      setAutomatedConfigs(automatedConfigs.map(config => 
-        config.id === automationId ? { ...config, enabled } : config
-      ));
+      await api.communications.toggleAutomation(automationId, enabled);
+      await fetchAutomations();
       toast({
         title: "Success",
         description: `Automation ${enabled ? 'enabled' : 'disabled'} successfully`,
@@ -948,7 +953,179 @@ const CommunicationsPage = () => {
       console.error('Error toggling automation:', error);
       toast({
         title: "Error",
-        description: "Failed to update automation",
+        description: "Failed to toggle automation",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Fetch automations
+  const fetchAutomations = async () => {
+    setIsLoadingAutomations(true);
+    try {
+      const response = await api.communications.getAutomations();
+      setAutomatedConfigs(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching automations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load automations",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingAutomations(false);
+    }
+  };
+
+  // Handle create/update automation
+  const handleSaveAutomation = async (data: any) => {
+    try {
+      if (editingAutomation) {
+        const response = await api.communications.updateAutomation(editingAutomation.AutomationID, data);
+        if (response.warning === 'birthday_no_recurring') {
+          setPendingAutomationData({ ...data, isUpdate: true, id: editingAutomation.AutomationID });
+          setIsBirthdayWarningOpen(true);
+          return;
+        }
+        toast({
+          title: "Success",
+          description: "Automation updated successfully",
+        });
+      } else {
+        const response = await api.communications.createAutomation(data);
+        if (response.warning === 'birthday_no_recurring') {
+          setPendingAutomationData(data);
+          setIsBirthdayWarningOpen(true);
+          return;
+        }
+        toast({
+          title: "Success",
+          description: "Automation created successfully",
+        });
+      }
+      setIsAutomatedModalOpen(false);
+      setEditingAutomation(null);
+      await fetchAutomations();
+    } catch (error: any) {
+      console.error('Error saving automation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save automation",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Confirm birthday warning and proceed
+  const handleConfirmBirthdayWarning = async () => {
+    try {
+      if (pendingAutomationData.isUpdate) {
+        await api.communications.updateAutomation(pendingAutomationData.id, pendingAutomationData);
+        toast({
+          title: "Success",
+          description: "Automation updated successfully",
+        });
+      } else {
+        await api.communications.createAutomation(pendingAutomationData);
+        toast({
+          title: "Success",
+          description: "Automation created successfully",
+        });
+      }
+      setIsBirthdayWarningOpen(false);
+      setPendingAutomationData(null);
+      setIsAutomatedModalOpen(false);
+      setEditingAutomation(null);
+      await fetchAutomations();
+    } catch (error: any) {
+      console.error('Error saving automation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save automation",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle test automation
+  const handleTestAutomation = async () => {
+    if (!testRecipient) {
+      toast({
+        title: "Error",
+        description: "Please enter a test recipient",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await api.communications.testAutomation(testingAutomation.AutomationID, testRecipient);
+      toast({
+        title: "Test Sent",
+        description: `Test message sent to ${testRecipient}`,
+      });
+      setIsTestAutomationOpen(false);
+      setTestingAutomation(null);
+      setTestRecipient("");
+    } catch (error: any) {
+      console.error('Error testing automation:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send test message",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Fetch pending automations
+  const fetchPendingAutomations = async (view: "today" | "week") => {
+    try {
+      const response = view === "today" 
+        ? await api.communications.getPendingToday()
+        : await api.communications.getPendingWeek();
+      setPendingAutomations(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching pending automations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load pending automations",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Fetch failed automations
+  const fetchFailedAutomations = async () => {
+    try {
+      const response = await api.communications.getFailedAutomations();
+      setFailedAutomations(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching failed automations:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load failed automations",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Handle delete automation
+  const handleDeleteAutomation = async (automationId: string) => {
+    if (!confirm('Are you sure you want to delete this automation?')) {
+      return;
+    }
+    try {
+      await api.communications.deleteAutomation(automationId);
+      toast({
+        title: "Success",
+        description: "Automation deleted successfully",
+      });
+      await fetchAutomations();
+    } catch (error: any) {
+      console.error('Error deleting automation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete automation",
         variant: "destructive"
       });
     }
@@ -976,6 +1153,12 @@ const CommunicationsPage = () => {
         // Load communication history
         await fetchCommunicationsHistory().catch(err => {
           console.error('Failed to fetch history:', err);
+        });
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Load automations
+        await fetchAutomations().catch(err => {
+          console.error('Failed to fetch automations:', err);
         });
         await new Promise(resolve => setTimeout(resolve, 300));
         
@@ -2421,13 +2604,13 @@ const CommunicationsPage = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Action Buttons */}
-                <div className="flex gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <Button 
                     onClick={() => {
                       setEditingAutomation(null);
                       setIsAutomatedModalOpen(true);
                     }}
-                    className="flex-1 gap-2"
+                    className="gap-2"
                   >
                     <Plus className="h-4 w-4" />
                     New Automation
@@ -2435,29 +2618,56 @@ const CommunicationsPage = () => {
                   <Button 
                     variant="outline"
                     onClick={() => setIsViewAutomationsModalOpen(true)}
-                    className="flex-1 gap-2"
+                    className="gap-2"
                   >
                     <List className="h-4 w-4" />
-                    View Automations
+                    View All
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setIsPendingAutomationsOpen(true);
+                      fetchPendingAutomations("today");
+                    }}
+                    className="gap-2"
+                  >
+                    <Clock className="h-4 w-4" />
+                    Pending
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setIsFailedAutomationsOpen(true);
+                      fetchFailedAutomations();
+                    }}
+                    className="gap-2"
+                  >
+                    <AlertCircle className="h-4 w-4" />
+                    Failed
                   </Button>
                 </div>
 
                 {/* Active Automations Summary */}
                 <div className="space-y-2 pt-2">
                   <p className="text-xs text-muted-foreground font-medium">Active Automations:</p>
-                  {automatedConfigs.filter(c => c.enabled).length === 0 ? (
+                  {automatedConfigs.filter(c => c.Enabled).length === 0 ? (
                     <p className="text-sm text-muted-foreground italic">No active automations</p>
                   ) : (
                     <div className="space-y-1">
-                      {automatedConfigs.filter(c => c.enabled).map(config => (
-                        <div key={config.id} className="flex items-center gap-2 text-sm">
+                      {automatedConfigs.filter(c => c.Enabled).slice(0, 5).map(config => (
+                        <div key={config.AutomationID} className="flex items-center gap-2 text-sm">
                           <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                          <span>{config.name}</span>
+                          <span>{config.Name}</span>
                           <span className="text-xs text-muted-foreground">
-                            ({config.channel.split(',').join(' + ')})
+                            ({config.Channel?.split(',').join(' + ')})
                           </span>
                         </div>
                       ))}
+                      {automatedConfigs.filter(c => c.Enabled).length > 5 && (
+                        <p className="text-xs text-muted-foreground italic">
+                          +{automatedConfigs.filter(c => c.Enabled).length - 5} more
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3397,39 +3607,65 @@ const CommunicationsPage = () => {
                 {/* Automations List */}
                 <div className="space-y-3">
                   {automatedConfigs.map((config) => (
-                    <Card key={config.id} className={`p-4 ${!config.enabled ? 'opacity-60' : ''}`}>
+                    <Card key={config.automationID || config.AutomationID} className={`p-4 ${!config.enabled ? 'opacity-60' : ''}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-2">
-                            <div className={`h-3 w-3 rounded-full ${config.enabled ? 'bg-green-500' : 'bg-gray-400'}`} />
-                            <h4 className="font-semibold text-sm">{config.name}</h4>
-                            <Badge variant={config.enabled ? 'default' : 'secondary'}>
-                              {config.enabled ? 'Active' : 'Disabled'}
+                            <div className={`h-3 w-3 rounded-full ${(config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? 'bg-green-500' : 'bg-gray-400'}`} />
+                            <h4 className="font-semibold text-sm">{config.name || config.Name}</h4>
+                            <Badge variant={(config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? 'default' : 'secondary'}>
+                              {(config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? 'Active' : 'Disabled'}
                             </Badge>
+                            {(config.isSystem === 'TRUE' || config.IsSystem === 'TRUE') && (
+                              <Badge variant="outline" className="text-xs bg-blue-50">
+                                System
+                              </Badge>
+                            )}
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {config.trigger === 'birthday' && 'On member birthdays'}
-                              {config.trigger === 'anniversary' && 'On member anniversaries'}
-                              {config.trigger === 'new_member' && 'When new member joins'}
-                              {config.trigger === 'event' && 'Before scheduled events'}
+                              {(config.type || config.Type) === 'new_member' && 'New member joins (instant)'}
+                              {(config.type || config.Type) === 'volunteer_assignment' && 'Volunteer assigned (instant)'}
+                              {(config.type || config.Type) === 'birthday' && 'On member birthdays'}
+                              {(config.type || config.Type) === 'anniversary' && 'On member anniversaries'}
+                              {(config.type || config.Type) === 'guest_welcome' && 'When new guest visits'}
+                              {(config.type || config.Type) === 'event_reminder' && 'Before scheduled events'}
+                              {(config.type || config.Type) === 'absent_followup' && 'Absent member follow-up'}
+                              {(config.type || config.Type) === 'donation_thank_you' && 'Donation thank you'}
+                              {(config.type || config.Type) === 'custom' && 'Custom trigger'}
                             </div>
                             <div className="flex items-center gap-1">
-                              {config.channel.includes('sms') && <MessageSquare className="h-3 w-3" />}
-                              {config.channel.includes('email') && <Mail className="h-3 w-3" />}
-                              {config.channel.includes('whatsapp') && <Phone className="h-3 w-3" />}
-                              {config.channel.split(',').join(' + ').toUpperCase()}
+                              {(config.channel || config.Channel)?.includes('sms') && <MessageSquare key="sms" className="h-3 w-3" />}
+                              {(config.channel || config.Channel)?.includes('email') && <Mail key="email" className="h-3 w-3" />}
+                              {(config.channel || config.Channel)?.includes('whatsapp') && <Phone key="whatsapp" className="h-3 w-3" />}
+                              <span>{(config.channel || config.Channel)?.split(',').join(' + ').toUpperCase()}</span>
                             </div>
                           </div>
 
                           <p className="text-xs text-muted-foreground line-clamp-2">
-                            {config.message}
+                            {config.message || config.Message}
                           </p>
+                          {(config.isSystem === 'TRUE' || config.IsSystem === 'TRUE') && (
+                            <p className="text-xs text-blue-600">
+                              ℹ️ System automation - triggered automatically, cannot be deleted (can be modified/disabled)
+                            </p>
+                          )}
                         </div>
 
                         <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setTestingAutomation(config);
+                              setIsTestAutomationOpen(true);
+                            }}
+                            title="Test this automation"
+                          >
+                            Test
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -3439,14 +3675,23 @@ const CommunicationsPage = () => {
                               setIsAutomatedModalOpen(true);
                             }}
                           >
-                            Configure
+                            Edit
                           </Button>
                           <Button
-                            variant={config.enabled ? 'outline' : 'default'}
+                            variant={(config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? 'outline' : 'default'}
                             size="sm"
-                            onClick={() => handleToggleAutomation(config.id, !config.enabled)}
+                            onClick={() => handleToggleAutomation(config.automationID || config.AutomationID, (config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? false : true)}
                           >
-                            {config.enabled ? 'Disable' : 'Enable'}
+                            {(config.enabled === 'TRUE' || config.Enabled === 'TRUE') ? 'Disable' : 'Enable'}
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteAutomation(config.automationID || config.AutomationID)}
+                            disabled={config.IsSystem === 'TRUE'}
+                            title={config.IsSystem === 'TRUE' ? 'System automations cannot be deleted' : 'Delete automation'}
+                          >
+                            Delete
                           </Button>
                         </div>
                       </div>
@@ -3507,34 +3752,23 @@ const CommunicationsPage = () => {
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
+                const channel = formData.get('channel') as string;
+                
                 const config = {
-                  id: editingAutomation?.id || Date.now(),
-                  name: formData.get('name') as string,
-                  type: formData.get('type') as string,
-                  enabled: editingAutomation ? editingAutomation.enabled : true,
-                  channel: formData.get('channel') as string,
-                  triggerTime: formData.get('triggerTime') as string,
-                  message: formData.get('message') as string
+                  Name: formData.get('name') as string,
+                  Type: formData.get('type') as string,
+                  TriggerTime: formData.get('triggerTime') as string,
+                  Channel: channel,
+                  EmailProvider: channel.includes('email') ? formData.get('emailProvider') as string : '',
+                  Subject: channel.includes('email') ? formData.get('subject') as string : '',
+                  Message: formData.get('message') as string,
+                  Recurring: formData.get('recurring') === 'true',
+                  TargetMembers: (document.getElementById('targetMembers') as HTMLInputElement)?.checked,
+                  TargetGuests: (document.getElementById('targetGuests') as HTMLInputElement)?.checked,
+                  TargetVolunteers: (document.getElementById('targetVolunteers') as HTMLInputElement)?.checked,
                 };
 
-                if (editingAutomation) {
-                  setAutomatedConfigs(automatedConfigs.map(c => 
-                    c.id === editingAutomation.id ? config : c
-                  ));
-                  toast({
-                    title: "Configuration Updated",
-                    description: "Automated message configuration has been updated successfully."
-                  });
-                } else {
-                  setAutomatedConfigs([...automatedConfigs, config]);
-                  toast({
-                    title: "Configuration Created",
-                    description: "New automated message configuration has been created."
-                  });
-                }
-
-                setIsAutomatedModalOpen(false);
-                setEditingAutomation(null);
+                handleSaveAutomation(config);
               }} className="space-y-6">
 
                 <div className="space-y-2">
@@ -3542,7 +3776,7 @@ const CommunicationsPage = () => {
                   <Input
                     id="name"
                     name="name"
-                    defaultValue={editingAutomation?.name}
+                    defaultValue={editingAutomation?.Name}
                     placeholder="E.g., Birthday Messages, New Member Welcome"
                     required
                   />
@@ -3550,13 +3784,14 @@ const CommunicationsPage = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="type">Automation Type</Label>
-                  <Select name="type" defaultValue={editingAutomation?.type || 'birthday'}>
+                  <Select name="type" defaultValue={editingAutomation?.Type || 'birthday'}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select automation type" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="new_member">New Member Welcome [System]</SelectItem>
+                      <SelectItem value="volunteer_assignment">Volunteer Assignment [System]</SelectItem>
                       <SelectItem value="birthday">Birthday Messages</SelectItem>
-                      <SelectItem value="volunteer">Volunteer Assignment</SelectItem>
                       <SelectItem value="guest_welcome">New Guest Welcome</SelectItem>
                       <SelectItem value="absent_followup">Absent Member Follow-up</SelectItem>
                       <SelectItem value="event_reminder">Event Reminder</SelectItem>
@@ -3566,19 +3801,21 @@ const CommunicationsPage = () => {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Select the event that will trigger this automated message
+                    Select the event that will trigger this automated message. [System] types are auto-triggered.
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="triggerTime">Trigger Timing</Label>
-                  <Select name="triggerTime" defaultValue={editingAutomation?.triggerTime || 'instant'}>
+                  <Select name="triggerTime" defaultValue={editingAutomation?.TriggerTime || '09:00'}>
                     <SelectTrigger>
                       <SelectValue placeholder="When to send the message" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="instant">Immediately (Instant)</SelectItem>
                       <SelectItem value="09:00">Daily at 9:00 AM</SelectItem>
+                      <SelectItem value="12:00">Daily at 12:00 PM</SelectItem>
+                      <SelectItem value="18:00">Daily at 6:00 PM</SelectItem>
                       <SelectItem value="same_day">Same Day (Evening)</SelectItem>
                       <SelectItem value="1_day">1 Day After Event</SelectItem>
                       <SelectItem value="2_days">2 Days After Event</SelectItem>
@@ -3597,7 +3834,20 @@ const CommunicationsPage = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="channel">Communication Channels</Label>
-                  <Select name="channel" defaultValue={editingAutomation?.channel || 'whatsapp'}>
+                  <Select 
+                    name="channel" 
+                    defaultValue={editingAutomation?.Channel || 'whatsapp'}
+                    onValueChange={(value) => {
+                      // Force re-render to show/hide email fields
+                      const form = document.querySelector('form');
+                      if (form) {
+                        const emailFields = form.querySelector('#emailFields');
+                        if (emailFields) {
+                          emailFields.style.display = value.includes('email') ? 'block' : 'none';
+                        }
+                      }
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select channels" />
                     </SelectTrigger>
@@ -3616,12 +3866,48 @@ const CommunicationsPage = () => {
                   </p>
                 </div>
 
+                {/* Email-specific fields */}
+                <div 
+                  id="emailFields" 
+                  className="space-y-4 border-l-2 border-blue-200 pl-4"
+                  style={{ display: editingAutomation?.Channel?.includes('email') || (!editingAutomation) ? 'none' : 'none' }}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="emailProvider">Email Provider</Label>
+                    <Select name="emailProvider" defaultValue={editingAutomation?.EmailProvider || 'gmail'}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select email provider" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="gmail">Gmail</SelectItem>
+                        <SelectItem value="sendgrid">SendGrid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Choose which email service to use for sending
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="subject">Email Subject</Label>
+                    <Input
+                      id="subject"
+                      name="subject"
+                      defaultValue={editingAutomation?.Subject}
+                      placeholder="E.g., Happy Birthday {firstName}!"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use placeholders like {'{firstName}'} for personalization
+                    </p>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="message">Message Template</Label>
                   <Textarea
                     id="message"
                     name="message"
-                    defaultValue={editingAutomation?.message}
+                    defaultValue={editingAutomation?.Message}
                     placeholder="Enter your message template. You can use variables like {firstName}, {lastName}, {eventName}, etc."
                     rows={6}
                     required
@@ -3631,31 +3917,59 @@ const CommunicationsPage = () => {
                   </p>
                 </div>
 
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id="recurring" 
+                      name="recurring" 
+                      value="true"
+                      className="rounded" 
+                      defaultChecked={editingAutomation?.Recurring}
+                    />
+                    <Label htmlFor="recurring" className="cursor-pointer font-normal">
+                      Recurring Automation (repeats annually for birthdays/anniversaries)
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Check this for messages that should be sent every year (e.g., birthdays, anniversaries)
+                  </p>
+                </div>
+
                 <div className="space-y-2 border-t pt-4">
                   <Label className="text-base font-semibold">Target Recipients</Label>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="targetMembers" className="rounded" defaultChecked />
+                      <input 
+                        type="checkbox" 
+                        id="targetMembers" 
+                        className="rounded" 
+                        defaultChecked={editingAutomation?.TargetMembers !== false}
+                      />
                       <Label htmlFor="targetMembers" className="cursor-pointer font-normal">
                         Active Members
                       </Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="targetGuests" className="rounded" />
+                      <input 
+                        type="checkbox" 
+                        id="targetGuests" 
+                        className="rounded"
+                        defaultChecked={editingAutomation?.TargetGuests}
+                      />
                       <Label htmlFor="targetGuests" className="cursor-pointer font-normal">
                         Guests
                       </Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="targetVolunteers" className="rounded" />
+                      <input 
+                        type="checkbox" 
+                        id="targetVolunteers" 
+                        className="rounded"
+                        defaultChecked={editingAutomation?.TargetVolunteers}
+                      />
                       <Label htmlFor="targetVolunteers" className="cursor-pointer font-normal">
                         Volunteers
-                      </Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input type="checkbox" id="targetStaff" className="rounded" />
-                      <Label htmlFor="targetStaff" className="cursor-pointer font-normal">
-                        Staff
                       </Label>
                     </div>
                   </div>
@@ -3680,6 +3994,234 @@ const CommunicationsPage = () => {
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Birthday Warning Dialog */}
+        {isBirthdayWarningOpen && (
+          <Dialog open={isBirthdayWarningOpen} onOpenChange={setIsBirthdayWarningOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Birthday Automation Warning</DialogTitle>
+                <DialogDescription>
+                  Birthday automations are typically recurring (sent every year).
+                </DialogDescription>
+              </DialogHeader>
+              <p className="text-sm">
+                You've created a birthday automation without enabling the "Recurring" option. 
+                This means the message will only be sent once, not every year.
+              </p>
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (pendingAutomationData) {
+                      pendingAutomationData.Recurring = true;
+                      await handleConfirmBirthdayWarning();
+                    }
+                  }}
+                >
+                  Make it Recurring
+                </Button>
+                <Button
+                  onClick={handleConfirmBirthdayWarning}
+                >
+                  Yes, Create One-Time
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Test Automation Modal */}
+        {isTestAutomationOpen && (
+          <Dialog open={isTestAutomationOpen} onOpenChange={setIsTestAutomationOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Test Automation</DialogTitle>
+                <DialogDescription>
+                  Send a test message to verify the automation works correctly
+                </DialogDescription>
+              </DialogHeader>
+              
+              {testingAutomation && (
+                <div className="space-y-4">
+                  <div className="rounded-lg bg-muted p-4 space-y-2">
+                    <h4 className="font-semibold">{testingAutomation.Name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Type:</strong> {testingAutomation.Type}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Channel:</strong> {testingAutomation.Channel}
+                    </p>
+                    <p className="text-sm">
+                      <strong>Message:</strong> {testingAutomation.Message}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="testRecipient">Test Recipient</Label>
+                    <Input
+                      id="testRecipient"
+                      value={testRecipient}
+                      onChange={(e) => setTestRecipient(e.target.value)}
+                      placeholder={
+                        testingAutomation.Channel.includes('email') 
+                          ? 'Enter email address' 
+                          : 'Enter phone number (with country code)'
+                      }
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {testingAutomation.Channel.includes('email') 
+                        ? 'Email address to receive the test message'
+                        : 'Phone number in format: +234XXXXXXXXXX'}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsTestAutomationOpen(false);
+                        setTestingAutomation(null);
+                        setTestRecipient("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={handleTestAutomation}>
+                      Send Test
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Pending Automations Modal */}
+        {isPendingAutomationsOpen && (
+          <Dialog open={isPendingAutomationsOpen} onOpenChange={setIsPendingAutomationsOpen}>
+            <DialogContent className="max-w-4xl max-h-[85vh]">
+              <DialogHeader>
+                <DialogTitle>Pending Automations</DialogTitle>
+                <DialogDescription>
+                  View automations scheduled to run soon
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant={pendingView === "today" ? "default" : "outline"}
+                    onClick={() => {
+                      setPendingView("today");
+                      fetchPendingAutomations("today");
+                    }}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    variant={pendingView === "week" ? "default" : "outline"}
+                    onClick={() => {
+                      setPendingView("week");
+                      fetchPendingAutomations("week");
+                    }}
+                  >
+                    This Week
+                  </Button>
+                </div>
+
+                <div className="border rounded-lg overflow-hidden">
+                  {pendingAutomations.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No pending automations for {pendingView === "today" ? "today" : "this week"}
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Name</th>
+                          <th className="px-4 py-2 text-left">Type</th>
+                          <th className="px-4 py-2 text-left">Scheduled Time</th>
+                          <th className="px-4 py-2 text-left">Recipients</th>
+                          <th className="px-4 py-2 text-left">Channel</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingAutomations.map((automation, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="px-4 py-2">{automation.Name}</td>
+                            <td className="px-4 py-2">{automation.Type}</td>
+                            <td className="px-4 py-2">{automation.NextRun || automation.TriggerTime}</td>
+                            <td className="px-4 py-2">
+                              {[
+                                automation.TargetMembers && 'Members',
+                                automation.TargetGuests && 'Guests',
+                                automation.TargetVolunteers && 'Volunteers'
+                              ].filter(Boolean).join(', ')}
+                            </td>
+                            <td className="px-4 py-2">{automation.Channel}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Failed Automations Modal */}
+        {isFailedAutomationsOpen && (
+          <Dialog open={isFailedAutomationsOpen} onOpenChange={setIsFailedAutomationsOpen}>
+            <DialogContent className="max-w-5xl max-h-[85vh]">
+              <DialogHeader>
+                <DialogTitle>Failed Automations</DialogTitle>
+                <DialogDescription>
+                  View automation messages that failed to send
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="border rounded-lg overflow-hidden">
+                {failedAutomations.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No failed automations
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Failed At</th>
+                          <th className="px-4 py-2 text-left">Automation</th>
+                          <th className="px-4 py-2 text-left">Recipient</th>
+                          <th className="px-4 py-2 text-left">Channel</th>
+                          <th className="px-4 py-2 text-left">Error</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedAutomations.map((failed, index) => (
+                          <tr key={index} className="border-t">
+                            <td className="px-4 py-2">
+                              {new Date(failed.FailedAt).toLocaleString()}
+                            </td>
+                            <td className="px-4 py-2">{failed.AutomationName}</td>
+                            <td className="px-4 py-2">{failed.Recipient}</td>
+                            <td className="px-4 py-2">{failed.Channel}</td>
+                            <td className="px-4 py-2 text-red-600 max-w-xs truncate" title={failed.ErrorMessage}>
+                              {failed.ErrorMessage}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </DialogContent>
           </Dialog>
         )}

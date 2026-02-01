@@ -16,6 +16,7 @@ import {
   UsersRound,
   LogOut
 } from "lucide-react";
+import type { ComponentType } from "react";
 
 import {
   Sidebar,
@@ -35,7 +36,17 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
-const navigationItems = [
+type NavItem = {
+  title: string;
+  url: string;
+  icon: ComponentType<{ className?: string }>;
+  description: string;
+  resource: string;
+  customPermission?: string;
+  alwaysVisible?: boolean;
+};
+
+const navigationItems: NavItem[] = [
   {
     title: "Dashboard",
     url: "/",
@@ -96,7 +107,7 @@ const navigationItems = [
   },
 ];
 
-const adminItems = [
+const adminItems: NavItem[] = [
   {
     title: "Staff Management",
     url: "/staff",
@@ -123,8 +134,7 @@ const adminItems = [
     url: "/settings",
     icon: Settings,
     description: "System configuration",
-    resource: "settings",
-    alwaysVisible: true
+    resource: "settings"
   }
 ];
 

@@ -8,10 +8,73 @@ const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
 const { logger } = require('../../utils/logger');
+const { getStaffGroupPermissions, hasAccessToGroup } = require('../../middlewares/groupPermissions');
 
 class AttendanceController extends BaseController {
   constructor() {
     super(sheetsService, sheetsService.SHEETS.ATTENDANCE, 'Attendance');
+  }
+
+  /**
+   * Override getAll to filter by group permissions
+   * Attendance is filtered by the gathering's parentID (groupID)
+   */
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get all attendance records
+    let attendanceData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Get gatherings to determine which groups they belong to
+    const gatherings = await sheetsService.getSheetObjects(sheetsService.SHEETS.GATHERINGS);
+    
+    // Filter attendance by group permissions (via gathering's parentID)
+    const groupPermissions = getStaffGroupPermissions(req);
+    if (groupPermissions !== null && groupPermissions.length > 0) {
+      // Filter to only include attendance for gatherings in assigned groups
+      const permittedGatheringIds = gatherings
+        .filter(g => groupPermissions.includes(g.parentID))
+        .map(g => g.gatheringID);
+      
+      attendanceData = attendanceData.filter(a => permittedGatheringIds.includes(a.gatheringID));
+    }
+
+    // Apply search if provided
+    if (search) {
+      const searchFields = this.getSearchFields();
+      const searchLower = search.toLowerCase();
+      attendanceData = attendanceData.filter((item) =>
+        searchFields.some((field) =>
+          item[field]?.toString().toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply custom filters
+    attendanceData = this.applyFilters(attendanceData, filters);
+
+    // Apply pagination if requested
+    if (page || limit) {
+      const pageNum = parseInt(page) || 1;
+      const pageSize = parseInt(limit) || 10;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      return res.json({
+        success: true,
+        data: attendanceData.slice(startIndex, endIndex),
+        total: attendanceData.length,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(attendanceData.length / pageSize),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: attendanceData,
+      total: attendanceData.length,
+    });
   }
 
   getSearchFields() {
@@ -45,6 +108,11 @@ class AttendanceController extends BaseController {
     const gathering = gatherings.find((g) => g.gatheringID === data.gatheringID);
     if (!gathering) {
       throw new ApiError(404, 'Gathering not found');
+    }
+
+    // Check if staff has access to this gathering's group
+    if (gathering.parentID && user.req && !hasAccessToGroup(user.req, gathering.parentID)) {
+      throw new ApiError(403, `You do not have access to take attendance for gatherings in this group (${gathering.parentID}). You can only take attendance for your assigned groups.`);
     }
 
     // Validate member exists
@@ -119,6 +187,20 @@ class AttendanceController extends BaseController {
    */
   async getByGathering(req, res) {
     const { gatheringID } = req.params;
+
+    // Check group permissions for this gathering
+    const staffId = req.user?.memberId || req.user?.staffId || req.user?.userId;
+    if (staffId) {
+      const gatheringsData = await sheetsService.getSheetObjects(sheetsService.SHEETS.GATHERINGS);
+      const gathering = gatheringsData.find(g => g.gatheringID === gatheringID);
+      
+      if (gathering && gathering.groupID) {
+        const groupPermissions = await getStaffGroupPermissions(staffId);
+        if (groupPermissions !== null && !groupPermissions.includes(gathering.groupID)) {
+          throw new ApiError(403, 'You do not have permission to view attendance for this group');
+        }
+      }
+    }
 
     const attendanceData = await sheetsService.getSheetObjects(this.sheetName);
     const attendance = attendanceData.filter(
@@ -297,6 +379,14 @@ class AttendanceController extends BaseController {
       console.log('Append result:', result);
       
       sheetsService.invalidateCache(this.sheetName);
+
+      // Membership automation: update Status and membershipLevel for this member
+      try {
+        const { automateMembershipStatusAndLevel } = require('../../services/onboardingService');
+        await automateMembershipStatusAndLevel();
+      } catch (automationError) {
+        console.error('Membership automation error:', automationError);
+      }
 
       logger.info('Check-in successful', { attendanceID, memberID, gatheringID });
 

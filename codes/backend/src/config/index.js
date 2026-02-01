@@ -31,7 +31,7 @@ const config = {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS) || 12,
     rateLimit: {
       windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-      maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+      maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1500, // Increased for authenticated users
     },
   },
 

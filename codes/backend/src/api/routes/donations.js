@@ -17,8 +17,8 @@ const { validate, schemas } = require('../../utils/validation');
  */
 router.get(
   '/stats',
-  // authenticate,
-  // requirePermission('can_view_donations'),
+  authenticate,
+  requirePermission('can_view_donations'),
   asyncHandler(donationsController.getStats.bind(donationsController))
 );
 
@@ -29,8 +29,8 @@ router.get(
  */
 router.get(
   '/member/:memberID',
-  // authenticate,
-  // requirePermission('can_view_donations'),
+  authenticate,
+  requirePermission('can_view_donations'),
   asyncHandler(donationsController.getByMember.bind(donationsController))
 );
 
@@ -41,8 +41,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_donations'),
+  authenticate,
+  requirePermission('can_view_donations'),
   asyncHandler(donationsController.getAll.bind(donationsController))
 );
 
@@ -53,8 +53,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_donations'),
+  authenticate,
+  requirePermission('can_view_donations'),
   asyncHandler(donationsController.getById.bind(donationsController))
 );
 
@@ -65,8 +65,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_add_donations'),
+  authenticate,
+  requirePermission('can_add_donations'),
   // validate(schemas.donation.create),
   asyncHandler(donationsController.create.bind(donationsController))
 );
@@ -78,8 +78,8 @@ router.post(
  */
 router.patch(
   '/:id/verify',
-  // authenticate,
-  // requirePermission('can_verify_donations'),
+  authenticate,
+  requirePermission('can_verify_donations'),
   asyncHandler(donationsController.verify.bind(donationsController))
 );
 
@@ -90,8 +90,8 @@ router.patch(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_edit_donations'),
+  authenticate,
+  requirePermission('can_edit_donations'),
   // validate(schemas.donation.update),
   asyncHandler(donationsController.update.bind(donationsController))
 );
@@ -103,8 +103,8 @@ router.patch(
  */
 router.delete(
   '/:id',
-  // authenticate,
-  // requirePermission('can_delete_donations'),
+  authenticate,
+  requirePermission('can_delete_donations'),
   asyncHandler(donationsController.delete.bind(donationsController))
 );
 

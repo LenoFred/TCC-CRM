@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const communicationsController = require('../controllers/communicationsController');
 const scheduledMessagesController = require('../controllers/scheduledMessagesController');
+const automatedMessagesController = require('../controllers/automatedMessagesController');
 const { authenticate, requirePermission } = require('../../middlewares/auth');
 const { asyncHandler } = require('../../middlewares/errorHandler');
 const { validate, schemas } = require('../../utils/validation');
@@ -28,8 +29,8 @@ router.get('/drafts', (req, res) => {
  */
 router.get(
   '/scheduled',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(scheduledMessagesController.getActiveSchedules.bind(scheduledMessagesController))
 );
 
@@ -40,8 +41,8 @@ router.get(
  */
 router.get(
   '/scheduled/all',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(scheduledMessagesController.getAll.bind(scheduledMessagesController))
 );
 
@@ -52,8 +53,8 @@ router.get(
  */
 router.get(
   '/scheduled/:id',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(scheduledMessagesController.getById.bind(scheduledMessagesController))
 );
 
@@ -64,8 +65,8 @@ router.get(
  */
 router.post(
   '/scheduled',
-  // authenticate,
-  // requirePermission('can_create_communications'),
+  authenticate,
+  requirePermission('can_create_communications'),
   // validate(schemas.scheduledMessage.create),
   asyncHandler(scheduledMessagesController.create.bind(scheduledMessagesController))
 );
@@ -77,8 +78,8 @@ router.post(
  */
 router.patch(
   '/scheduled/:id',
-  // authenticate,
-  // requirePermission('can_update_communications'),
+  authenticate,
+  requirePermission('can_update_communications'),
   asyncHandler(scheduledMessagesController.update.bind(scheduledMessagesController))
 );
 
@@ -89,8 +90,8 @@ router.patch(
  */
 router.post(
   '/scheduled/:id/cancel',
-  // authenticate,
-  // requirePermission('can_update_communications'),
+  authenticate,
+  requirePermission('can_update_communications'),
   asyncHandler(scheduledMessagesController.cancel.bind(scheduledMessagesController))
 );
 
@@ -101,8 +102,8 @@ router.post(
  */
 router.delete(
   '/scheduled/:id',
-  // authenticate,
-  // requirePermission('can_delete_communications'),
+  authenticate,
+  requirePermission('can_delete_communications'),
   asyncHandler(scheduledMessagesController.delete.bind(scheduledMessagesController))
 );
 
@@ -114,8 +115,8 @@ router.delete(
  */
 router.get(
   '/history',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getHistory.bind(communicationsController))
 );
 
@@ -127,8 +128,8 @@ router.get(
  */
 router.get(
   '/analytics',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getAnalytics.bind(communicationsController))
 );
 
@@ -139,8 +140,8 @@ router.get(
  */
 router.get(
   '/stats',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getStats.bind(communicationsController))
 );
 
@@ -151,9 +152,114 @@ router.get(
  */
 router.get(
   '/recipient/:recipientID',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getByRecipient.bind(communicationsController))
+);
+
+// ============================================
+// AUTOMATED MESSAGES ROUTES
+// ============================================
+// IMPORTANT: These must come BEFORE generic /:id routes to avoid conflicts
+
+/**
+ * @route   GET /api/communications/automations
+ * @desc    Get all automated message configurations
+ * @access  Public (Auth disabled for development)
+ */
+router.get(
+  '/automations',
+  asyncHandler(automatedMessagesController.getAll.bind(automatedMessagesController))
+);
+
+/**
+ * @route   GET /api/communications/automations/pending/today
+ * @desc    Get pending automations for today
+ * @access  Public (Auth disabled for development)
+ */
+router.get(
+  '/automations/pending/today',
+  asyncHandler(automatedMessagesController.getPendingToday.bind(automatedMessagesController))
+);
+
+/**
+ * @route   GET /api/communications/automations/pending/week
+ * @desc    Get pending automations for this week
+ * @access  Public (Auth disabled for development)
+ */
+router.get(
+  '/automations/pending/week',
+  asyncHandler(automatedMessagesController.getPendingWeek.bind(automatedMessagesController))
+);
+
+/**
+ * @route   GET /api/communications/automations/failed
+ * @desc    Get failed automations
+ * @access  Public (Auth disabled for development)
+ */
+router.get(
+  '/automations/failed',
+  asyncHandler(automatedMessagesController.getFailed.bind(automatedMessagesController))
+);
+
+/**
+ * @route   GET /api/communications/automations/:id
+ * @desc    Get single automation by ID
+ * @access  Public (Auth disabled for development)
+ */
+router.get(
+  '/automations/:id',
+  asyncHandler(automatedMessagesController.getById.bind(automatedMessagesController))
+);
+
+/**
+ * @route   POST /api/communications/automations
+ * @desc    Create new automated message configuration
+ * @access  Public (Auth disabled for development)
+ */
+router.post(
+  '/automations',
+  asyncHandler(automatedMessagesController.create.bind(automatedMessagesController))
+);
+
+/**
+ * @route   PATCH /api/communications/automations/:id
+ * @desc    Update automated message configuration
+ * @access  Public (Auth disabled for development)
+ */
+router.patch(
+  '/automations/:id',
+  asyncHandler(automatedMessagesController.update.bind(automatedMessagesController))
+);
+
+/**
+ * @route   POST /api/communications/automations/:id/toggle
+ * @desc    Toggle automation enabled status
+ * @access  Public (Auth disabled for development)
+ */
+router.post(
+  '/automations/:id/toggle',
+  asyncHandler(automatedMessagesController.toggle.bind(automatedMessagesController))
+);
+
+/**
+ * @route   POST /api/communications/automations/:id/test
+ * @desc    Test automation by sending to specific recipient
+ * @access  Public (Auth disabled for development)
+ */
+router.post(
+  '/automations/:id/test',
+  asyncHandler(automatedMessagesController.test.bind(automatedMessagesController))
+);
+
+/**
+ * @route   DELETE /api/communications/automations/:id
+ * @desc    Delete automated message configuration
+ * @access  Public (Auth disabled for development)
+ */
+router.delete(
+  '/automations/:id',
+  asyncHandler(automatedMessagesController.delete.bind(automatedMessagesController))
 );
 
 /**
@@ -163,8 +269,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getAll.bind(communicationsController))
 );
 
@@ -175,8 +281,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_communications'),
+  authenticate,
+  requirePermission('can_view_communications'),
   asyncHandler(communicationsController.getById.bind(communicationsController))
 );
 
@@ -187,8 +293,8 @@ router.get(
  */
 router.post(
   '/bulk',
-  // authenticate,
-  // requirePermission('can_send_communications'),
+  authenticate,
+  requirePermission('can_send_communications'),
   asyncHandler(communicationsController.sendBulk.bind(communicationsController))
 );
 
@@ -199,8 +305,8 @@ router.post(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_send_communications'),
+  authenticate,
+  requirePermission('can_send_communications'),
   validate(schemas.communication.create),
   asyncHandler(communicationsController.create.bind(communicationsController))
 );
@@ -212,8 +318,8 @@ router.post(
  */
 router.patch(
   '/:id/status',
-  // authenticate,
-  // requirePermission('can_manage_communications'),
+  authenticate,
+  requirePermission('can_manage_communications'),
   asyncHandler(communicationsController.updateStatus.bind(communicationsController))
 );
 
@@ -224,8 +330,8 @@ router.patch(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_manage_communications'),
+  authenticate,
+  requirePermission('can_manage_communications'),
   validate(schemas.communication.update),
   asyncHandler(communicationsController.update.bind(communicationsController))
 );
@@ -237,8 +343,8 @@ router.patch(
  */
 router.delete(
   '/:id',
-  // authenticate,
-  // requirePermission('can_delete_communications'),
+  authenticate,
+  requirePermission('can_delete_communications'),
   asyncHandler(communicationsController.delete.bind(communicationsController))
 );
 

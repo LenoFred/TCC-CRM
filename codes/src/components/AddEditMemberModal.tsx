@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,11 @@ interface Member {
   familyId?: string;
   familyID?: string; // Backend field name
   family?: string;
+  CLDS?: string;
+  Baptism?: string;
+  GBIC?: string;
+  ABIC?: string;
+  membershipLevel?: string;
 }
 
 interface AddEditMemberModalProps {
@@ -57,6 +63,14 @@ interface AddEditMemberModalProps {
   onClose: () => void;
   onSave: (member: Member) => void;
   isEdit?: boolean;
+}
+
+// Helper to format date for input
+function toInputDateFormat(dateStr: string): string {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
 }
 
 export const AddEditMemberModal = ({ 
@@ -81,7 +95,12 @@ export const AddEditMemberModal = ({
     emergencyContact: "",
     dateOfBirth: "",
     gender: "",
-    membershipType: "Regular Member"
+    membershipType: "Regular Member",
+    CLDS: "Not Completed",
+    Baptism: "Not Done",
+    GBIC: "Not Completed",
+    ABIC: "Not Completed",
+    membershipLevel: "member"
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -91,50 +110,30 @@ export const AddEditMemberModal = ({
 
   useEffect(() => {
     if (isEdit && member) {
-      console.log('Loading member for edit:', member);
-      console.log('Member status:', member.status);
-      console.log('Member state:', member.state);
-      console.log('Member lga:', member.lga, 'Member lGA:', member.lGA);
-      
-      // Map backend field names to form field names
       const loadedData = {
         firstName: member.firstName || "",
         surname: member.surname || member.lastName || "",
         otherNames: member.otherNames || "",
         email: member.email || "",
         phone: member.phone || member.phoneNumber || "",
-        status: member.status || "Active",  // Use status directly (not memberStatus)
-        joinDate: member.joinDate || new Date().toISOString().split('T')[0],
-        dateOfBirth: member.dateOfBirth || member.dOB || "",
+        status: member.status || "Active",
+        joinDate: toInputDateFormat(member.joinDate || new Date().toISOString()),
+        dateOfBirth: toInputDateFormat(member.dateOfBirth || member.dOB || ""),
         gender: member.gender || "",
         address: member.address || "",
         emergencyContact: member.emergencyContact || "",
         membershipType: member.membershipType || member.memberType || "Regular Member",
         state: member.state || "",
-        lga: member.lga || member.lGA || ""
+        lga: member.lga || member.lGA || "",
+        CLDS: ['Completed'].includes(member.CLDS || '') ? 'Completed' : 'Not Completed',
+        Baptism: ['Done'].includes(member.Baptism || '') ? 'Done' : 'Not Done',
+        GBIC: ['Completed'].includes(member.GBIC || '') ? 'Completed' : 'Not Completed',
+        ABIC: ['Completed'].includes(member.ABIC || '') ? 'Completed' : 'Not Completed',
+        membershipLevel: (member.membershipLevel && member.membershipLevel.toLowerCase() === 'registered member') ? 'registered member' : 'member'
       };
-      
-      console.log('Form data being set:', loadedData);
-      console.log('Status specifically:', loadedData.status);
-      console.log('LGA specifically:', loadedData.lga);
-      
       setFormData(loadedData);
-      
-      // Load LGAs for the state
-      if (member.state) {
-        const lgas = getLGAsByState(member.state);
-        console.log('Available LGAs for state', member.state, ':', lgas);
-        setAvailableLGAs(lgas);
-        
-        // Check if LGA is in the available LGAs
-        const lgaValue = member.lga || member.lGA || "";
-        if (lgaValue && !lgas.includes(lgaValue)) {
-          console.warn('LGA value not found in available LGAs!', { lgaValue, lgas });
-        } else if (lgaValue) {
-          console.log('LGA value IS in available LGAs:', lgaValue);
-        }
-      }
-    } else if (!isEdit) {
+    } else if (!isEdit && isOpen) {
+      // Reset to defaults each time the add modal opens
       setFormData({
         firstName: "",
         surname: "",
@@ -149,12 +148,16 @@ export const AddEditMemberModal = ({
         emergencyContact: "",
         dateOfBirth: "",
         gender: "",
-        membershipType: "Regular Member"
+        membershipType: "Regular Member",
+        CLDS: "Not Completed",
+        Baptism: "Not Done",
+        GBIC: "Not Completed",
+        ABIC: "Not Completed",
+        membershipLevel: "member"
       });
-      setAvailableLGAs([]);
+      setErrors({});
     }
-    setErrors({});
-  }, [member, isEdit, isOpen]);
+  }, [isEdit, member, isOpen]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -224,30 +227,37 @@ export const AddEditMemberModal = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     setIsSubmitting(true);
-
     try {
-      const dataToSave = {
+      const payload = {
         ...formData,
-        id: isEdit ? member?.id : Date.now()
+        // Ensure dates are in correct format
+        joinDate: formData.joinDate,
+        dateOfBirth: formData.dateOfBirth,
+        // Map frontend fields to backend expected fields if necessary
+        // The backend seems to handle both camelCase and PascalCase for some fields based on the controller
+        // but let's be consistent with what the form state has
       };
-      
-      console.log('Form submitting with data:', dataToSave);
-      console.log('Status field:', dataToSave.status);
-      console.log('LGA field:', dataToSave.lga);
-      console.log('State field:', dataToSave.state);
-      
-      onSave(dataToSave);
 
+      if (isEdit && member?.memberID) {
+        await api.members.update(member.memberID, payload);
+        toast({
+          description: "Member updated successfully",
+        });
+      } else {
+        await api.members.create(payload);
+        toast({
+          description: "Member added successfully",
+        });
+      }
+      
+      // Refresh the list and close modal
+      onSave(formData); 
       onClose();
     } catch (error) {
+      console.error("Error saving member:", error);
       toast({
-        title: "Error",
         description: `Failed to ${isEdit ? 'update' : 'add'} member. Please try again.`,
         variant: "destructive",
       });
@@ -273,7 +283,7 @@ export const AddEditMemberModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
+      <DialogContent aria-describedby="add-edit-member-description" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <DialogTitle className="text-xl font-bold">
             {isEdit ? 'Edit Member' : 'Add New Member'}
@@ -286,6 +296,9 @@ export const AddEditMemberModal = ({
             <X className="h-4 w-4" />
           </Button>
         </DialogHeader>
+        <DialogDescription id="add-edit-member-description">
+          Fill out the form below to {isEdit ? 'update the member details' : 'add a new member'}.
+        </DialogDescription>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
@@ -357,7 +370,7 @@ export const AddEditMemberModal = ({
                 <Input
                   id="dateOfBirth"
                   type="date"
-                  value={formData.dateOfBirth}
+                  value={toInputDateFormat(formData.dateOfBirth)}
                   onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
                   className={errors.dateOfBirth ? "border-destructive" : ""}
                 />
@@ -412,7 +425,7 @@ export const AddEditMemberModal = ({
                 <Input
                   id="joinDate"
                   type="date"
-                  value={formData.joinDate}
+                  value={toInputDateFormat(formData.joinDate)}
                   onChange={(e) => handleInputChange('joinDate', e.target.value)}
                   className={errors.joinDate ? "border-destructive" : ""}
                 />
@@ -426,8 +439,10 @@ export const AddEditMemberModal = ({
                     <SelectValue placeholder="Select state" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60 overflow-y-auto">
-                    {states.map(state => (
-                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    {states.filter(Boolean).map((state) => (
+                      <SelectItem key={state} value={state}>
+                        {state}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -449,8 +464,10 @@ export const AddEditMemberModal = ({
                     } />
                   </SelectTrigger>
                   <SelectContent className="max-h-60 overflow-y-auto">
-                    {availableLGAs.map(lga => (
-                      <SelectItem key={lga} value={lga}>{lga}</SelectItem>
+                    {availableLGAs.filter(Boolean).map((lga) => (
+                      <SelectItem key={lga} value={lga}>
+                        {lga}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -484,7 +501,72 @@ export const AddEditMemberModal = ({
             </div>
           </div>
 
-          {/* Form Actions */}
+          {/* Onboarding Fields */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Onboarding & Discipleship</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="CLDS">CLDS (Christian Life Development School)</Label>
+                <Select value={formData.CLDS} onValueChange={(value) => handleInputChange('CLDS', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select CLDS status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Not Completed">Not Completed</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="Baptism">Baptismal Class</Label>
+                <Select value={formData.Baptism} onValueChange={(value) => handleInputChange('Baptism', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Baptism status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Not Done">Not Done</SelectItem>
+                    <SelectItem value="Done">Done</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="GBIC">GBIC (Bible School - Optional)</Label>
+                <Select value={formData.GBIC} onValueChange={(value) => handleInputChange('GBIC', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select GBIC status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Not Completed">Not Completed</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ABIC">ABIC (Bible School - Optional)</Label>
+                <Select value={formData.ABIC} onValueChange={(value) => handleInputChange('ABIC', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select ABIC status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Not Completed">Not Completed</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="membershipLevel">Membership Level</Label>
+                <Select value={formData.membershipLevel} onValueChange={(value) => handleInputChange('membershipLevel', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select membership level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">member</SelectItem>
+                    <SelectItem value="registered member">registered member</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button
               type="button"

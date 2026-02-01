@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Users, Calendar, MapPin, Phone, Mail, UserCheck, Eye, Search, Loader2, AlertCircle, Edit } from "lucide-react";
+import { X, Plus, Users, Calendar, MapPin, Phone, Mail, UserCheck, Eye, Search, Loader2, AlertCircle, Edit, Shield } from "lucide-react";
 import { CreateGatheringModal } from "./CreateGatheringModal";
 import { MemberAttendanceModal } from "./MemberAttendanceModal";
 import { GroupGatheringAttendanceModal } from "./GroupGatheringAttendanceModal";
@@ -20,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/config/api";
 
+// Extend the Group interface to include assistantLeader and pastor details
 interface Group {
   id: string;
   name: string;
@@ -31,6 +32,18 @@ interface Group {
   location?: string;
   status: 'Active' | 'Inactive';
   createdDate: string;
+  assistantLeader?: string;
+  pastor?: string;
+  classType?: string;
+  sessionNumber?: string | number;
+  assistantLeaderDetails?: {
+    firstName: string;
+    lastName: string;
+  };
+  pastorDetails?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 interface Member {
@@ -95,6 +108,27 @@ export const GroupProfileModal = ({
   const [leaderName, setLeaderName] = useState<string>('');
   const [leaderContact, setLeaderContact] = useState<string>('');
   
+  // Assistant Leader and Pastor details
+  const [assistantLeaderName, setAssistantLeaderName] = useState<string>("");
+  const [pastorName, setPastorName] = useState<string>("");
+
+  const applyLeadershipNames = (source: any) => {
+    const assistantLeader = source?.assistantLeaderDetails;
+    const pastor = source?.pastorDetails;
+
+    if (assistantLeader) {
+      setAssistantLeaderName(`${assistantLeader.firstName} ${assistantLeader.lastName}`);
+    } else {
+      setAssistantLeaderName("");
+    }
+
+    if (pastor) {
+      setPastorName(`${pastor.firstName} ${pastor.lastName}`);
+    } else {
+      setPastorName("");
+    }
+  };
+  
   // Gatherings state
   const [gatherings, setGatherings] = useState<Activity[]>([]);
   const [isLoadingGatherings, setIsLoadingGatherings] = useState(false);
@@ -107,6 +141,13 @@ export const GroupProfileModal = ({
       fetchGatherings();
     }
   }, [isOpen, group]);
+
+  // Set Assistant Leader and Pastor details when group data changes
+  useEffect(() => {
+    if (group) {
+      applyLeadershipNames(group);
+    }
+  }, [group]);
 
   const fetchMembers = async () => {
     if (!group) return;
@@ -137,13 +178,14 @@ export const GroupProfileModal = ({
         setLeaderName(`${leader.firstName} ${leader.lastName}`);
         setLeaderContact(leader.phoneNumber || leader.email || '');
       } else if (group.leader) {
-        // Fallback: try to find leader in members array
         const leader = membersData.find((m: any) => m.memberID === group.leader);
         if (leader) {
           setLeaderName(`${leader.firstName} ${leader.lastName}`);
           setLeaderContact(leader.phoneNumber || leader.email || '');
         }
       }
+
+      applyLeadershipNames(groupData);
     } catch (error: any) {
       console.error('Error fetching members:', error);
       setMembersError(error.message || 'Failed to load members');
@@ -177,9 +219,10 @@ export const GroupProfileModal = ({
           attendanceCount = attendanceResponse.total || attendanceResponse.attendance?.length || 0;
         } catch (error) {
           console.error(`Error fetching attendance for gathering ${gathering.gatheringID}:`, error);
-          // If error, keep attendanceCount as 0
         }
-        
+
+        const status: 'Planned' | 'Completed' | 'Cancelled' = new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned';
+
         return {
           id: gathering.gatheringID,
           name: gathering.gatheringName,
@@ -188,8 +231,8 @@ export const GroupProfileModal = ({
           time: gathering.gatheringTime || '',
           location: group.location || '',
           type: gathering.gatheringType || group.type,
-          status: new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned',
-          attendanceCount
+          status,
+          attendanceCount,
         };
       });
       
@@ -337,47 +380,80 @@ export const GroupProfileModal = ({
                         </span>
                       </div>
                     </div>
+
+                    <div>
+                      <h4 className="font-semibold text-sm text-muted-foreground mb-2">CLASS TYPE</h4>
+                      <p className="text-foreground">{group.classType || 'Not set'}</p>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm text-muted-foreground mb-2">SESSION NUMBER</h4>
+                      <p className="text-foreground">
+                        {group.sessionNumber !== undefined && group.sessionNumber !== ''
+                          ? group.sessionNumber
+                          : 'Not set'}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Leadership Information */}
-              {group.leader && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg">Leadership</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {isLoadingMembers ? (
-                      <div className="flex items-start gap-4">
-                        <Skeleton className="w-12 h-12 rounded-full" />
-                        <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-24" />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                          <UserCheck className="w-6 h-6 text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-foreground">
-                            {leaderName || group.leader}
-                          </h4>
-                          <p className="text-sm text-muted-foreground mb-2">Group Leader</p>
-                          {leaderContact && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Phone className="w-4 h-4" />
-                              {leaderContact}
+                  {group.leader && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Leadership</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {isLoadingMembers ? (
+                          <div className="flex items-start gap-4">
+                            <Skeleton className="w-12 h-12 rounded-full" />
+                            <div className="flex-1 space-y-2">
+                              <Skeleton className="h-4 w-32" />
+                              <Skeleton className="h-3 w-24" />
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div className="flex items-start gap-4">
+                              <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                <UserCheck className="w-6 h-6 text-primary" />
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-foreground">
+                                  {leaderName || group.leader}
+                                </h4>
+                                <p className="text-sm text-muted-foreground">
+                                  {leaderContact || 'No contact'}
+                                </p>
+                              </div>
+                            </div>
+                            {assistantLeaderName && (
+                              <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-secondary/10 rounded-full flex items-center justify-center">
+                                  <Users className="w-6 h-6 text-secondary" />
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-semibold text-foreground">Assistant Leader</h4>
+                                  <p className="text-sm text-muted-foreground">{assistantLeaderName}</p>
+                                </div>
+                              </div>
+                            )}
+                            {pastorName && (
+                              <div className="flex items-start gap-4">
+                                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                                  <Shield className="w-6 h-6 text-primary" />
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-semibold text-foreground">Pastor</h4>
+                                  <p className="text-sm text-muted-foreground">{pastorName}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
               {/* Location */}
               {group.location && (
@@ -605,7 +681,7 @@ export const GroupProfileModal = ({
           memberID={selectedMemberID}
           memberName={selectedMemberName}
           groupID={group.id}
-          groupName={group.name}
+          groupName={group.name} // Added groupName to resolve the error
           isOpen={isAttendanceModalOpen}
           onClose={() => {
             setIsAttendanceModalOpen(false);

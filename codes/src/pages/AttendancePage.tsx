@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Search, UserCheck, UserPlus, Calendar, Users, CheckCircle, CalendarCheck, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, UserCheck, UserPlus, Calendar, Users, CheckCircle, CalendarCheck, AlertCircle, RefreshCw, WifiOff } from "lucide-react";
 import { api } from "@/config/api";
+import { addToQueue } from "@/utils/offlineQueue";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,14 +31,19 @@ import { DigitalCheckInModal } from "@/components/DigitalCheckInModal";
 import { GroupAttendanceModal } from "@/components/GroupAttendanceModal";
 import { SendFollowUpModal } from "@/components/SendFollowUpModal";
 import { CreateGatheringModal } from "@/components/CreateGatheringModal";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/use-toast";
+import { usePermission } from "@/hooks/usePermission";
 
 const AttendancePage = () => {
   const { toast } = useToast();
+  const { canEdit } = usePermission();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300); // Debounce search
   const [selectedEvent, setSelectedEvent] = useState<string>("");
   const [checkedInMembers, setCheckedInMembers] = useState<Set<number>>(new Set());
+  const [offlineCheckedInMembers, setOfflineCheckedInMembers] = useState<Set<number>>(new Set()); // Track offline check-ins
   const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
   const [isSelectEventModalOpen, setIsSelectEventModalOpen] = useState(false);
   const [isGroupAttendanceModalOpen, setIsGroupAttendanceModalOpen] = useState(false);
@@ -75,6 +81,38 @@ const AttendancePage = () => {
       setSearchParams({});
     }
   }, [searchParams]);
+
+  // Listen for service worker sync completion messages
+  useEffect(() => {
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'operation-synced' && event.data?.endpoint === '/attendance') {
+        // Clear the offline badge for this member
+        const memberID = parseInt(event.data?.data?.memberID);
+        if (memberID) {
+          setOfflineCheckedInMembers(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(memberID);
+            return newSet;
+          });
+          
+          toast({
+            title: "Check-in Synced",
+            description: "Offline check-in has been synced to the server.",
+          });
+        }
+      }
+    };
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
+
+    return () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
+    };
+  }, []);
 
   // Helper function to convert 12-hour time to 24-hour format
   const convertTo24Hour = (timeStr: string): string => {
@@ -235,24 +273,52 @@ const AttendancePage = () => {
     const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
     const phone = member.phone || '';
     return !checkedInMembers.has(member.memberID) &&
-      (fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-       phone.includes(searchTerm));
+      (fullName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+       phone.includes(debouncedSearchTerm));
   });
 
   const handleCheckIn = async (memberId: number) => {
     if (selectedEventForCheckIn) {
       setIsLoadingCheckIn(true);
+      
       try {
-        await api.attendance.checkIn({
+        const checkInData = {
           memberID: memberId.toString(),
           gatheringID: selectedEventForCheckIn.gatheringID,
-        });
-        setCheckedInMembers(new Set([...checkedInMembers, memberId]));
-        setSearchTerm(""); // Clear search after check-in
-        toast({
-          title: "Check-in Successful",
-          description: "Member has been checked in successfully",
-        });
+        };
+        
+        // Check if offline
+        if (!navigator.onLine) {
+          // Queue the operation for later sync
+          await addToQueue({
+            type: 'CREATE',
+            endpoint: '/attendance',
+            data: checkInData,
+            timestamp: Date.now(),
+            retryCount: 0,
+          });
+          
+          // Optimistic UI update - mark as checked in with offline flag
+          setCheckedInMembers(new Set([...checkedInMembers, memberId]));
+          setOfflineCheckedInMembers(new Set([...offlineCheckedInMembers, memberId]));
+          setSearchTerm("");
+          
+          toast({
+            title: "Check-in Queued (Offline)",
+            description: "Member will be checked in when connection is restored.",
+            variant: "default",
+          });
+        } else {
+          // Online - proceed normally
+          await api.attendance.checkIn(checkInData);
+          setCheckedInMembers(new Set([...checkedInMembers, memberId]));
+          setSearchTerm("");
+          
+          toast({
+            title: "Check-in Successful",
+            description: "Member has been checked in successfully",
+          });
+        }
       } catch (error) {
         console.error('Error checking in member:', error);
         toast({
@@ -910,6 +976,8 @@ const AttendancePage = () => {
                     filteredMembers.map((member) => {
                       const fullName = `${member.firstName || ''} ${member.lastName || ''}`.trim();
                       const initials = `${member.firstName?.[0] || ''}${member.lastName?.[0] || ''}`.toUpperCase();
+                      const isOfflineCheckIn = offlineCheckedInMembers.has(member.memberID);
+                      
                       return (
                       <div
                         key={member.memberID}
@@ -926,6 +994,15 @@ const AttendancePage = () => {
                         </div>
                         <div className="flex items-center gap-3">
                           <Badge variant="outline">{member.groupName || member.groupID || 'No Group'}</Badge>
+                          
+                          {/* Show offline badge if this check-in is queued */}
+                          {isOfflineCheckIn && (
+                            <Badge variant="secondary" className="gap-1 bg-orange-500/10 text-orange-600 border-orange-500/30">
+                              <WifiOff className="h-3 w-3" />
+                              Queued
+                            </Badge>
+                          )}
+                          
                           <Button
                             onClick={() => handleCheckIn(member.memberID)}
                             className="gap-2"
@@ -1047,6 +1124,7 @@ const AttendancePage = () => {
                         setIsCreateGatheringModalOpen(true);
                       }}
                       className="w-full"
+                      disabled={!canEdit('attendance')}
                     >
                       <Calendar className="h-4 w-4 mr-2" />
                       Create New Gathering
@@ -1064,6 +1142,7 @@ const AttendancePage = () => {
                         setIsSelectEventModalOpen(false);
                         setIsCreateGatheringModalOpen(true);
                       }}
+                      disabled={!canEdit('attendance')}
                     >
                       <Calendar className="h-3 w-3 mr-1" />
                       New

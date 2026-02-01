@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { filterByGroupPermissions, hasAccessToGroup } = require('../../middlewares/groupPermissions');
 
 class VolunteerAssignmentsController extends BaseController {
   constructor() {
@@ -15,6 +16,56 @@ class VolunteerAssignmentsController extends BaseController {
       sheetsService.SHEETS.VOLUNTEER_ASSIGNMENTS,
       'VolunteerAssignments'
     );
+  }
+
+  /**
+   * Override getAll to filter by group permissions
+   */
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get all assignments
+    let assignmentsData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Filter by group permissions
+    assignmentsData = filterByGroupPermissions(assignmentsData, req, 'groupID');
+
+    // Apply search if provided
+    if (search) {
+      const searchFields = this.getSearchFields();
+      const searchLower = search.toLowerCase();
+      assignmentsData = assignmentsData.filter((item) =>
+        searchFields.some((field) =>
+          item[field]?.toString().toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply custom filters
+    assignmentsData = this.applyFilters(assignmentsData, filters);
+
+    // Apply pagination if requested
+    if (page || limit) {
+      const pageNum = parseInt(page) || 1;
+      const pageSize = parseInt(limit) || 10;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      return res.json({
+        success: true,
+        data: assignmentsData.slice(startIndex, endIndex),
+        total: assignmentsData.length,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(assignmentsData.length / pageSize),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: assignmentsData,
+      total: assignmentsData.length,
+    });
   }
 
   getSearchFields() {
@@ -64,6 +115,11 @@ class VolunteerAssignmentsController extends BaseController {
       throw new ApiError('Group/Event not found', 404);
     }
 
+    // Check if staff has access to this group
+    if (data.groupID && user.req && !hasAccessToGroup(user.req, data.groupID)) {
+      throw new ApiError(403, `You do not have access to assign volunteers to this group (${data.groupID}). You can only assign volunteers to your assigned groups.`);
+    }
+
     return {
       assignmentID: generateId('VOLUNTEER_ASSIGNMENT'),
       memberID: data.memberID,
@@ -72,6 +128,55 @@ class VolunteerAssignmentsController extends BaseController {
       assignmentStatus: data.assignmentStatus || data.status || 'Scheduled',
       assignmentDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
     };
+  }
+
+  /**
+   * Override create to trigger volunteer assignment automation
+   * POST /api/volunteer-assignments
+   */
+  async create(req, res) {
+    // Call parent create method
+    await super.create(req, res);
+
+    // If successful, trigger volunteer assignment automation
+    if (res.statusCode === 201) {
+      const assignmentData = res.locals.data || req.body;
+      
+      // Trigger automation asynchronously (don't wait for it)
+      setImmediate(async () => {
+        try {
+          // Get member details
+          const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+          const member = members.find(m => m.memberID === assignmentData.memberID);
+          
+          // Get role details
+          const roles = await sheetsService.getSheetObjects(sheetsService.SHEETS.VOLUNTEER_ROLES);
+          const role = roles.find(r => r.roleID === assignmentData.roleID);
+          
+          // Get group details
+          const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+          const group = groups.find(g => g.groupID === assignmentData.groupID);
+
+          if (member && role) {
+            const schedulerService = require('../../services/schedulerService');
+            await schedulerService.triggerAutomationImmediately('volunteer_assignment', {
+              firstName: member.firstName,
+              lastName: member.lastName,
+              phoneNumber: member.phoneNumber,
+              email: member.email,
+              roleName: role.roleName,
+              roleDescription: role.description || '',
+              groupName: group?.groupName || 'N/A',
+              assignmentDate: assignmentData.assignmentDate,
+              assignmentStatus: assignmentData.assignmentStatus || 'Scheduled'
+            });
+          }
+        } catch (error) {
+          console.error('Failed to trigger volunteer assignment automation:', error);
+          // Don't fail the request if automation fails
+        }
+      });
+    }
   }
 
   async getAll(req, res) {

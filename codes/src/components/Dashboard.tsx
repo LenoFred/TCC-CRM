@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGuests, useDonationVerification } from "@/hooks/useBusinessLogic";
 import { dashboardService } from "@/services/businessLogicService";
+import api from "@/config/api";
 import {
   Users,
   Heart,
@@ -29,6 +30,7 @@ import {
   UsersRound,
   Home,
   Activity,
+  Loader2,
   Search
 } from "lucide-react";
 
@@ -36,6 +38,9 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
+  const typedUser = (user as unknown as { staffRole?: string; fullName?: string; firstName?: string; role?: string }) || {};
+  const staffRole = typedUser.staffRole || typedUser.role || 'Staff';
+  const displayName = typedUser.fullName || typedUser.firstName || 'User';
   
   // Use business logic hooks
   const { fetchGuests, fetchStats, guests, stats, loading: guestsLoading, error: guestsError } = useGuests();
@@ -60,6 +65,7 @@ export function Dashboard() {
   const [activitiesError, setActivitiesError] = useState<string | null>(null);
   const [showActivitiesModal, setShowActivitiesModal] = useState(false);
   const [activitySearchQuery, setActivitySearchQuery] = useState('');
+  const [isIngestingForms, setIsIngestingForms] = useState(false);
 
   // Calculate if loading
   const isLoadingMetrics = guestsLoading || donationsLoading || isLoadingDashboard;
@@ -184,6 +190,29 @@ export function Dashboard() {
     navigate('/volunteers');
   };
 
+  const handleManualIngestion = async () => {
+    setIsIngestingForms(true);
+    try {
+      const res: any = await api.forms.ingestAll();
+      toast({
+        title: "Form ingestion triggered",
+        description: res?.message || "Pulling latest form responses now."
+      });
+
+      // Hard refresh of dashboard data so new ingested rows are visible immediately
+      await fetchDashboardData();
+      await fetchRecentActivities();
+    } catch (error: any) {
+      toast({
+        title: "Form ingestion failed",
+        description: error?.message || "Could not start ingestion.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsIngestingForms(false);
+    }
+  };
+
 
   return (
     <div className="space-y-8">
@@ -192,7 +221,7 @@ export function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold mb-2">
-              Welcome back, {user?.staffRole || 'Staff'} {user?.fullName || user?.firstName || 'User'}
+              Welcome back, {staffRole} {displayName}
             </h1>
             <p className="text-lg opacity-90">Here's what's happening at TCC today</p>
           </div>
@@ -358,6 +387,22 @@ export function Dashboard() {
                   <Button variant="outline" size="sm" className="h-20 flex-col gap-2" onClick={handleScheduleVolunteer}>
                     <UserCheck className="w-5 h-5" />
                     <span className="text-xs">Volunteer</span>
+                  </Button>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleManualIngestion}
+                    disabled={isIngestingForms}
+                    className="flex items-center gap-2"
+                  >
+                    {isIngestingForms ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    Ingest Forms
                   </Button>
                 </div>
                 <div className="mt-4 pt-4 border-t text-center">

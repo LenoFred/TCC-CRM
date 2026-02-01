@@ -49,7 +49,17 @@ export function StaffProfileModal({ isOpen, onClose, onEdit, staffMember }: Staf
     try {
       const response = await api.staffPermissions.getByStaffId(staffMember.id.toString());
       const granted = response.permissions.filter((p: any) => p.granted);
-      setGrantedPermissions(granted);
+      const groupPermissions = response.groupPermissions || [];
+      
+      // Add group permissions as special permission entries for display
+      const groupPerms = groupPermissions.map((groupId: string) => ({
+        key: groupId,
+        label: `Group Access: ${groupId}`,
+        category: 'Group Access',
+        granted: true
+      }));
+      
+      setGrantedPermissions([...granted, ...groupPerms]);
     } catch (error) {
       console.error('Error fetching permissions:', error);
       setGrantedPermissions([]);

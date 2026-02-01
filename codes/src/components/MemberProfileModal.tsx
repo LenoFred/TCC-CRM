@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,11 @@ interface Member {
   lGA?: string; // Backend field
   membershipType?: string;
   memberType?: string; // Backend field
+  CLDS?: string;
+  Baptism?: string;
+  GBIC?: string;
+  ABIC?: string;
+  membershipLevel?: string;
 }
 
 interface MemberProfileModalProps {
@@ -168,11 +174,27 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
     }
   }, [member, isOpen]);
 
+  const normalizeStatus = (value?: string, doneLabel?: string) => {
+    const val = (value || '').toString().trim();
+    if (!val) return doneLabel ? 'Not Done' : 'Not Completed';
+    const lower = val.toLowerCase();
+    if (doneLabel) {
+      return lower === 'done' ? 'Done' : 'Not Done';
+    }
+    return lower === 'completed' ? 'Completed' : 'Not Completed';
+  };
+
   if (!member) return null;
+
+  const normalizedMembershipLevel = (() => {
+    const val = (member.membershipLevel || '').toString().trim().toLowerCase();
+    if (val === 'registered member') return 'registered member';
+    return 'member';
+  })();
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
+      <DialogContent aria-describedby="member-profile-description" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <DialogTitle className="text-2xl font-bold">{member.name}</DialogTitle>
           <div className="flex gap-2">
@@ -195,6 +217,12 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
             </Button>
           </div>
         </DialogHeader>
+        <DialogDescription id="member-profile-description">
+          View and manage the details of the selected member.
+        </DialogDescription>
+        <DialogDescription id="member-profile-description">
+          View and manage the details of the selected member.
+        </DialogDescription>
 
         <div className="space-y-6">
           {/* Basic Information Card */}
@@ -226,7 +254,10 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
                 <p className="text-sm">
-                  {(member.dateOfBirth || member.dOB) ? new Date(member.dateOfBirth || member.dOB).toLocaleDateString() : 'Not provided'}
+                  {(member.dateOfBirth || member.dOB) ? (() => {
+                    const d = new Date(member.dateOfBirth || member.dOB);
+                    return isNaN(d.getTime()) ? 'Not provided' : d.toISOString().slice(0, 10);
+                  })() : 'Not provided'}
                 </p>
               </div>
               <div>
@@ -258,7 +289,7 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
 
           {/* Detailed Information Tabs */}
           <Tabs defaultValue="family" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="family" className="gap-2">
                 <Users className="h-4 w-4" />
                 Family
@@ -275,7 +306,42 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                 <Calendar className="h-4 w-4" />
                 Groups
               </TabsTrigger>
+              <TabsTrigger value="onboarding" className="gap-2">
+                <CheckCircle className="h-4 w-4" />
+                Onboarding
+              </TabsTrigger>
             </TabsList>
+            <TabsContent value="onboarding" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Onboarding & Discipleship Progress</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="font-semibold">Baptismal Class (Compulsory)</p>
+                      <span className="block mt-1">Baptismal Class: <Badge variant={normalizeStatus(member.Baptism, 'done') === 'Done' ? 'default' : 'secondary'}>{normalizeStatus(member.Baptism, 'done')}</Badge></span>
+                    </div>
+                    <div>
+                      <p className="font-semibold">CLDS (Christian Life Development School) (Compulsory)</p>
+                      <span className="block mt-1">CLDS: <Badge variant={normalizeStatus(member.CLDS) === 'Completed' ? 'default' : 'secondary'}>{normalizeStatus(member.CLDS)}</Badge></span>
+                    </div>
+                    <div>
+                      <p className="font-semibold">GBIC (Optional)</p>
+                      <span className="block mt-1">GBIC: <Badge variant={normalizeStatus(member.GBIC) === 'Completed' ? 'default' : 'secondary'}>{normalizeStatus(member.GBIC)}</Badge></span>
+                    </div>
+                    <div>
+                      <p className="font-semibold">ABIC (Optional)</p>
+                      <span className="block mt-1">ABIC: <Badge variant={normalizeStatus(member.ABIC) === 'Completed' ? 'default' : 'secondary'}>{normalizeStatus(member.ABIC)}</Badge></span>
+                    </div>
+                    <div>
+                      <p className="font-semibold">Membership Level</p>
+                      <span className="block mt-1">Level: <Badge variant={normalizedMembershipLevel === 'registered member' ? 'default' : 'secondary'}>{normalizedMembershipLevel}</Badge></span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="family" className="space-y-4">
               <Card>

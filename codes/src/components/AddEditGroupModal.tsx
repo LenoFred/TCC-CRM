@@ -34,6 +34,9 @@ interface Group {
   location?: string;
   status: 'Active' | 'Inactive';
   createdDate: string;
+  assistantLeader?: string; // New field
+  pastor?: string; // New field
+  classType?: string;
 }
 
 interface AddEditGroupModalProps {
@@ -69,8 +72,12 @@ export const AddEditGroupModal = ({
 }: AddEditGroupModalProps) => {
   const { toast } = useToast();
   const [searchLeader, setSearchLeader] = useState("");
+  const [searchAssistantLeader, setSearchAssistantLeader] = useState("");
+  const [searchPastor, setSearchPastor] = useState("");
   const [searchMember, setSearchMember] = useState("");
   const [selectedLeader, setSelectedLeader] = useState<Member | null>(null);
+    const [selectedAssistantLeader, setSelectedAssistantLeader] = useState<Member | null>(null);
+    const [selectedPastor, setSelectedPastor] = useState<Member | null>(null);
   const [selectedMembers, setSelectedMembers] = useState<GroupMember[]>([]);
   const [existingMemberIDs, setExistingMemberIDs] = useState<string[]>([]); // Track original member IDs
   const [originalMembers, setOriginalMembers] = useState<GroupMember[]>([]); // Track original members with groupMemberID
@@ -78,13 +85,16 @@ export const AddEditGroupModal = ({
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
   const [formData, setFormData] = useState<Omit<Group, 'id'>>({
     name: "",
-    type: "Department",
+    type: "Ministry",
     description: "",
-    leader: "", // This will store leaderMemberID
+    leader: "",
+    assistantLeader: "", // New field
+    pastor: "", // New field
     leaderContact: "",
     members: [],
     location: "",
     status: "Active",
+    classType: "none",
     createdDate: new Date().toISOString().split('T')[0]
   });
   
@@ -131,7 +141,9 @@ export const AddEditGroupModal = ({
       const response = await api.groupMembers.getByGroup(groupId);
       console.log('📥 Raw response from getByGroup:', response);
       
-      const membersData = response.members || [];
+      const resAny = response as any;
+      const membersRaw = resAny?.members || resAny?.data?.members || resAny?.data || [];
+      const membersData = Array.isArray(membersRaw) ? membersRaw : [];
       console.log('👥 Members data:', membersData);
       
       const transformedMembers: GroupMember[] = membersData.map((gm: any) => ({
@@ -169,10 +181,13 @@ export const AddEditGroupModal = ({
         type: group.type,
         description: group.description || "",
         leader: group.leader || "", // This is leaderMemberID from backend
+        assistantLeader: group.assistantLeader || "",
+        pastor: group.pastor || "",
         leaderContact: group.leaderContact || "",
         members: group.members || [],
         location: group.location || "",
         status: group.status,
+        classType: group.classType || 'none',
         createdDate: group.createdDate
       });
       
@@ -182,6 +197,22 @@ export const AddEditGroupModal = ({
         if (leader) {
           setSelectedLeader(leader);
           console.log('✅ Found and set leader:', leader.name);
+        }
+      }
+
+      if (group.assistantLeader && availableMembers.length > 0) {
+        const asst = availableMembers.find(m => m.id === group.assistantLeader);
+        if (asst) {
+          setSelectedAssistantLeader(asst);
+          console.log('✅ Found and set assistant leader:', asst.name);
+        }
+      }
+
+      if (group.pastor && availableMembers.length > 0) {
+        const pastorMember = availableMembers.find(m => m.id === group.pastor);
+        if (pastorMember) {
+          setSelectedPastor(pastorMember);
+          console.log('✅ Found and set pastor:', pastorMember.name);
         }
       }
       
@@ -195,16 +226,21 @@ export const AddEditGroupModal = ({
     } else if (!isEdit) {
       setFormData({
         name: "",
-        type: "Department",
+        type: "Ministry",
         description: "",
         leader: "",
+        assistantLeader: "",
+        pastor: "",
         leaderContact: "",
         members: [],
         location: "",
         status: "Active",
+        classType: "none",
         createdDate: new Date().toISOString().split('T')[0]
       });
       setSelectedLeader(null);
+      setSelectedAssistantLeader(null);
+      setSelectedPastor(null);
       setSelectedMembers([]);
       setExistingMemberIDs([]); // Reset for new group
     }
@@ -323,9 +359,15 @@ export const AddEditGroupModal = ({
       console.log('Members to Add:', membersToAdd.map(m => m.memberID));
       console.log('Members to Remove:', membersToRemove.map(m => `${m.memberID} (${m.groupMemberID})`));
       
-      // Prepare group data with members
-      const groupData = {
-        ...formData,
+    const normalizedClassType = formData.classType === 'none' ? '' : formData.classType;
+
+    // Prepare group data with members
+    const groupData = {
+      ...formData,
+        classType: normalizedClassType,
+      leader: selectedLeader ? selectedLeader.id : '',
+      assistantLeader: selectedAssistantLeader ? selectedAssistantLeader.id : '',
+      pastor: selectedPastor ? selectedPastor.id : '',
         members: membersToAdd,
         removedMembers: membersToRemove,
         memberCount: selectedMembers.length, // Total count includes existing + new
@@ -360,6 +402,30 @@ export const AddEditGroupModal = ({
         ...prev,
         leader: selectedMember.id, // Store member ID, not name
         leaderContact: selectedMember.phone
+      }));
+    }
+  };
+
+  // Handler for Assistant Leader selection
+  const handleAssistantLeaderChange = (assistantLeaderId: string) => {
+    const selectedMember = availableMembers.find(m => m.id === assistantLeaderId);
+    if (selectedMember) {
+      setSelectedAssistantLeader(selectedMember);
+      setFormData(prev => ({
+        ...prev,
+        assistantLeader: selectedMember.id
+      }));
+    }
+  };
+
+  // Handler for Pastor selection
+  const handlePastorChange = (pastorId: string) => {
+    const selectedMember = availableMembers.find(m => m.id === pastorId);
+    if (selectedMember) {
+      setSelectedPastor(selectedMember);
+      setFormData(prev => ({
+        ...prev,
+        pastor: selectedMember.id
       }));
     }
   };
@@ -417,10 +483,10 @@ export const AddEditGroupModal = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Department">Department</SelectItem>
                     <SelectItem value="Ministry">Ministry</SelectItem>
-                    <SelectItem value="Committee">Committee</SelectItem>
-                    <SelectItem value="Small Group">Small Group</SelectItem>
+                    <SelectItem value="Department">Department</SelectItem>
+                    <SelectItem value="Cell">Cell</SelectItem>
+                    <SelectItem value="Fellowship">Fellowship</SelectItem>
                   </SelectContent>
                 </Select>
                 {errors.type && <p className="text-sm text-destructive">{errors.type}</p>}
@@ -462,6 +528,30 @@ export const AddEditGroupModal = ({
             </div>
           </div>
 
+          {/* Class Details */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Class Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="classType">Class Type</Label>
+                <Select value={formData.classType || "none"} onValueChange={(value) => handleInputChange('classType', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select class type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="Foundational">Foundational</SelectItem>
+                    <SelectItem value="CLDS">CLDS</SelectItem>
+                    <SelectItem value="GBIC">GBIC</SelectItem>
+                    <SelectItem value="ABIC">ABIC</SelectItem>
+                    <SelectItem value="Baptism">Baptism</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           {/* Leadership Information */}
           <div className="space-y-4">
             <div className="flex items-center gap-3">
@@ -470,115 +560,213 @@ export const AddEditGroupModal = ({
               </div>
               <h3 className="text-lg font-semibold">Leadership</h3>
             </div>
-            
-            {/* Selected Leader Display */}
-            {selectedLeader && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Users className="h-5 w-5" />
-                    Group Leader
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between p-3 border rounded-lg">
-                    <div className="flex-1">
-                      <p className="font-medium">{selectedLeader.name}</p>
-                      <p className="text-sm text-muted-foreground">{selectedLeader.email || 'No email'}</p>
+
+            {/* Group Leader */}
+            <div className="space-y-2">
+              <Label>Group Leader</Label>
+              {selectedLeader ? (
+                <Card>
+                  <CardContent>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium">{selectedLeader.name}</p>
+                        <p className="text-sm text-muted-foreground">{selectedLeader.email || 'No email'}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedLeader(null);
+                          setFormData(prev => ({ ...prev, leader: '', leaderContact: '' }));
+                        }}
+                        title="Remove leader"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setSelectedLeader(null);
-                        setFormData(prev => ({ ...prev, leader: '', leaderContact: '' }));
-                      }}
-                      title="Remove leader"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-            
-            {/* Warning when no leader selected */}
-            {!selectedLeader && (
-              <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
-                <CardContent className="pt-6">
-                  <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    No leader selected. Please add a group leader.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-            
-            {/* Add Leader Card - Only show if no leader selected */}
-            {!selectedLeader && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Plus className="h-5 w-5" />
-                    Select Group Leader
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <Label htmlFor="leaderSearch">Search Members</Label>
-                    <Input
-                      id="leaderSearch"
-                      value={searchLeader}
-                      onChange={(e) => setSearchLeader(e.target.value)}
-                      placeholder="Search by name or email..."
-                      disabled={isLoadingMembers}
-                    />
-                  </div>
-
-                  {isLoadingMembers && (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      Loading members...
-                    </p>
-                  )}
-
+                  </CardContent>
+                </Card>
+              ) : (
+                <div>
+                  <Input
+                    value={searchLeader}
+                    onChange={(e) => setSearchLeader(e.target.value)}
+                    placeholder="Search by name or email..."
+                    disabled={isLoadingMembers}
+                  />
                   {searchLeader && !isLoadingMembers && (
-                    <div className="max-h-48 overflow-y-auto space-y-2">
+                    <div className="max-h-48 overflow-y-auto space-y-2 mt-2">
                       {availableMembers
-                        .filter(member => 
+                        .filter(member =>
                           member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
                           member.email.toLowerCase().includes(searchLeader.toLowerCase())
                         )
-                        .length > 0 ? (
-                        availableMembers
-                          .filter(member => 
-                            member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
-                            member.email.toLowerCase().includes(searchLeader.toLowerCase())
-                          )
-                          .map(member => (
-                            <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
-                              <div>
-                                <p className="font-medium">{member.name}</p>
-                                <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleLeaderChange(member.id)}
-                              >
-                                Add
-                              </Button>
+                        .map(member => (
+                          <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                            <div>
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
                             </div>
-                          ))
-                      ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleLeaderChange(member.id)}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      {availableMembers.filter(member =>
+                        member.name.toLowerCase().includes(searchLeader.toLowerCase()) ||
+                        member.email.toLowerCase().includes(searchLeader.toLowerCase())
+                      ).length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-4">
                           No members found matching "{searchLeader}"
                         </p>
                       )}
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              )}
+            </div>
+
+            {/* Assistant Leader */}
+            <div className="space-y-2">
+              <Label>Assistant Leader</Label>
+              {selectedAssistantLeader ? (
+                <Card>
+                  <CardContent>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium">{selectedAssistantLeader.name}</p>
+                        <p className="text-sm text-muted-foreground">{selectedAssistantLeader.email || 'No email'}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedAssistantLeader(null);
+                          setFormData(prev => ({ ...prev, assistantLeader: '' }));
+                        }}
+                        title="Remove assistant leader"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div>
+                  <Input
+                    value={searchAssistantLeader}
+                    onChange={(e) => setSearchAssistantLeader(e.target.value)}
+                    placeholder="Search by name or email..."
+                    disabled={isLoadingMembers}
+                  />
+                  {searchAssistantLeader && !isLoadingMembers && (
+                    <div className="max-h-48 overflow-y-auto space-y-2 mt-2">
+                      {availableMembers
+                        .filter(member =>
+                          member.name.toLowerCase().includes(searchAssistantLeader.toLowerCase()) ||
+                          member.email.toLowerCase().includes(searchAssistantLeader.toLowerCase())
+                        )
+                        .map(member => (
+                          <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                            <div>
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAssistantLeaderChange(member.id)}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      {availableMembers.filter(member =>
+                        member.name.toLowerCase().includes(searchAssistantLeader.toLowerCase()) ||
+                        member.email.toLowerCase().includes(searchAssistantLeader.toLowerCase())
+                      ).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No members found matching "{searchAssistantLeader}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Pastor */}
+            <div className="space-y-2">
+              <Label>Pastor</Label>
+              {selectedPastor ? (
+                <Card>
+                  <CardContent>
+                    <div className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium">{selectedPastor.name}</p>
+                        <p className="text-sm text-muted-foreground">{selectedPastor.email || 'No email'}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setSelectedPastor(null);
+                          setFormData(prev => ({ ...prev, pastor: '' }));
+                        }}
+                        title="Remove pastor"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div>
+                  <Input
+                    value={searchPastor}
+                    onChange={(e) => setSearchPastor(e.target.value)}
+                    placeholder="Search by name or email..."
+                    disabled={isLoadingMembers}
+                  />
+                  {searchPastor && !isLoadingMembers && (
+                    <div className="max-h-48 overflow-y-auto space-y-2 mt-2">
+                      {availableMembers
+                        .filter(member =>
+                          member.name.toLowerCase().includes(searchPastor.toLowerCase()) ||
+                          member.email.toLowerCase().includes(searchPastor.toLowerCase())
+                        )
+                        .map(member => (
+                          <div key={member.id} className="flex items-center justify-between p-2 border rounded hover:bg-muted/50">
+                            <div>
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.email || 'No email'}</p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handlePastorChange(member.id)}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      {availableMembers.filter(member =>
+                        member.name.toLowerCase().includes(searchPastor.toLowerCase()) ||
+                        member.email.toLowerCase().includes(searchPastor.toLowerCase())
+                      ).length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          No members found matching "{searchPastor}"
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Group Members */}
@@ -715,4 +903,4 @@ export const AddEditGroupModal = ({
       </DialogContent>
     </Dialog>
   );
-};
+}

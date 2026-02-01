@@ -103,7 +103,7 @@ export function showNotification(title: string, options?: NotificationOptions) {
 }
 
 // Background sync for offline operations
-export async function syncWhenOnline(tag: string) {
+export async function syncWhenOnline(tag: string = 'sync-offline-queue') {
   if ('serviceWorker' in navigator && 'SyncManager' in window) {
     try {
       const registration = await navigator.serviceWorker.ready;
@@ -185,7 +185,11 @@ export function isOnline(): boolean {
 
 // Listen to online/offline events
 export function onConnectionChange(callback: (isOnline: boolean) => void) {
-  const handleOnline = () => callback(true);
+  const handleOnline = () => {
+    callback(true);
+    // Trigger background sync when connection is restored
+    syncWhenOnline('sync-offline-queue');
+  };
   const handleOffline = () => callback(false);
 
   window.addEventListener('online', handleOnline);
@@ -196,6 +200,28 @@ export function onConnectionChange(callback: (isOnline: boolean) => void) {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
   };
+}
+
+// Listen to service worker messages
+export function listenToServiceWorkerMessages(
+  callback: (message: any) => void
+): () => void {
+  if ('serviceWorker' in navigator) {
+    const handler = (event: MessageEvent) => {
+      if (event.data && event.data.type) {
+        console.log('[PWA] Service worker message:', event.data);
+        callback(event.data);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', handler);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handler);
+    };
+  }
+
+  return () => {};
 }
 
 // Check if app can be installed

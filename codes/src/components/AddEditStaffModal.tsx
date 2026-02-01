@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Eye, EyeOff } from "lucide-react";
+import { Shield, Eye, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ManageStaffPermissionsModal } from "@/components/ManageStaffPermissionsModal";
+import { api } from "@/config/api";
 
 interface StaffMember {
   id?: number;
@@ -24,6 +25,7 @@ interface StaffMember {
   username?: string;
   password?: string;
   permissions?: string[];
+  groupPermissions?: string | string[]; // Can be comma-separated string or array
 }
 
 interface AddEditStaffModalProps {
@@ -40,6 +42,24 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
   const [tempPermissions, setTempPermissions] = useState<string[]>([]);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<Array<{ groupID: string; groupName: string }>>([]);
+
+  // Fetch available groups
+  useEffect(() => {
+    const fetchGroups = async () => {
+      try {
+        const response = await api.groups.getForPermissions();
+        console.log('Fetched groups:', response.data);
+        setAvailableGroups(response.data || []);
+      } catch (error) {
+        console.error('Failed to fetch groups:', error);
+      }
+    };
+    if (isOpen) {
+      fetchGroups();
+    }
+  }, [isOpen]);
 
   // Initialize form data when modal opens or staffMember changes
   const [formData, setFormData] = useState<Partial<StaffMember>>({
@@ -54,6 +74,21 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
     username: "",
     password: "",
   });
+
+  // Fetch group permissions from StaffPermissions sheet
+  const fetchGroupPermissions = async (staffId: number) => {
+    try {
+      const response = await api.staffPermissions.getByStaffId(staffId.toString());
+      if (response.groupPermissions && Array.isArray(response.groupPermissions)) {
+        setSelectedGroupIds(response.groupPermissions);
+      } else {
+        setSelectedGroupIds([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch group permissions:', error);
+      setSelectedGroupIds([]);
+    }
+  };
 
   // Update form data when staffMember changes
   useEffect(() => {
@@ -71,6 +106,8 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
         password: "", // Never pre-fill password for security
       });
       setTempPermissions(staffMember.permissions || []);
+      // Fetch group permissions from StaffPermissions sheet
+      fetchGroupPermissions(staffMember.id);
     } else if (mode === 'add') {
       setFormData({
         name: "",
@@ -85,6 +122,7 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
         password: "",
       });
       setTempPermissions([]);
+      setSelectedGroupIds([]);
     }
   }, [staffMember, mode, isOpen]);
 
@@ -129,12 +167,13 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
       }
     }
 
-    // Include permissions in the save data
-    const staffData = {
+    // Include permissions and groupPermissions in the save data
+    const staffData: StaffMember = {
       ...formData,
       permissions: tempPermissions,
+      groupPermissions: selectedGroupIds, // Send as array for create/edit
       id: staffMember?.id || Date.now(),
-    };
+    } as StaffMember;
 
     onSave(staffData);
 
@@ -159,10 +198,14 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
       password: "",
     });
     setTempPermissions([]);
+    setSelectedGroupIds([]);
   };
 
-  const handlePermissionsUpdate = (permissions: string[]) => {
+  const handlePermissionsUpdate = (permissions: string[], groupPerms?: string[]) => {
     setTempPermissions(permissions);
+    if (groupPerms !== undefined) {
+      setSelectedGroupIds(groupPerms);
+    }
   };
 
   return (
@@ -233,6 +276,59 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
               </Select>
             </div>
           </div>
+
+          {/* Group Permissions - Only for Staff (not Admin) */}
+          {formData.userRole === "Staff" && (
+            <div className="border rounded-lg p-4 bg-muted/50">
+              <Label className="text-sm font-medium mb-2 block">
+                Group Access Permissions
+              </Label>
+              <p className="text-xs text-muted-foreground mb-3">
+                Leave empty for full access to all groups. Select specific groups to restrict access.
+              </p>
+              <Select
+                value=""
+                onValueChange={(groupId) => {
+                  if (groupId && !selectedGroupIds.includes(groupId)) {
+                    setSelectedGroupIds([...selectedGroupIds, groupId]);
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select groups to grant access..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableGroups
+                    .filter(g => !selectedGroupIds.includes(g.groupID))
+                    .map(group => (
+                      <SelectItem key={group.groupID} value={group.groupID}>
+                        {group.groupName}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {selectedGroupIds.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {selectedGroupIds.map(groupId => {
+                    const group = availableGroups.find(g => g.groupID === groupId);
+                    return (
+                      <Badge key={groupId} variant="secondary" className="pl-2 pr-1">
+                        {group?.groupName || groupId}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
+                          onClick={() => setSelectedGroupIds(selectedGroupIds.filter(id => id !== groupId))}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -372,6 +468,9 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
         onClose={() => setShowPermissionsModal(false)}
         selectedPermissions={tempPermissions}
         onUpdate={handlePermissionsUpdate}
+        groupPermissions={selectedGroupIds}
+        userRole={formData.userRole}
+        staffName={formData.name || "staff member"}
       />
     </Dialog>
   );

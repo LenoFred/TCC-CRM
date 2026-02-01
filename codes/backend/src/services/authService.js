@@ -336,6 +336,22 @@ class AuthService {
   }
 
   /**
+   * Get staff record by staff ID
+   * @param {string} staffID - Staff ID from Staff sheet
+   * @returns {Promise<object|null>} Staff record or null
+   */
+  async getStaffRecord(staffID) {
+    try {
+      const staffData = await sheetsService.getSheetObjects(sheetsService.SHEETS.STAFF);
+      const staff = staffData.find(s => s.staffID === staffID || s.id === staffID);
+      return staff || null;
+    } catch (error) {
+      logger.error('Error getting staff record', { error: error.message, staffID });
+      return null;
+    }
+  }
+
+  /**
    * Get staff permissions from StaffPermissions sheet
    * @param {string} staffID - Staff ID from Staff sheet
    * @returns {Promise<Array<string>>} Array of permission keys
@@ -347,7 +363,7 @@ class AuthService {
       );
 
       if (permissionsData.length === 0) {
-        return [];
+        return { permissions: [], groupPermissions: [] };
       }
 
       const headers = permissionsData[0];
@@ -365,10 +381,10 @@ class AuthService {
 
       if (staffIDIndex === -1 || permissionKeyIndex === -1 || hasAccessIndex === -1) {
         logger.error('Required columns not found in StaffPermissions sheet');
-        return [];
+        return { permissions: [], groupPermissions: [] };
       }
 
-      const permissions = rows
+      const allPermissions = rows
         .filter(row => 
           row[staffIDIndex] === staffID && 
           (row[hasAccessIndex] === 'TRUE' || row[hasAccessIndex] === 'true' || row[hasAccessIndex] === true)
@@ -378,16 +394,81 @@ class AuthService {
           hasAccess: true
         }));
 
+      // Separate regular permissions and group permissions
+      // Return permissions as flat string array (not objects)
+      const permissions = allPermissions
+        .filter(p => !p.permissionKey.startsWith('GRP-'))
+        .map(p => p.permissionKey);
+      
+      const groupPermissions = allPermissions
+        .filter(p => p.permissionKey.startsWith('GRP-'))
+        .map(p => p.permissionKey);
+
       logger.info('Staff permissions retrieved', { 
         staffID, 
-        permissionsCount: permissions.length,
-        permissions: permissions.map(p => p.permissionKey)
+        regularPermissionsCount: permissions.length,
+        groupPermissionsCount: groupPermissions.length,
+        permissions,
+        groupPermissions
       });
 
-      return permissions;
+      return { permissions, groupPermissions };
     } catch (error) {
       logger.error('Error getting staff permissions', { error: error.message, staffID });
-      return [];
+      return { permissions: [], groupPermissions: [] };
+    }
+  }
+
+  /**
+   * Get staff group permissions
+   * @param {string} staffID - Staff ID from Staff sheet
+   * @returns {Promise<Array<string>|null>} Array of group IDs or null for admin/all access
+   */
+  async getStaffGroupPermissions(staffID) {
+    try {
+      const staff = await sheetsService.getSheetObjects(sheetsService.SHEETS.STAFF);
+      const staffMember = staff.find((s) => s.staffID === staffID || s.id === staffID);
+
+      if (!staffMember) {
+        logger.warn('Staff member not found for group permissions', { staffID });
+        return []; // No staff found = no access
+      }
+
+      // Check if staff is admin or has admin role
+      if (
+        staffMember.role?.toLowerCase() === 'admin' ||
+        staffMember.staffRole?.toLowerCase() === 'admin' ||
+        staffMember.userRole?.toLowerCase() === 'admin'
+      ) {
+        logger.info('Staff is admin - full group access granted', { staffID });
+        return null; // null = full access to all groups (admin bypass)
+      }
+
+      // Get group permissions (comma-separated IDs)
+      const groupPermissions = staffMember.groupPermissions || '';
+
+      // Empty string = all access (default before restrictions)
+      if (!groupPermissions || groupPermissions.trim() === '') {
+        logger.info('Staff has no group restrictions - full access granted', { staffID });
+        return null; // null = full access (no restrictions set)
+      }
+
+      // Parse comma-separated group IDs
+      const permittedGroups = groupPermissions
+        .split(',')
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0);
+
+      logger.info('Staff group permissions retrieved', { 
+        staffID, 
+        permittedGroupsCount: permittedGroups.length,
+        permittedGroups 
+      });
+
+      return permittedGroups;
+    } catch (error) {
+      logger.error('Error getting staff group permissions', { error: error.message, staffID });
+      return []; // Return empty array on error (no access)
     }
   }
 
@@ -437,24 +518,66 @@ class AuthService {
       }
 
       // Validate loginType matches staff Role
-      const userRole = staff.role || 'Staff';
-      if (loginType && loginType !== userRole) {
-        logAuthEvent('LOGIN_FAILED', username, { 
-          reason: 'Role mismatch', 
-          expectedRole: loginType, 
-          actualRole: userRole 
-        });
-        const message = loginType === 'Admin' 
-          ? 'You are not an Admin. Please use the Staff Login form.'
-          : 'You are not a Staff member. Please use the Admin Login form.';
-        throw new Error(message);
+      // Admin users must use Admin login, all other staff roles (Pastor, Treasurer, etc.) use Staff login
+      const userRole = (staff.role || 'Staff').toLowerCase();
+      const isAdminUser = userRole === 'admin';
+      
+      if (loginType) {
+        const loginAsAdmin = loginType.toLowerCase() === 'admin';
+        
+        if (isAdminUser && !loginAsAdmin) {
+          logAuthEvent('LOGIN_FAILED', username, { 
+            reason: 'Role mismatch', 
+            expectedRole: 'Admin', 
+            actualRole: staff.role 
+          });
+          throw new Error('You are an Admin. Please use the Admin Login form.');
+        }
+        
+        if (!isAdminUser && loginAsAdmin) {
+          logAuthEvent('LOGIN_FAILED', username, { 
+            reason: 'Role mismatch', 
+            expectedRole: 'Staff', 
+            actualRole: staff.role 
+          });
+          throw new Error('You are not an Admin. Please use the Staff Login form.');
+        }
       }
 
       // Get staffID for permissions lookup
       const staffID = staff.staffID || staff.staffId;
 
-      // Get permissions from StaffPermissions sheet
-      const permissions = await this.getStaffPermissions(staffID);
+      // Check if user is Admin - grant all permissions automatically (as strings)
+      const isAdmin = (staff.role || '').toLowerCase() === 'admin';
+      let permissions = [];
+      let groupPermissions = null;
+      if (isAdmin) {
+        // Admin gets ALL permissions automatically as flat string array
+        permissions = [
+          'can_view_members', 'can_add_members', 'can_edit_members', 'can_delete_members',
+          'can_view_families', 'can_add_families', 'can_edit_families', 'can_delete_families',
+          'can_view_groups', 'can_add_groups', 'can_edit_groups', 'can_delete_groups',
+          'can_view_attendance', 'can_add_attendance', 'can_edit_attendance', 'can_delete_attendance', 'can_mark_attendance',
+          'can_view_volunteers', 'can_manage_volunteers',
+          'can_view_communications', 'can_create_communications', 'can_update_communications', 'can_delete_communications',
+          'can_send_sms', 'can_send_email',
+          'can_view_analytics', 'can_generate_reports',
+          'can_view_donations', 'can_manage_donations',
+          'can_view_events', 'can_add_events', 'can_edit_events', 'can_delete_events', 'can_manage_events',
+          'can_view_staff', 'can_manage_staff',
+          'can_view_support_requests', 'can_create_support_requests', 'can_manage_support_requests', 'can_delete_support_requests',
+          'can_manage_settings', 'can_view_settings'
+        ];
+        groupPermissions = null; // Admin has access to all groups (null = no restrictions)
+      } else {
+        // Staff: Get permissions from StaffPermissions sheet
+        const permissionsData = await this.getStaffPermissions(staffID);
+        permissions = permissionsData.permissions || [];
+        groupPermissions = permissionsData.groupPermissions || [];
+        if (!groupPermissions || groupPermissions.length === 0) {
+          groupPermissions = null; // No group restrictions = full access
+        }
+      }
 
       // Update LastLogin in Staff sheet
       await this.updateLastLogin(staffID);
@@ -464,6 +587,7 @@ class AuthService {
         userId: staffID,
         email: staff.email || '',
         role: staff.role || 'Staff', // Use role column from Staff sheet (Staff or Admin)
+        groupPermissions: groupPermissions || [], // Include group permissions in token
       };
 
       const accessToken = this.generateAccessToken(tokenPayload);
@@ -517,13 +641,15 @@ class AuthService {
       const staffID = staff.staffID || staff.staffId;
 
       // Get permissions from StaffPermissions sheet
-      const permissions = await this.getStaffPermissions(staffID);
+      const permissionsData = await this.getStaffPermissions(staffID);
+      const { permissions, groupPermissions } = permissionsData;
 
       // Generate new access token - use role column from Staff sheet
       const tokenPayload = {
         userId: staffID,
         email: staff.email || '',
         role: staff.role || 'Staff', // Use role column from Staff sheet (Staff or Admin)
+        groupPermissions: groupPermissions || [], // Include group permissions in token
       };
 
       const accessToken = this.generateAccessToken(tokenPayload);
@@ -657,17 +783,41 @@ class AuthService {
    */
   async resetStaffPassword(staffId, newPassword) {
     try {
+      logger.info('Resetting password for staff', { staffId });
+      
       // Hash new password
       const newPasswordHash = await this.hashPassword(newPassword);
 
-      // Update password in Details sheet
-      await sheetsService.updateRow(
-        sheetsService.SHEETS.DETAILS || 'Details',
-        'StaffID',
+      // Try to find the staff in Details sheet first
+      const detailsData = await sheetsService.getSheetData(sheetsService.SHEETS.DETAILS);
+      logger.info('Details sheet data', { 
+        headers: detailsData[0],
+        rowCount: detailsData.length - 1 
+      });
+
+      // Update password in Details sheet - try both staffID and StaffID
+      let updated = await sheetsService.updateRow(
+        sheetsService.SHEETS.DETAILS,
+        'staffID',
         staffId,
-        { Password: newPasswordHash, UpdatedAt: new Date().toISOString() }
+        { password: newPasswordHash, updatedAt: new Date().toISOString() }
       );
 
+      // If not found, try with capital S
+      if (!updated) {
+        updated = await sheetsService.updateRow(
+          sheetsService.SHEETS.DETAILS,
+          'StaffID',
+          staffId,
+          { password: newPasswordHash, updatedAt: new Date().toISOString() }
+        );
+      }
+
+      if (!updated) {
+        throw new Error(`Staff credentials not found in Details sheet for staffId: ${staffId}`);
+      }
+
+      logger.info('Password reset successful', { staffId });
       logAuthEvent('PASSWORD_RESET_BY_ADMIN', staffId);
 
       return true;

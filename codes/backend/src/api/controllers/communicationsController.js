@@ -8,10 +8,82 @@ const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
 const { logger } = require('../../utils/logger');
+const { formatPhoneNumber, extractValidPhoneNumbers } = require('../../utils/dataFormatters');
+const { getStaffGroupPermissions, hasAccessToGroup } = require('../../middlewares/groupPermissions');
 
 class CommunicationsController extends BaseController {
   constructor() {
     super(sheetsService, sheetsService.SHEETS.COMMUNICATIONS, 'Communications');
+  }
+
+  /**
+   * Override getAll to filter communications by group permissions
+   */
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get all communications
+    let communicationsData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Filter by group permissions
+    // Communications are filtered by checking if recipients are in assigned groups
+    const groupPermissions = getStaffGroupPermissions(req);
+    if (groupPermissions !== null && groupPermissions.length > 0) {
+      // Get group members to filter by permitted groups
+      const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
+      const permittedMemberIds = new Set(
+        groupMembers
+          .filter(gm => groupPermissions.includes(gm.groupID))
+          .map(gm => gm.memberID)
+      );
+      
+      // Filter communications sent to permitted members
+      communicationsData = communicationsData.filter(comm => {
+        // If recipientType is 'Member', check if memberID is in permitted list
+        if (comm.recipientType === 'Member') {
+          return permittedMemberIds.has(comm.recipientID);
+        }
+        // For other types (bulk, etc.), include if staff sent it
+        return comm.sentBy === req.user?.userId;
+      });
+    }
+
+    // Apply search if provided
+    if (search) {
+      const searchFields = this.getSearchFields();
+      const searchLower = search.toLowerCase();
+      communicationsData = communicationsData.filter((item) =>
+        searchFields.some((field) =>
+          item[field]?.toString().toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply custom filters
+    communicationsData = this.applyFilters(communicationsData, filters);
+
+    // Apply pagination if requested
+    if (page || limit) {
+      const pageNum = parseInt(page) || 1;
+      const pageSize = parseInt(limit) || 10;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      return res.json({
+        success: true,
+        data: communicationsData.slice(startIndex, endIndex),
+        total: communicationsData.length,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(communicationsData.length / pageSize),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: communicationsData,
+      total: communicationsData.length,
+    });
   }
 
   getSearchFields() {
@@ -133,6 +205,18 @@ class CommunicationsController extends BaseController {
 
       // C. Add group members
       if (groupIds && groupIds.length > 0) {
+        // Check group permissions
+        const staffId = req.user?.memberId || req.user?.staffId || req.user?.userId;
+        if (staffId) {
+          const groupPermissions = await getStaffGroupPermissions(staffId);
+          if (groupPermissions !== null) {
+            const unauthorizedGroups = groupIds.filter(gid => !groupPermissions.includes(gid));
+            if (unauthorizedGroups.length > 0) {
+              throw new ApiError(403, `You do not have permission to send messages to these groups: ${unauthorizedGroups.join(', ')}`);
+            }
+          }
+        }
+
         const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
         groupIds.forEach(groupId => {
           const group = groups.find(g => String(g.groupID) === String(groupId));
@@ -192,27 +276,54 @@ class CommunicationsController extends BaseController {
 
       // STEP 2: Extract contacts based on channel
       if (normalizedChannel === 'sms' || normalizedChannel === 'whatsapp') {
-        // For SMS/WhatsApp: Extract phone numbers
+        // For SMS/WhatsApp: Extract phone numbers and validate
         selectedMembers.forEach(member => {
           // Use phoneNumber field (not "phone")
           const phone = member.phoneNumber || member.phone;
           if (phone) {
-            phoneNumbers.push({
-              contact: phone,
-              name: `${member.firstName} ${member.lastName}`,
-              memberId: member.memberID
-            });
-            logger.info('Extracted phone', { phone, name: `${member.firstName} ${member.lastName}` });
+            const phoneResult = formatPhoneNumber(phone);
+            
+            if (phoneResult.isValid && phoneResult.isValidForTwilio) {
+              phoneNumbers.push({
+                contact: phoneResult.e164, // Use E.164 format for SMS/WhatsApp
+                displayContact: phoneResult.display, // For logging/display
+                name: `${member.firstName} ${member.lastName}`,
+                memberId: member.memberID
+              });
+              logger.info('Extracted valid phone', { 
+                phone: phoneResult.e164, 
+                display: phoneResult.display,
+                name: `${member.firstName} ${member.lastName}` 
+              });
+            } else {
+              logger.warn('Member has invalid phone number for SMS', { 
+                memberID: member.memberID, 
+                name: `${member.firstName} ${member.lastName}`,
+                phone,
+                error: phoneResult.error
+              });
+            }
           } else {
             logger.warn('Member has no phone', { memberID: member.memberID, name: `${member.firstName} ${member.lastName}` });
           }
         });
 
-        // Add manual phone numbers
+        // Add manual phone numbers with validation
         if (manualPhoneNumbers && manualPhoneNumbers.length > 0) {
           manualPhoneNumbers.forEach(phone => {
             if (phone) {
-              phoneNumbers.push({ contact: phone, name: 'Manual Contact', memberId: null });
+              const phoneResult = formatPhoneNumber(phone);
+              
+              if (phoneResult.isValid && phoneResult.isValidForTwilio) {
+                phoneNumbers.push({ 
+                  contact: phoneResult.e164, 
+                  displayContact: phoneResult.display,
+                  name: 'Manual Contact', 
+                  memberId: null 
+                });
+              } else {
+                logger.warn('Invalid manual phone number', { phone, error: phoneResult.error });
+              }
             }
           });
         }

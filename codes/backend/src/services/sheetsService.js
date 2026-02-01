@@ -46,6 +46,8 @@ class SheetsService {
       SCHEDULED_MESSAGES: 'ScheduledMessages',
       MESSAGE_DRAFTS: 'MessageDrafts',
       COMMUNICATION_TEMPLATES: 'Communication_Templates', // NEW: Template-based messaging
+      AUTOMATED_MESSAGES: 'AutomatedMessages', // NEW: Automated message configurations
+      FAILED_AUTOMATIONS: 'FailedAutomations', // NEW: Failed message tracking
       SETTINGS: 'Settings',
     };
 

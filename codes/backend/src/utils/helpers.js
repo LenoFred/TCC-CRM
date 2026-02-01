@@ -93,11 +93,17 @@ const sheetsToObjects = (data) => {
     headers.forEach((header, index) => {
       // Convert header to camelCase
       const camelKey = header.charAt(0).toLowerCase() + header.slice(1);
-      obj[camelKey] = row[index] || '';
+      const value = row[index] || '';
+      obj[camelKey] = value;
+      
+      // Preserve the raw header as well (e.g., CLDS) so existing consumers keep working
+      if (header !== camelKey) {
+        obj[header] = value;
+      }
       
       // Special mapping for DOB -> dateOfBirth for better frontend compatibility
       if (header === 'DOB') {
-        obj['dateOfBirth'] = row[index] || '';
+        obj['dateOfBirth'] = value;
       }
     });
     return obj;
