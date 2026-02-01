@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { usePermission } from "@/hooks/usePermission";
 
 // Define interface for the column metadata
 interface ColumnMetadata {
@@ -49,6 +50,7 @@ interface Filter {
 
 const AnalyticsPage = () => {
   const { toast } = useToast();
+  const { hasPermission } = usePermission();
   const [selectedDataSource, setSelectedDataSource] = useState<string>("");
   const [filters, setFilters] = useState<Filter[]>([]);
   const [reportResults, setReportResults] = useState<any[]>([]);
@@ -59,6 +61,7 @@ const AnalyticsPage = () => {
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [reportError, setReportError] = useState<string | null>(null);
   const [summaryStats, setSummaryStats] = useState<any>(null);
+  const onboarding = summaryStats?.onboarding;
   const [totalRecords, setTotalRecords] = useState(0);
 
   // Data sources that match Google Sheets
@@ -304,6 +307,65 @@ const AnalyticsPage = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6" style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+
+        {/* Onboarding overview */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Onboarding Snapshot
+            </CardTitle>
+            <CardDescription>Track completion of Baptism, CLDS, GBIC, ABIC, and membership level</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {isLoadingStats ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <Skeleton key={idx} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">Total Members</p>
+                    <p className="text-2xl font-bold">{onboarding?.totalMembers ?? summaryStats?.members?.total ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">Registered Members</p>
+                    <p className="text-2xl font-bold">{onboarding?.registeredMembers ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">Members (Not Registered)</p>
+                    <p className="text-2xl font-bold">{onboarding?.members ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">Baptism Done</p>
+                    <p className="text-2xl font-bold">{onboarding?.baptismDone ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">CLDS Completed</p>
+                    <p className="text-2xl font-bold">{onboarding?.cldsCompleted ?? 0}</p>
+                  </CardContent>
+                </Card>
+                <Card className="border-muted">
+                  <CardContent className="pt-4">
+                    <p className="text-xs text-muted-foreground">GBIC / ABIC Completed</p>
+                    <p className="text-sm font-semibold">GBIC: {onboarding?.gbicCompleted ?? 0} | ABIC: {onboarding?.abicCompleted ?? 0}</p>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </CardContent>
+        </Card>
         {/* Report Builder */}
         <Card>
           <CardHeader>
@@ -480,7 +542,7 @@ const AnalyticsPage = () => {
                   variant="outline" 
                   onClick={exportToCSV}
                   className="gap-2"
-                  disabled={isGeneratingReport}
+                  disabled={isGeneratingReport || !hasPermission('can_generate_reports')}
                 >
                   <FileDown className="h-4 w-4" />
                   Export to CSV ({reportResults.length} records)
@@ -509,6 +571,7 @@ const AnalyticsPage = () => {
                 size="sm"
                 onClick={exportToCSV}
                 className="gap-2"
+                disabled={!hasPermission('can_generate_reports')}
               >
                 <Download className="h-4 w-4" />
                 Download CSV

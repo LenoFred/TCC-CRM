@@ -192,13 +192,20 @@ const SettingsPage = () => {
     }
 
     const passwordToUse = newPassword || generateRandomPassword();
+    const staffId = selectedStaff.staffID || selectedStaff.id;
+    
+    console.log('Resetting password for staff:', {
+      staffId,
+      selectedStaff,
+      password: passwordToUse
+    });
     
     setIsResetting(true);
     try {
-      const response = await api.auth.resetPassword(selectedStaff.id, passwordToUse);
+      const response = await api.auth.resetPassword(staffId, passwordToUse);
       toast({
         title: "Password Reset Successful",
-        description: `New password for ${selectedStaff.name}: ${passwordToUse}`,
+        description: `New password for ${selectedStaff.fullName || selectedStaff.name}: ${passwordToUse}`,
         duration: 10000, // Show for 10 seconds
       });
       setNewPassword(passwordToUse);
@@ -206,7 +213,7 @@ const SettingsPage = () => {
       console.error('Error resetting password:', error);
       toast({
         title: "Error",
-        description: "Failed to reset password.",
+        description: error.message || "Failed to reset password.",
         variant: "destructive"
       });
     } finally {

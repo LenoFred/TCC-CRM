@@ -84,6 +84,7 @@ class StaffController extends BaseController {
       _username: data.username,
       _password: data.password,
       _permissions: data.permissions,
+      _groupPermissions: data.groupPermissions || [], // Group IDs array
       _userRole: data.userRole || 'Staff',
     };
   }
@@ -99,6 +100,7 @@ class StaffController extends BaseController {
       const username = createData._username;
       const password = createData._password;
       const permissions = createData._permissions;
+      const groupPermissions = createData._groupPermissions || [];
       const staffID = createData.staffID;
       const userRole = createData._userRole;
 
@@ -106,6 +108,7 @@ class StaffController extends BaseController {
       delete createData._username;
       delete createData._password;
       delete createData._permissions;
+      delete createData._groupPermissions;
       delete createData._userRole;
 
       // Add role to the staff record
@@ -135,16 +138,28 @@ class StaffController extends BaseController {
       ];
       await sheetsService.appendSheetData(sheetsService.SHEETS.DETAILS, [detailsRow]);
 
-      // 3. Create permissions in StaffPermissions sheet
+      // 3. Create permissions in StaffPermissions sheet (regular permissions + group permissions)
       const permissionRows = permissions.map((permissionKey) => [
         generateId('PRM'),
         staffID,
         permissionKey,
         'TRUE', // HasAccess
       ]);
-      await sheetsService.appendSheetData(sheetsService.SHEETS.STAFF_PERMISSIONS, permissionRows);
+      
+      // Add group permissions as separate rows
+      const groupPermissionRows = groupPermissions.map((groupId) => [
+        generateId('PRM'),
+        staffID,
+        groupId, // PermissionKey is the groupID
+        'TRUE', // HasAccess
+      ]);
+      
+      const allPermissionRows = [...permissionRows, ...groupPermissionRows];
+      if (allPermissionRows.length > 0) {
+        await sheetsService.appendSheetData(sheetsService.SHEETS.STAFF_PERMISSIONS, allPermissionRows);
+      }
 
-      console.log(`✅ Staff created successfully: ${staffID} with ${permissions.length} permissions`);
+      console.log(`✅ Staff created successfully: ${staffID} with ${permissions.length} permissions and ${groupPermissions.length} group permissions`);
 
       res.status(201).json({
         success: true,

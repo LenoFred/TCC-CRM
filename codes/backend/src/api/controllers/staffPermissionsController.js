@@ -148,9 +148,18 @@ class StaffPermissionsController extends BaseController {
     // Get available permissions list
     const available = this.getAvailablePermissions();
 
-    // Create a map of granted permissions
+    // Separate group permissions from regular permissions
+    const groupPermissions = staffPermissions.filter(p => 
+      String(p.permissionKey).startsWith('GRP-') && 
+      (p.hasAccess === true || p.hasAccess === 'true' || p.hasAccess === 'TRUE')
+    );
+    const regularPermissions = staffPermissions.filter(p => 
+      !String(p.permissionKey).startsWith('GRP-')
+    );
+
+    // Create a map of granted regular permissions
     const grantedMap = {};
-    staffPermissions.forEach((p) => {
+    regularPermissions.forEach((p) => {
       grantedMap[p.permissionKey] = p.hasAccess === true || p.hasAccess === 'true' || p.hasAccess === 'TRUE';
     });
 
@@ -165,6 +174,7 @@ class StaffPermissionsController extends BaseController {
       staffId,
       total: permissionsWithStatus.filter(p => p.granted).length,
       permissions: permissionsWithStatus,
+      groupPermissions: groupPermissions.map(p => p.permissionKey),
     });
   }
 
@@ -173,13 +183,13 @@ class StaffPermissionsController extends BaseController {
    */
   async updateStaffPermissions(req, res) {
     const { staffId } = req.params;
-    const { permissions } = req.body; // Array of permission keys that should be granted
+    const { permissions, groupPermissions } = req.body; // permissions: Array of permission keys, groupPermissions: Array of group IDs
 
     if (!Array.isArray(permissions)) {
       throw new ApiError(400, 'Permissions must be an array of permission keys');
     }
 
-    logger.info('Updating staff permissions', { staffId, permissions });
+    logger.info('Updating staff permissions', { staffId, permissions, groupPermissions });
 
     // Get all available permissions
     const availablePermissions = this.getAvailablePermissions();
@@ -197,9 +207,17 @@ class StaffPermissionsController extends BaseController {
       (p) => String(p.staffID) === String(staffId)
     );
 
-    // Create a map of existing permissions
+    // Separate existing group permissions from regular permissions
+    const existingGroupPermissions = existingStaffPermissions.filter(p => 
+      String(p.permissionKey).startsWith('GRP-')
+    );
+    const existingRegularPermissions = existingStaffPermissions.filter(p => 
+      !String(p.permissionKey).startsWith('GRP-')
+    );
+
+    // Create a map of existing regular permissions
     const existingMap = {};
-    existingStaffPermissions.forEach((p) => {
+    existingRegularPermissions.forEach((p) => {
       existingMap[p.permissionKey] = p;
     });
 
@@ -232,11 +250,43 @@ class StaffPermissionsController extends BaseController {
       }
     });
 
-    // Apply updates
-    const data = await sheetsService.getSheetObjects(this.sheetName);
+    // Handle group permissions
+    const groupPermissionsArray = Array.isArray(groupPermissions) ? groupPermissions : [];
+    logger.info('Processing group permissions', {
+      staffId,
+      groupPermissionsArray,
+      arrayLength: groupPermissionsArray.length
+    });
+    
+    const groupPermissionsToCreate = groupPermissionsArray.map(groupId => ({
+      permissionID: generateId('PRM'),
+      staffID: staffId,
+      permissionKey: groupId,
+      hasAccess: true,
+    }));
+
+    // Apply updates - IMPORTANT: Don't use cache to ensure we have latest data
+    let data = await sheetsService.getSheetObjects(this.sheetName, false);
     const headers = this.getDefaultHeaders();
 
-    // Update existing permissions
+    // Count existing group permissions before deletion
+    const existingGroupPermsCount = data.filter(p => 
+      String(p.staffID) === String(staffId) && String(p.permissionKey).startsWith('GRP-')
+    ).length;
+
+    // Remove all existing group permissions for this staff
+    data = data.filter(p => 
+      !(String(p.staffID) === String(staffId) && String(p.permissionKey).startsWith('GRP-'))
+    );
+    
+    logger.info('Group permissions deletion', {
+      staffId,
+      existingGroupPermsCount,
+      newGroupPermsCount: groupPermissionsToCreate.length,
+      totalRecordsAfterDeletion: data.length
+    });
+
+    // Update existing regular permissions
     for (const update of toUpdate) {
       const index = data.findIndex((p) => p.permissionID === update.permissionID);
       if (index !== -1) {
@@ -244,9 +294,16 @@ class StaffPermissionsController extends BaseController {
       }
     }
 
-    // Add new permissions
+    // Add new regular permissions
     data.push(...toCreate);
 
+    // Add new group permissions
+    data.push(...groupPermissionsToCreate);
+
+    // CRITICAL: Clear the sheet first to remove deleted group permissions
+    // Using update() alone doesn't clear rows beyond the new data range
+    await sheetsService.clearSheet(this.sheetName);
+    
     // Write to sheet
     await sheetsService.updateSheetData(
       this.sheetName,
@@ -265,6 +322,7 @@ class StaffPermissionsController extends BaseController {
       staffId,
       updated: toUpdate.length,
       created: toCreate.length,
+      groupPermissions: groupPermissionsArray.length,
     });
 
     res.json({
@@ -274,6 +332,7 @@ class StaffPermissionsController extends BaseController {
       updated: toUpdate.length,
       created: toCreate.length,
       totalGranted: permissions.length,
+      groupPermissionsGranted: groupPermissionsArray.length,
     });
   }
 

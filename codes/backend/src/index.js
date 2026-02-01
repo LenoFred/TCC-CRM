@@ -6,6 +6,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const config = require('./config');
@@ -74,6 +75,21 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Response compression (gzip/deflate)
+// Reduces response size by ~70-80% for text/json responses
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses with Cache-Control: no-transform
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression filter function
+    return compression.filter(req, res);
+  },
+  level: 6, // Compression level (0-9, default 6)
+  threshold: 1024, // Only compress responses larger than 1KB
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -272,6 +288,15 @@ const server = app.listen(PORT, async () => {
   } catch (error) {
     logger.error('❌ Failed to initialize Form Ingestion Service:', error.message);
   }
+
+  // Initialize Scheduler Service for automated messages
+  try {
+    const schedulerService = require('./services/schedulerService');
+    schedulerService.start();
+    logger.info('✅ Scheduler Service initialized (WAT timezone, 5-min intervals)');
+  } catch (error) {
+    logger.error('❌ Failed to initialize Scheduler Service:', error.message);
+  }
 });
 
 // Graceful shutdown
@@ -284,6 +309,14 @@ process.on('SIGTERM', () => {
     formIngestionService.stopPolling();
   } catch (error) {
     logger.error('Error stopping form ingestion:', error.message);
+  }
+
+  // Stop scheduler service
+  try {
+    const schedulerService = require('./services/schedulerService');
+    schedulerService.stop();
+  } catch (error) {
+    logger.error('Error stopping scheduler:', error.message);
   }
   
   server.close(() => {
@@ -301,6 +334,14 @@ process.on('SIGINT', () => {
     formIngestionService.stopPolling();
   } catch (error) {
     logger.error('Error stopping form ingestion:', error.message);
+  }
+
+  // Stop scheduler service
+  try {
+    const schedulerService = require('./services/schedulerService');
+    schedulerService.stop();
+  } catch (error) {
+    logger.error('Error stopping scheduler:', error.message);
   }
   
   server.close(() => {

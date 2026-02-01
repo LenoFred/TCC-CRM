@@ -41,8 +41,8 @@ router.get(
  */
 router.get(
   '/group/:groupID',
-  // authenticate,
-  // requirePermission('can_view_attendance'),
+  authenticate,
+  requirePermission('can_view_attendance'),
   asyncHandler(gatheringsController.getByGroup.bind(gatheringsController))
 );
 
@@ -53,8 +53,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_attendance'),
+  authenticate,
+  requirePermission('can_view_attendance'),
   asyncHandler(gatheringsController.getAll.bind(gatheringsController))
 );
 
@@ -77,8 +77,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_add_attendance'),
+  authenticate,
+  requirePermission('can_add_attendance'),
   validate(schemas.gathering.create),
   asyncHandler(gatheringsController.create.bind(gatheringsController))
 );
@@ -90,8 +90,8 @@ router.post(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_edit_attendance'),
+  authenticate,
+  requirePermission('can_edit_attendance'),
   validate(schemas.gathering.update),
   asyncHandler(gatheringsController.update.bind(gatheringsController))
 );

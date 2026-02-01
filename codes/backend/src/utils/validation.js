@@ -4,6 +4,35 @@
  */
 
 const { z } = require('zod');
+const { formatPhoneNumber, formatDateOfBirth } = require('./dataFormatters');
+
+/**
+ * Custom phone validator using our formatPhoneNumber utility
+ */
+const phoneValidator = z.string().refine(
+  (val) => {
+    if (!val) return true; // Allow empty/optional
+    const result = formatPhoneNumber(val);
+    return result.isValid && result.isValidForTwilio;
+  },
+  {
+    message: 'Invalid phone number. Use format: 08012345678 or +2348012345678'
+  }
+);
+
+/**
+ * Custom date validator using our formatDateOfBirth utility
+ */
+const dateOfBirthValidator = z.string().refine(
+  (val) => {
+    if (!val) return true; // Allow empty/optional
+    const result = formatDateOfBirth(val);
+    return result !== null;
+  },
+  {
+    message: 'Invalid date of birth. Use format: YYYY-MM-DD or DD/MM/YYYY'
+  }
+);
 
 /**
  * Common validation schemas
@@ -11,8 +40,9 @@ const { z } = require('zod');
 const commonSchemas = {
   id: z.string().min(1, 'ID is required'),
   email: z.string().email('Invalid email format'),
-  phone: z.string().regex(/^[\d\s\-\+\(\)]+$/, 'Invalid phone number format').optional(),
+  phone: phoneValidator.optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
+  dateOfBirth: dateOfBirthValidator.optional(),
   dateTime: z.string().datetime('Invalid datetime format'),
   url: z.string().url('Invalid URL format').optional(),
   positiveNumber: z.number().positive('Must be a positive number'),
@@ -29,11 +59,16 @@ const memberSchemas = {
     email: commonSchemas.email.optional(),
     phone: commonSchemas.phone,
     address: z.string().optional(),
-    dateOfBirth: commonSchemas.date.optional(),
+    dateOfBirth: commonSchemas.dateOfBirth,
     gender: z.enum(['Male', 'Female', 'Other']).optional(),
     familyId: z.string().optional(),
     memberStatus: z.enum(['Active', 'Inactive', 'Child', 'Guest']),
+    membershipLevel: z.string().optional(),
     branchId: z.string().optional(),
+    CLDS: z.string().optional(),
+    Baptism: z.string().optional(),
+    GBIC: z.string().optional(),
+    ABIC: z.string().optional(),
     customFields: z.record(z.any()).optional(),
   }),
   
@@ -43,11 +78,16 @@ const memberSchemas = {
     email: commonSchemas.email.optional(),
     phone: commonSchemas.phone,
     address: z.string().optional(),
-    dateOfBirth: commonSchemas.date.optional(),
+    dateOfBirth: commonSchemas.dateOfBirth,
     gender: z.enum(['Male', 'Female', 'Other']).optional(),
     familyId: z.string().optional(),
     memberStatus: z.enum(['Active', 'Inactive', 'Child', 'Guest']).optional(),
+    membershipLevel: z.string().optional(),
     branchId: z.string().optional(),
+    CLDS: z.string().optional(),
+    Baptism: z.string().optional(),
+    GBIC: z.string().optional(),
+    ABIC: z.string().optional(),
     customFields: z.record(z.any()).optional(),
   }),
 };
@@ -79,18 +119,26 @@ const groupSchemas = {
     groupName: z.string().min(1, 'Group name is required'),
     groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee', 'Small Group']),
     leaderMemberID: z.string().optional(),
+    AsstLeaderID: z.string().min(1, 'Assistant Leader ID is required'),
+    PastorID: z.string().min(1, 'Pastor ID is required'),
     status: z.string().optional(),
     meetingLocation: z.string().optional(),
     description: z.string().optional(),
+    classType: z.string().optional(),
+    sessionNumber: z.string().optional(),
   }),
   
   update: z.object({
     groupName: z.string().min(1).optional(),
     groupType: z.enum(['Department', 'Fellowship', 'Cell', 'Ministry', 'Committee', 'Small Group']).optional(),
     leaderMemberID: z.string().optional(),
+    AsstLeaderID: z.string().optional(),
+    PastorID: z.string().optional(),
     status: z.string().optional(),
     meetingLocation: z.string().optional(),
     description: z.string().optional(),
+    classType: z.string().optional(),
+    sessionNumber: z.string().optional(),
   }),
 };
 
@@ -123,6 +171,8 @@ const gatheringSchemas = {
     parentID: z.string().min(1, 'Parent ID (Event or Group) is required'),
     gatheringDate: z.string().min(1, 'Gathering date is required'),
     gatheringTime: z.string().optional(),
+    classType: z.string().optional(),
+    sessionNumber: z.string().optional(),
   }),
   
   update: z.object({
@@ -131,6 +181,8 @@ const gatheringSchemas = {
     parentID: z.string().optional(),
     gatheringDate: z.string().optional(),
     gatheringTime: z.string().optional(),
+    classType: z.string().optional(),
+    sessionNumber: z.string().optional(),
   }),
 };
 

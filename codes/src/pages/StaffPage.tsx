@@ -18,9 +18,11 @@ import {
 import { AddEditStaffModal } from "@/components/AddEditStaffModal";
 import { StaffProfileModal } from "@/components/StaffProfileModal";
 import { useToast } from "@/hooks/use-toast";
+import { usePermission } from "@/hooks/usePermission";
 
 const StaffPage = () => {
   const { toast } = useToast();
+  const { hasPermission } = usePermission();
   const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
   const [isEditStaffModalOpen, setIsEditStaffModalOpen] = useState(false);
@@ -46,17 +48,20 @@ const StaffPage = () => {
         id: staff.staffID || staff.id,
         name: staff.fullName || staff.name,
         role: staff.staffRole || staff.role,
+        userRole: staff.role, // Access level (Admin/Staff) from Role column
         phone: staff.phoneNumber || staff.phone,
       }));
 
-      // Fetch permission counts for each staff member
+      // Fetch permission counts for each staff member (including group permissions)
       const staffWithPermissions = await Promise.all(
         transformedStaff.map(async (staff: any) => {
           try {
             const permResponse = await api.staffPermissions.getByStaffId(staff.id.toString());
+            const regularPermissionsCount = permResponse.total || 0;
+            const groupPermissionsCount = permResponse.groupPermissions?.length || 0;
             return {
               ...staff,
-              permissionCount: permResponse.total || 0,
+              permissionCount: regularPermissionsCount + groupPermissionsCount,
             };
           } catch (error) {
             console.error(`Error fetching permissions for staff ${staff.id}:`, error);
@@ -165,7 +170,7 @@ const StaffPage = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Staff Management</h1>
             <p className="text-sm sm:text-base text-muted-foreground">Manage staff accounts and permissions</p>
           </div>
-          <Button className="gap-2 w-full sm:w-auto" onClick={() => setIsAddStaffModalOpen(true)} disabled={isLoadingStaff}>
+          <Button className="gap-2 w-full sm:w-auto" onClick={() => setIsAddStaffModalOpen(true)} disabled={isLoadingStaff || !hasPermission('can_manage_staff')}>
             <UserPlus className="h-4 w-4" />
             Add Staff Member
           </Button>

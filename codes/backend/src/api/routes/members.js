@@ -17,8 +17,8 @@ const { validate, schemas } = require('../../utils/validation');
  */
 router.get(
   '/stats',
-  // authenticate,
-  // requirePermission('can_view_members'),
+  authenticate,
+  requirePermission('can_view_members'),
   asyncHandler(membersController.getStats.bind(membersController))
 );
 
@@ -29,8 +29,8 @@ router.get(
  */
 router.get(
   '/family/:familyId',
-  // authenticate,
-  // requirePermission('can_view_members'),
+  authenticate,
+  requirePermission('can_view_members'),
   asyncHandler(membersController.getMembersByFamily.bind(membersController))
 );
 
@@ -41,8 +41,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_members'),
+  authenticate,
+  requirePermission('can_view_members'),
   asyncHandler(membersController.getAll.bind(membersController))
 );
 
@@ -53,8 +53,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_members'),
+  authenticate,
+  requirePermission('can_view_members'),
   asyncHandler(membersController.getById.bind(membersController))
 );
 
@@ -65,8 +65,8 @@ router.get(
  */
 router.get(
   '/:id/family',
-  // authenticate,
-  // requirePermission('can_view_members'),
+  authenticate,
+  requirePermission('can_view_members'),
   asyncHandler(membersController.getMemberWithFamily.bind(membersController))
 );
 
@@ -77,8 +77,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_add_members'),
+  authenticate,
+  requirePermission('can_add_members'),
   // validate(schemas.member.create),
   asyncHandler(membersController.create.bind(membersController))
 );
@@ -90,8 +90,8 @@ router.post(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_edit_members'),
+  authenticate,
+  requirePermission('can_edit_members'),
   // validate(schemas.member.update),
   asyncHandler(membersController.update.bind(membersController))
 );
@@ -103,8 +103,8 @@ router.patch(
  */
 router.delete(
   '/:id',
-  // authenticate,
-  // requirePermission('can_delete_members'),
+  authenticate,
+  requirePermission('can_delete_members'),
   asyncHandler(membersController.delete.bind(membersController))
 );
 

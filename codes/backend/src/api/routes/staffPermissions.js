@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const staffPermissionsController = require('../controllers/staffPermissionsController');
 const { asyncHandler } = require('../../middlewares/errorHandler');
-// const { authenticate } = require('../../middlewares/auth'); // TODO: Enable when auth is ready
+const { authenticate } = require('../../middlewares/auth');
 
 /**
  * @route   GET /api/staff-permissions/available

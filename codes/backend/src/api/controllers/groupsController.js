@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { filterByGroupPermissions } = require('../../middlewares/groupPermissions');
 
 class GroupsController extends BaseController {
   constructor() {
@@ -18,15 +19,19 @@ class GroupsController extends BaseController {
   }
 
   getDefaultHeaders() {
-    return [
-      'GroupID',
-      'GroupName',
-      'GroupType',
-      'LeaderMemberID',
-      'Status',
-      'MeetingLocation',
-      'Description',
-    ];
+      return [
+        'GroupID',
+        'GroupName',
+        'GroupType',
+        'LeaderMemberID',
+        'AsstLeaderID',
+        'PastorID',
+        'Status',
+        'MeetingLocation',
+        'Description',
+        'classType',
+        'sessionNumber',
+      ];
   }
 
   getIdColumn() {
@@ -34,15 +39,85 @@ class GroupsController extends BaseController {
   }
 
   async prepareCreateData(data, user) {
+    // Validate AsstLeaderID and PastorID
+    let asstLeaderID = data.asstLeaderID ?? data.AsstLeaderID ?? '';
+    let pastorID = data.pastorID ?? data.PastorID ?? '';
+    // Check if referenced MemberIDs exist
+    const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+    if (asstLeaderID && !members.find(m => m.memberID === asstLeaderID)) {
+      throw new ApiError(400, `Assistant Leader ID ${asstLeaderID} does not exist in Members sheet.`);
+    }
+    if (pastorID && !members.find(m => m.memberID === pastorID)) {
+      throw new ApiError(400, `Pastor ID ${pastorID} does not exist in Members sheet.`);
+    }
     return {
       groupID: generateId('GROUP'),
       groupName: data.groupName,
       groupType: data.groupType || 'General',
       leaderMemberID: data.leaderMemberID || '',
+      AsstLeaderID: asstLeaderID,
+      PastorID: pastorID,
       status: data.status || 'Active',
       meetingLocation: data.meetingLocation || '',
       description: data.description || '',
+      classType: (data.classType ?? data.ClassType ?? '') || '',
+      sessionNumber: (data.sessionNumber ?? data.SessionNumber) !== undefined ? (data.sessionNumber ?? data.SessionNumber) : '',
     };
+  }
+
+  async prepareUpdateData(data, user) {
+    const updateData = {};
+    if (data.groupName !== undefined) updateData.groupName = data.groupName;
+    if (data.groupType !== undefined) updateData.groupType = data.groupType;
+    if (data.leaderMemberID !== undefined) updateData.leaderMemberID = data.leaderMemberID;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.meetingLocation !== undefined) updateData.meetingLocation = data.meetingLocation;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.classType !== undefined || data.ClassType !== undefined) {
+      updateData.classType = data.classType ?? data.ClassType;
+    }
+    if (data.sessionNumber !== undefined || data.SessionNumber !== undefined) {
+      updateData.sessionNumber = data.sessionNumber ?? data.SessionNumber;
+    }
+    // AsstLeaderID and PastorID
+    if (data.AsstLeaderID !== undefined || data.asstLeaderID !== undefined) {
+      const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+      const asstLeader = data.AsstLeaderID ?? data.asstLeaderID;
+      if (asstLeader && !members.find(m => m.memberID === asstLeader)) {
+        throw new ApiError(400, `Assistant Leader ID ${asstLeader} does not exist in Members sheet.`);
+      }
+      updateData.AsstLeaderID = asstLeader || '';
+    }
+    if (data.PastorID !== undefined || data.pastorID !== undefined) {
+      const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+      const pastor = data.PastorID ?? data.pastorID;
+      if (pastor && !members.find(m => m.memberID === pastor)) {
+        throw new ApiError(400, `Pastor ID ${pastor} does not exist in Members sheet.`);
+      }
+      updateData.PastorID = pastor || '';
+    }
+    updateData.updatedAt = new Date().toISOString();
+    return updateData;
+  }
+
+  /**
+   * Override create to block creation if staff has group restrictions
+   */
+  async create(req, res) {
+    // Check if staff is admin
+    const isAdmin = req.user?.role?.toLowerCase() === 'admin';
+
+    // Check if staff has group restrictions
+    const groupPermissions = req.user?.groupPermissions;
+    const hasGroupRestrictions = Array.isArray(groupPermissions) && groupPermissions.length > 0;
+
+    // Block creation if staff has group restrictions (not admin)
+    if (!isAdmin && hasGroupRestrictions) {
+      throw new ApiError(403, 'You cannot create new groups because you are restricted to specific groups. Only admins or staff with no group restrictions can create new groups.');
+    }
+
+    // Call parent create method
+    return super.create(req, res);
   }
 
   applyFilters(data, filters) {
@@ -70,13 +145,16 @@ class GroupsController extends BaseController {
   }
 
   /**
-   * Override getAll to include member counts
+   * Override getAll to include member counts and filter by group permissions
    */
   async getAll(req, res) {
     const { page, limit, search, ...filters } = req.query;
 
     // Get groups data
     let groupsData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Filter by group permissions (uses req.user.groupPermissions from token)
+    groupsData = filterByGroupPermissions(groupsData, req, 'groupID');
     
     // Get group members data
     const groupMembersData = await sheetsService.getSheetObjects(
@@ -188,6 +266,22 @@ class GroupsController extends BaseController {
       }
     }
 
+    const resolveMemberDetails = (memberID) => {
+      if (!memberID) return null;
+      const member = membersData.find((m) => m.memberID === memberID);
+      if (!member) return null;
+      return {
+        memberID: member.memberID,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        phoneNumber: member.phoneNumber,
+        email: member.email,
+      };
+    };
+
+    const assistantLeaderDetails = resolveMemberDetails(group.AsstLeaderID || group.assistantLeaderID || group.assistantLeader);
+    const pastorDetails = resolveMemberDetails(group.PastorID || group.pastorID || group.pastor);
+
     res.json({
       success: true,
       data: {
@@ -195,6 +289,8 @@ class GroupsController extends BaseController {
         members,
         memberCount: members.length,
         leaderDetails,
+        assistantLeaderDetails,
+        pastorDetails,
       },
     });
   }

@@ -47,8 +47,9 @@ class CheckInService {
       }
 
       // Create attendance record (only 3 fields as per schema)
+      const attendanceID = generateId('ATT');
       const attendance = {
-        attendanceID: generateId('ATTENDANCE'),
+        attendanceID,
         memberID,
         gatheringID,
       };
@@ -60,8 +61,18 @@ class CheckInService {
         attendance.gatheringID,
       ];
 
-      await sheetsService.appendSheetData(sheetsService.SHEETS.ATTENDANCE, [newRow]);
-      sheetsService.invalidateCache(sheetsService.SHEETS.ATTENDANCE);
+      console.log('=== CHECK-IN SERVICE DEBUG ===');
+      console.log('Attempting to append to sheet:', sheetsService.SHEETS.ATTENDANCE);
+      console.log('Row data:', newRow);
+      
+      try {
+        const result = await sheetsService.appendSheetData(sheetsService.SHEETS.ATTENDANCE, [newRow]);
+        console.log('Append result:', result);
+        sheetsService.invalidateCache(sheetsService.SHEETS.ATTENDANCE);
+      } catch (error) {
+        console.error('=== APPEND ERROR IN CHECK-IN SERVICE ===', error);
+        throw error;
+      }
 
       logger.info('Check-in successful', { attendanceID: attendance.attendanceID });
 

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { saveToStore } from '../utils/indexedDB';
+import { preloadMultiple } from '../utils/cacheStrategy';
 
 interface User {
   userId: string;
@@ -7,6 +9,7 @@ interface User {
   role: string;
   firstName?: string;
   lastName?: string;
+  groupPermissions?: string[]; // Array of permitted group IDs, null = full access
 }
 
 interface Permission {
@@ -23,6 +26,7 @@ interface AuthContextType {
   logout: () => void;
   refreshAccessToken: () => Promise<void>;
   checkPermission: (permissionKey: string) => boolean;
+  hasGroupAccess: (groupId: string) => boolean; // Check if user has access to specific group
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,8 +64,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedPermissions = localStorage.getItem(PERMISSIONS_KEY);
 
         if (token && storedUser && storedPermissions) {
+          const parsedPermissions = JSON.parse(storedPermissions);
+          
+          // Handle migration from old string array format to Permission objects
+          const permissionsData = Array.isArray(parsedPermissions) 
+            ? parsedPermissions.map((perm: any) => 
+                typeof perm === 'string' 
+                  ? { permissionKey: perm, hasAccess: true }
+                  : perm
+              )
+            : [];
+          
           setUser(JSON.parse(storedUser));
-          setPermissions(JSON.parse(storedPermissions));
+          setPermissions(permissionsData);
           setIsAuthenticated(true);
         }
       } catch (error) {
@@ -107,12 +122,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Store tokens and user data
       localStorage.setItem(TOKEN_KEY, data.accessToken);
       localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
-      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-      localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(data.permissions || []));
-
-      setUser(data.user);
-      setPermissions(data.permissions || []);
+      
+      // Parse groupPermissions from comma-separated string to array
+      const userData = {
+        ...data.user,
+        groupPermissions: data.user.groupPermissions 
+          ? data.user.groupPermissions.split(',').filter((id: string) => id.trim())
+          : null
+      };
+      
+      localStorage.setItem(USER_KEY, JSON.stringify(userData));
+      // Convert permissions from string array to Permission objects
+      const permissionsData = (data.permissions || []).map((perm: string) => ({
+        permissionKey: perm,
+        hasAccess: true
+      }));
+      
+      localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissionsData));
+      setPermissions(permissionsData);
       setIsAuthenticated(true);
+
+      // Cache essential data for offline use (non-blocking)
+      if (navigator.onLine) {
+        cacheEssentialData().catch((error) => {
+          console.error('[Auth] Failed to cache data:', error);
+          // Don't fail login if caching fails
+        });
+      }
 
       return { success: true };
     } catch (error) {
@@ -222,6 +258,138 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return false;
   };
 
+  // Cache essential data for offline use
+  const cacheEssentialData = async () => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+    const token = localStorage.getItem(TOKEN_KEY);
+
+    if (!token) {
+      console.log('[Auth] No token available for caching');
+      return;
+    }
+
+    console.log('[Auth] 📥 Caching essential data for offline use...');
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+
+      // Fetch all essential data in parallel
+      const resources = [
+        {
+          endpoint: '/members',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/members`, { headers });
+            const data = await response.json();
+            // Store in members IndexedDB store
+            if (data.success && data.data) {
+              await saveToStore('members', data.data);
+              console.log(`[Auth] ✅ Cached ${data.data.length} members`);
+            }
+            return data;
+          },
+        },
+        {
+          endpoint: '/donations',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/donations`, { headers });
+            const data = await response.json();
+            // Store in donations IndexedDB store
+            if (Array.isArray(data)) {
+              await saveToStore('donations', data);
+              console.log(`[Auth] ✅ Cached ${data.length} donations`);
+            }
+            return data;
+          },
+        },
+        {
+          endpoint: '/groups',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/groups`, { headers });
+            const data = await response.json();
+            // Store in groups IndexedDB store
+            if (data.success && data.data) {
+              await saveToStore('groups', data.data);
+              console.log(`[Auth] ✅ Cached ${data.data.length} groups`);
+            }
+            return data;
+          },
+        },
+        {
+          endpoint: '/gatherings',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/gatherings`, { headers });
+            const data = await response.json();
+            // Store in gatherings IndexedDB store
+            if (data.success && data.data) {
+              await saveToStore('gatherings', data.data);
+              console.log(`[Auth] ✅ Cached ${data.data.length} gatherings`);
+            }
+            return data;
+          },
+        },
+        {
+          endpoint: '/guests',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/guests`, { headers });
+            const data = await response.json();
+            // Store in guests IndexedDB store
+            if (data.success && data.data) {
+              await saveToStore('guests', data.data);
+              console.log(`[Auth] ✅ Cached ${data.data.length} guests`);
+            }
+            return data;
+          },
+        },
+        {
+          endpoint: '/attendance',
+          fetcher: async () => {
+            const response = await fetch(`${apiUrl}/api/attendance`, { headers });
+            const data = await response.json();
+            // Store in attendance IndexedDB store
+            if (Array.isArray(data)) {
+              await saveToStore('attendance', data);
+              console.log(`[Auth] ✅ Cached ${data.length} attendance records`);
+            }
+            return data;
+          },
+        },
+      ];
+
+      // Preload all resources (this also caches API responses)
+      await preloadMultiple(resources);
+
+      console.log('[Auth] ✅ All essential data cached successfully!');
+    } catch (error) {
+      console.error('[Auth] ❌ Data caching failed:', error);
+      // Don't throw - caching failure shouldn't break login
+    }
+  };
+
+  /**
+   * Check if user has access to a specific group
+   * Returns true if:
+   * - User is admin (full access)
+   * - groupPermissions is null/undefined (full access - default)
+   * - groupId is in the groupPermissions array
+   */
+  const hasGroupAccess = (groupId: string): boolean => {
+    // Admins have access to all groups
+    if (user?.role?.toLowerCase() === 'admin') {
+      return true;
+    }
+
+    // If no groupPermissions defined, full access (backward compatible)
+    if (!user?.groupPermissions) {
+      return true;
+    }
+
+    // Check if groupId is in permitted groups
+    return user.groupPermissions.includes(groupId);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -233,6 +401,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         logout,
         refreshAccessToken,
         checkPermission,
+        hasGroupAccess,
       }}
     >
       {children}

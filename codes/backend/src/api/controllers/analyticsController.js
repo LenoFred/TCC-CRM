@@ -45,7 +45,12 @@ class AnalyticsController {
         { name: 'JoinDate', type: 'date', label: 'Join Date' },
         { name: 'MemberType', type: 'string', label: 'Member Type' },
         { name: 'EmergencyContact', type: 'string', label: 'Emergency Contact' },
-        { name: 'FamilyRole', type: 'string', label: 'Family Role' }
+        { name: 'FamilyRole', type: 'string', label: 'Family Role' },
+        { name: 'CLDS', type: 'string', label: 'CLDS' },
+        { name: 'Baptism', type: 'string', label: 'Baptism' },
+        { name: 'GBIC', type: 'string', label: 'GBIC' },
+        { name: 'ABIC', type: 'string', label: 'ABIC' },
+        { name: 'MembershipLevel', type: 'string', label: 'Membership Level' }
       ],
       'Families': [
         { name: 'FamilyID', type: 'string', label: 'Family ID' },
@@ -57,6 +62,10 @@ class AnalyticsController {
         { name: 'GroupName', type: 'string', label: 'Group Name' },
         { name: 'GroupType', type: 'string', label: 'Group Type' },
         { name: 'LeaderMemberID', type: 'string', label: 'Leader Member ID' },
+        { name: 'AsstLeaderID', type: 'string', label: 'Assistant Leader ID' },
+        { name: 'PastorID', type: 'string', label: 'Pastor ID' },
+        { name: 'classType', type: 'string', label: 'Class Type' },
+        { name: 'sessionNumber', type: 'string', label: 'Session Number' },
         { name: 'Status', type: 'string', label: 'Status' },
         { name: 'MeetingLocation', type: 'string', label: 'Meeting Location' },
         { name: 'Description', type: 'string', label: 'Description' }
@@ -341,11 +350,15 @@ class AnalyticsController {
   async getSummaryStats(req, res) {
     try {
       const stats = {};
-      
+      let membersData = [];
+
       // Get counts for each sheet
       for (const [key, sheetName] of Object.entries(this.sheetMapping)) {
         try {
           const data = await this.sheetsService.getSheetObjects(sheetName);
+          if (sheetName === 'Members') {
+            membersData = data;
+          }
           stats[key] = {
             total: data.length,
             sheetName: sheetName
@@ -359,12 +372,27 @@ class AnalyticsController {
           };
         }
       }
-      
+
+      // Onboarding summary for quick dashboard metrics
+      if (membersData.length > 0) {
+        const normalize = (val) => (val || '').toString().trim().toLowerCase();
+        const onboardingSummary = {
+          totalMembers: membersData.length,
+          registeredMembers: membersData.filter(m => normalize(m.membershipLevel) === 'registered member').length,
+          members: membersData.filter(m => normalize(m.membershipLevel) !== 'registered member').length,
+          cldsCompleted: membersData.filter(m => normalize(m.CLDS) === 'completed').length,
+          baptismDone: membersData.filter(m => normalize(m.Baptism) === 'done').length,
+          gbicCompleted: membersData.filter(m => normalize(m.GBIC) === 'completed').length,
+          abicCompleted: membersData.filter(m => normalize(m.ABIC) === 'completed').length,
+        };
+        stats.onboarding = onboardingSummary;
+      }
+
       res.json({
         success: true,
         data: stats
       });
-      
+
     } catch (error) {
       console.error('Error getting summary stats:', error);
       throw error;

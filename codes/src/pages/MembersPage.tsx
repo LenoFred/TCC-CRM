@@ -16,19 +16,29 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { MemberProfileModal } from "@/components/MemberProfileModal";
 import { AddEditMemberModal } from "@/components/AddEditMemberModal";
 import { usePermission } from "@/hooks/usePermission";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/config/api";
 
 const MembersPage = () => {
   const { toast } = useToast();  const { canEdit } = usePermission();  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300); // Debounce search by 300ms
   const [selectedMember, setSelectedMember] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAddEditModalOpen, setIsAddEditModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+  const [onboardingFilter, setOnboardingFilter] = useState<'all' | 'registered' | 'member'>('all');
 
   // Handle URL parameter for opening add member modal
   useEffect(() => {
@@ -94,6 +104,21 @@ const MembersPage = () => {
     }
   };
 
+  const fetchMemberDetail = async (memberId: string) => {
+    try {
+      const res = await api.members.getById(String(memberId));
+      return res.data || res;
+    } catch (error: any) {
+      console.error('Error fetching member detail:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load member details",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
   const fetchMembers = async () => {
     setIsLoadingMembers(true);
     setMembersError(null);
@@ -114,10 +139,16 @@ const MembersPage = () => {
         name: `${member.firstName || ''} ${member.lastName || ''}`.trim(),
         email: member.email,
         phone: member.phoneNumber || member.phone,
-        // Status is already in the correct field from backend
-        status: member.status || 'Active', 
-        joinDate: member.joinDate ? new Date(member.joinDate).toLocaleDateString() : '',
-        family: member.familyID || '',
+        status: member.status || member.memberStatus || 'Active',
+        joinDate: member.joinDate || member.JoinDate || '',
+        family: member.familyID || member.familyId || '',
+        CLDS: member.CLDS || member.clds || 'Not Completed',
+        Baptism: member.Baptism || member.baptism || 'Not Done',
+        GBIC: member.GBIC || member.gbic || 'Not Completed',
+        ABIC: member.ABIC || member.abic || 'Not Completed',
+        membershipLevel: ((member.membershipLevel || member.membershiplevel || 'member').toString().toLowerCase() === 'registered member')
+          ? 'registered member'
+          : 'member',
       }));
       
       console.log('Transformed members sample:', transformedMembers[0]);
@@ -149,20 +180,46 @@ const MembersPage = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const filteredMembers = members.filter(member =>
-    member && (
-      (member.name && member.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase()))
-    )
-  );
+  const filteredMembers = members.filter(member => {
+    if (!member) return false;
+    const matchesSearch = (
+      (member.name && member.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) ||
+      (member.email && member.email.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+    );
 
-  const handleViewProfile = (member) => {
-    setSelectedMember(member);
+    const level = (member.membershipLevel || '').toString().toLowerCase();
+    const matchesOnboarding = onboardingFilter === 'all'
+      ? true
+      : onboardingFilter === 'registered'
+        ? level === 'registered member'
+        : level !== 'registered member';
+
+    return matchesSearch && matchesOnboarding;
+  });
+
+  const handleViewProfile = async (member) => {
+    const memberId = member?.memberID || member?.id;
+    if (!memberId) {
+      setSelectedMember(member);
+      setIsProfileModalOpen(true);
+      return;
+    }
+
+    const detailed = await fetchMemberDetail(memberId);
+    const mergedMember = detailed ? { ...member, ...detailed } : member;
+    setSelectedMember(mergedMember);
     setIsProfileModalOpen(true);
   };
 
-  const handleEditMember = (member) => {
-    setEditingMember(member);
+  const handleEditMember = async (member) => {
+    const memberId = member?.memberID || member?.id;
+    if (memberId) {
+      const detailed = await fetchMemberDetail(memberId);
+      const mergedMember = detailed ? { ...member, ...detailed } : member;
+      setEditingMember(mergedMember);
+    } else {
+      setEditingMember(member);
+    }
     setIsAddEditModalOpen(true);
   };
 
@@ -175,7 +232,7 @@ const MembersPage = () => {
     try {
       console.log('Saving member with data:', memberData);
       
-      // Transform data to match backend schema
+      // Transform data to match backend schema, including onboarding fields
       const backendData = {
         firstName: memberData.firstName,
         lastName: memberData.surname || memberData.lastName,
@@ -193,6 +250,12 @@ const MembersPage = () => {
         membershipType: memberData.membershipType,
         emergencyContact: memberData.emergencyContact,
         joinDate: memberData.joinDate || new Date().toISOString().split('T')[0],
+        // Onboarding fields
+        CLDS: memberData.CLDS,
+        Baptism: memberData.Baptism,
+        GBIC: memberData.GBIC,
+        ABIC: memberData.ABIC,
+        membershipLevel: memberData.membershipLevel,
       };
 
       console.log('Backend data to send:', backendData);
@@ -371,6 +434,16 @@ const MembersPage = () => {
                   <Download className="h-4 w-4" />
                   Export
                 </Button>
+                <Select value={onboardingFilter} onValueChange={(v: 'all' | 'registered' | 'member') => setOnboardingFilter(v)}>
+                  <SelectTrigger className="w-[170px]">
+                    <SelectValue placeholder="Onboarding" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All members</SelectItem>
+                    <SelectItem value="registered">Registered members</SelectItem>
+                    <SelectItem value="member">Members (not registered)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
           </CardHeader>
@@ -383,7 +456,8 @@ const MembersPage = () => {
                     <TableHead>Name</TableHead>
                     <TableHead className="hidden md:table-cell">Email</TableHead>
                     <TableHead className="hidden lg:table-cell">Phone</TableHead>
-                    <TableHead>Status</TableHead>
+                      <TableHead>Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Onboarding</TableHead>
                     <TableHead className="hidden xl:table-cell">Join Date</TableHead>
                     <TableHead className="hidden lg:table-cell">Family</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -445,6 +519,11 @@ const MembersPage = () => {
                             className={member.status === 'Active' ? 'bg-green-100 text-green-800 border-green-200' : ''}
                           >
                             {member.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <Badge variant={member.membershipLevel?.toLowerCase() === 'registered member' ? 'default' : 'secondary'}>
+                            {member.membershipLevel || 'member'}
                           </Badge>
                         </TableCell>
                         <TableCell className="hidden xl:table-cell">{member.joinDate}</TableCell>

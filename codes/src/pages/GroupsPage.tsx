@@ -24,6 +24,7 @@ import {
 import { AddEditGroupModal } from "@/components/AddEditGroupModal";
 import { GroupProfileModal } from "@/components/GroupProfileModal";
 import { useToast } from "@/hooks/use-toast";
+import { usePermission } from "@/hooks/usePermission";
 import { api } from "@/config/api";
 
 // Group interface - id must be string for API compatibility
@@ -38,10 +39,15 @@ interface Group {
   location?: string;
   status: 'Active' | 'Inactive';
   createdDate: string;
+  assistantLeader?: string;
+  pastor?: string;
+  classType?: string;
+  sessionNumber?: string | number;
 }
 
 const GroupsPage = () => {
   const { toast } = useToast();
+  const { canEdit, canDelete } = usePermission();
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [groupsError, setGroupsError] = useState<string | null>(null);
@@ -75,6 +81,10 @@ const GroupsPage = () => {
         members: Array(group.memberCount || 0).fill(''), // Create array with correct length based on memberCount
         location: group.meetingLocation || '',
         status: group.status || 'Active',
+        assistantLeader: group.AsstLeaderID || group.assistantLeader || '',
+        pastor: group.PastorID || group.pastor || '',
+        classType: group.classType || group.ClassType || '',
+        sessionNumber: group.sessionNumber || group.SessionNumber || '',
         createdDate: new Date().toLocaleDateString(),
       }));
       
@@ -114,6 +124,7 @@ const GroupsPage = () => {
   const handleSaveGroup = async (groupData: any) => {
     try {
       let savedGroupID: string;
+      const normalizedClassType = groupData.classType === 'none' ? '' : (groupData.classType || '');
       
       if (selectedGroup) {
         // Update existing group
@@ -121,6 +132,10 @@ const GroupsPage = () => {
           groupName: groupData.name,
           groupType: groupData.type,
           leaderMemberID: groupData.leader || '',
+          AsstLeaderID: groupData.assistantLeader || '',
+          PastorID: groupData.pastor || '',
+          classType: normalizedClassType,
+          ClassType: normalizedClassType,
           status: groupData.status || 'Active',
           meetingLocation: groupData.location || '',
           description: groupData.description || '',
@@ -190,6 +205,12 @@ const GroupsPage = () => {
           groupName: groupData.name,
           groupType: groupData.type,
           leaderMemberID: groupData.leader || '',
+          asstLeaderID: groupData.assistantLeader || '',
+          pastorID: groupData.pastor || '',
+          AsstLeaderID: groupData.assistantLeader || '',
+          PastorID: groupData.pastor || '',
+          classType: normalizedClassType,
+          ClassType: normalizedClassType,
           status: groupData.status || 'Active',
           meetingLocation: groupData.location || '',
           description: groupData.description || '',
@@ -327,6 +348,7 @@ const GroupsPage = () => {
             <Button 
               onClick={() => setIsAddModalOpen(true)}
               className="flex items-center gap-2"
+              disabled={!canEdit('groups')}
             >
               <Plus className="w-4 h-4" />
               Add New Group
@@ -497,17 +519,21 @@ const GroupsPage = () => {
                                 <Eye className="mr-2 h-4 w-4" />
                                 View Profile
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditGroup(group)}>
-                                <Edit2 className="mr-2 h-4 w-4" />
-                                Edit Group
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteGroup(group)}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Group
-                              </DropdownMenuItem>
+                              {canEdit('groups') && (
+                                <DropdownMenuItem onClick={() => handleEditGroup(group)}>
+                                  <Edit2 className="mr-2 h-4 w-4" />
+                                  Edit Group
+                                </DropdownMenuItem>
+                              )}
+                              {canDelete('groups') && (
+                                <DropdownMenuItem 
+                                  onClick={() => handleDeleteGroup(group)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete Group
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -523,6 +549,7 @@ const GroupsPage = () => {
 
         {/* Modals */}
         <AddEditGroupModal
+          key="add-group-modal"
           group={null}
           isOpen={isAddModalOpen}
           onClose={() => {
@@ -533,6 +560,7 @@ const GroupsPage = () => {
         />
 
         <AddEditGroupModal
+          key={`edit-group-${selectedGroup?.id || 'none'}`}
           group={selectedGroup}
           isOpen={isEditModalOpen}
           onClose={() => {

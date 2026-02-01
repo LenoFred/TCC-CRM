@@ -21,7 +21,7 @@ class FormIngestionService {
     this.MAIN_SHEET_ID = process.env.GOOGLE_SHEET_ID;
     this.FORM_RESPONSES_SHEET_ID = process.env.FORM_RESPONSES_SHEET_ID;
     this.INGESTION_ENABLED = process.env.FORM_INGESTION_ENABLED === 'true';
-    this.INTERVAL_MINUTES = parseInt(process.env.FORM_INGESTION_INTERVAL_MINUTES || '5');
+    this.INTERVAL_MINUTES = parseInt(process.env.FORM_INGESTION_INTERVAL_MINUTES || '30');
     
     this.sheets = null;
     this.pollingInterval = null;
@@ -295,10 +295,21 @@ class FormIngestionService {
         return stats;
       }
 
-      // Create header-to-index mapping
+      // Create header-to-index mapping (form responses)
       const headers = rows[0];
       const headerMap = this.createHeaderMap(headers);
       console.log(`  📋 ${formType} headers found:`, Object.keys(headerMap));
+
+      // Get target Members sheet headers to align columns (prevents misalignment like Baptism -> CLDS)
+      const memberHeadersResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.MAIN_SHEET_ID,
+        range: `${this.TARGET_SHEETS.MEMBERS}!1:1`
+      });
+      const memberHeaders = memberHeadersResponse.data.values?.[0] || [];
+      const memberHeaderIndex = memberHeaders.reduce((acc, header, idx) => {
+        if (header) acc[header.toString().trim().toLowerCase()] = idx;
+        return acc;
+      }, {});
 
       // Process data rows
       for (let i = 1; i < rows.length; i++) {
@@ -327,7 +338,8 @@ class FormIngestionService {
             State: this.getByHeader(row, headerMap, 'State'),
             LGA: this.getByHeader(row, headerMap, 'LGA') || this.getByHeader(row, headerMap, 'Local Government Area'),
             Address: this.getByHeader(row, headerMap, 'Address') || this.getByHeader(row, headerMap, 'Home Address'),
-            EmergencyContact: this.getByHeader(row, headerMap, 'EmergencyContact') || this.getByHeader(row, headerMap, 'Emergency Contact')
+            EmergencyContact: this.getByHeader(row, headerMap, 'EmergencyContact') || this.getByHeader(row, headerMap, 'Emergency Contact'),
+            Baptism: this.getByHeader(row, headerMap, 'Baptism') || this.getByHeader(row, headerMap, 'Baptismal')
           };
 
           // Semantic validation
@@ -354,11 +366,11 @@ class FormIngestionService {
           }
 
           /**
-           * Members Sheet Structure (16 columns):
+           * Members Sheet Structure (17 columns):
            * [0] MemberID, [1] FirstName, [2] LastName, [3] PhoneNumber, [4] Email,
            * [5] DOB, [6] Gender, [7] State, [8] LGA, [9] Address,
            * [10] FamilyID, [11] Status, [12] JoinDate, [13] MemberType,
-           * [14] EmergencyContact, [15] FamilyRole
+           * [14] EmergencyContact, [15] FamilyRole, [16] Baptism
            */
           
           // Format DOB as YYYY-MM-DD to ensure it's stored as date type
@@ -374,29 +386,66 @@ class FormIngestionService {
             }
           }
           
-          const memberData = [
-            this.generateId('MEM', 'member'),           // [0] MemberID - AUTO
-            formData.FirstName,                         // [1] FirstName - FORM
-            formData.LastName,                          // [2] LastName - FORM
-            formData.PhoneNumber,                       // [3] PhoneNumber - FORM
-            formData.Email,                             // [4] Email - FORM
-            dobFormatted,                               // [5] DOB - FORM (formatted as YYYY-MM-DD)
-            formData.Gender,                            // [6] Gender - FORM
-            formData.State,                             // [7] State - FORM
-            formData.LGA,                               // [8] LGA - FORM
-            formData.Address,                           // [9] Address - FORM
-            '',                                         // [10] FamilyID - BLANK
-            'Active',                                   // [11] Status - AUTO
-            new Date().toISOString().split('T')[0],     // [12] JoinDate - AUTO
-            'Regular Member',                           // [13] MemberType - AUTO
-            formData.EmergencyContact,                  // [14] EmergencyContact - FORM
-            ''                                          // [15] FamilyRole - BLANK
-          ];
+          const buildMemberRow = () => {
+            // Fallback length 17 if headers missing
+            const row = Array(memberHeaders.length || 17).fill('');
+            const setField = (headerName, value) => {
+              const idx = memberHeaderIndex[headerName.toLowerCase()];
+              if (idx !== undefined) {
+                row[idx] = value ?? '';
+              }
+            };
+
+            setField('memberid', this.generateId('MEM', 'member'));
+            setField('firstname', formData.FirstName);
+            setField('lastname', formData.LastName);
+            setField('phonenumber', formData.PhoneNumber);
+            setField('email', formData.Email);
+            setField('dob', dobFormatted);
+            setField('gender', formData.Gender);
+            setField('state', formData.State);
+            setField('lga', formData.LGA);
+            setField('address', formData.Address);
+            setField('emergencycontact', formData.EmergencyContact);
+            setField('baptism', formData.Baptism || '');
+            setField('familyid', '');
+            setField('status', 'Active');
+            setField('joindate', new Date().toISOString().split('T')[0]);
+            setField('membertype', 'Regular Member');
+            setField('familyrole', '');
+
+            // If headers were empty or didn't include our keys, ensure base structure so we don't append blanks
+            if (memberHeaders.length === 0) {
+              return [
+                this.generateId('MEM', 'member'),
+                formData.FirstName,
+                formData.LastName,
+                formData.PhoneNumber,
+                formData.Email,
+                dobFormatted,
+                formData.Gender,
+                formData.State,
+                formData.LGA,
+                formData.Address,
+                '',
+                'Active',
+                new Date().toISOString().split('T')[0],
+                'Regular Member',
+                formData.EmergencyContact,
+                '',
+                formData.Baptism || ''
+              ];
+            }
+
+            return row;
+          };
+
+          const memberData = buildMemberRow();
 
           await this.sheets.spreadsheets.values.append({
             spreadsheetId: this.MAIN_SHEET_ID,
-            range: 'Members!A:P',
-            valueInputOption: 'USER_ENTERED', // Changed from 'RAW' to preserve date formatting
+            range: `${this.TARGET_SHEETS.MEMBERS}!A1`,
+            valueInputOption: 'USER_ENTERED', // preserve date formatting
             resource: { values: [memberData] }
           });
 

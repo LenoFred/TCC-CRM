@@ -287,4 +287,3 @@ describe('Guest Tracking Service', () => {
       expect(result.firstTimeGuests).toBe(1);
     });
   });
-});

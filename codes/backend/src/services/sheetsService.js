@@ -46,6 +46,8 @@ class SheetsService {
       SCHEDULED_MESSAGES: 'ScheduledMessages',
       MESSAGE_DRAFTS: 'MessageDrafts',
       COMMUNICATION_TEMPLATES: 'Communication_Templates', // NEW: Template-based messaging
+      AUTOMATED_MESSAGES: 'AutomatedMessages', // NEW: Automated message configurations
+      FAILED_AUTOMATIONS: 'FailedAutomations', // NEW: Failed message tracking
       SETTINGS: 'Settings',
     };
 
@@ -205,9 +207,14 @@ class SheetsService {
     const appendData = async () => {
       if (!this.sheets) await this.initializeAuth();
 
+      // For Attendance sheet, only use columns A:C to avoid appending to wrong columns
+      const range = sheetName === 'Attendance' 
+        ? `${sheetName}!A:C`
+        : `${sheetName}!A:Z`;
+
       const response = await this.sheets.spreadsheets.values.append({
         spreadsheetId: this.spreadsheetId,
-        range: `${sheetName}!A:Z`,
+        range: range,
         valueInputOption: 'RAW',
         resource: { values: data },
       });

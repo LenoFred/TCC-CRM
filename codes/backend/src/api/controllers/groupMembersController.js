@@ -7,10 +7,61 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { filterByGroupPermissions, hasAccessToGroup } = require('../../middlewares/groupPermissions');
 
 class GroupMembersController extends BaseController {
   constructor() {
     super(sheetsService, sheetsService.SHEETS.GROUP_MEMBERS, 'GroupMembers');
+  }
+
+  /**
+   * Override getAll to filter by group permissions
+   */
+  async getAll(req, res) {
+    const { page, limit, search, ...filters } = req.query;
+
+    // Get all data
+    let groupMembersData = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Filter by group permissions
+    groupMembersData = filterByGroupPermissions(groupMembersData, req, 'groupID');
+
+    // Apply search if provided
+    if (search) {
+      const searchFields = this.getSearchFields();
+      const searchLower = search.toLowerCase();
+      groupMembersData = groupMembersData.filter((gm) =>
+        searchFields.some((field) =>
+          gm[field]?.toString().toLowerCase().includes(searchLower)
+        )
+      );
+    }
+
+    // Apply custom filters
+    groupMembersData = this.applyFilters(groupMembersData, filters);
+
+    // Apply pagination if requested
+    if (page || limit) {
+      const pageNum = parseInt(page) || 1;
+      const pageSize = parseInt(limit) || 10;
+      const startIndex = (pageNum - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      return res.json({
+        success: true,
+        data: groupMembersData.slice(startIndex, endIndex),
+        total: groupMembersData.length,
+        page: pageNum,
+        limit: pageSize,
+        totalPages: Math.ceil(groupMembersData.length / pageSize),
+      });
+    }
+
+    res.json({
+      success: true,
+      data: groupMembersData,
+      total: groupMembersData.length,
+    });
   }
 
   getSearchFields() {
@@ -35,6 +86,11 @@ class GroupMembersController extends BaseController {
   }
 
   async prepareCreateData(data, user) {
+    // Check if staff has access to this group
+    if (data.groupID && !hasAccessToGroup(user.req, data.groupID)) {
+      throw new ApiError(403, `You do not have access to add members to this group (${data.groupID}). You can only add members to your assigned groups.`);
+    }
+
     // Validate that group and member exist
     const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
     const group = groups.find((g) => g.groupID === data.groupID);

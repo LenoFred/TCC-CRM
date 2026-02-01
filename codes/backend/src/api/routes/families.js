@@ -17,8 +17,8 @@ const { validate, schemas } = require('../../utils/validation');
  */
 router.get(
   '/stats',
-  // authenticate,
-  // requirePermission('can_view_families'),
+  authenticate,
+  requirePermission('can_view_families'),
   asyncHandler(familiesController.getStats.bind(familiesController))
 );
 
@@ -29,8 +29,8 @@ router.get(
  */
 router.get(
   '/',
-  // authenticate,
-  // requirePermission('can_view_families'),
+  authenticate,
+  requirePermission('can_view_families'),
   asyncHandler(familiesController.getAll.bind(familiesController))
 );
 
@@ -41,8 +41,8 @@ router.get(
  */
 router.get(
   '/:id',
-  // authenticate,
-  // requirePermission('can_view_families'),
+  authenticate,
+  requirePermission('can_view_families'),
   asyncHandler(familiesController.getById.bind(familiesController))
 );
 
@@ -53,8 +53,8 @@ router.get(
  */
 router.post(
   '/',
-  // authenticate,
-  // requirePermission('can_add_families'),
+  authenticate,
+  requirePermission('can_add_families'),
   validate(schemas.family.create),
   asyncHandler(familiesController.create.bind(familiesController))
 );
@@ -66,8 +66,8 @@ router.post(
  */
 router.post(
   '/:id/members',
-  // authenticate,
-  // requirePermission('can_edit_families'),
+  authenticate,
+  requirePermission('can_edit_families'),
   asyncHandler(familiesController.addMember.bind(familiesController))
 );
 
@@ -78,8 +78,8 @@ router.post(
  */
 router.patch(
   '/:id',
-  // authenticate,
-  // requirePermission('can_edit_families'),
+  authenticate,
+  requirePermission('can_edit_families'),
   // validate(schemas.family.update),
   asyncHandler(familiesController.update.bind(familiesController))
 );
@@ -91,8 +91,8 @@ router.patch(
  */
 router.put(
   '/:id',
-  // authenticate,
-  // requirePermission('can_edit_families'),
+  authenticate,
+  requirePermission('can_edit_families'),
   asyncHandler(familiesController.update.bind(familiesController))
 );
 
@@ -103,8 +103,8 @@ router.put(
  */
 router.delete(
   '/:id/members/:memberId',
-  // authenticate,
-  // requirePermission('can_edit_families'),
+  authenticate,
+  requirePermission('can_edit_families'),
   asyncHandler(familiesController.removeMember.bind(familiesController))
 );
 
@@ -115,8 +115,8 @@ router.delete(
  */
 router.delete(
   '/:id',
-  // authenticate,
-  // requirePermission('can_delete_families'),
+  authenticate,
+  requirePermission('can_delete_families'),
   asyncHandler(familiesController.delete.bind(familiesController))
 );
 

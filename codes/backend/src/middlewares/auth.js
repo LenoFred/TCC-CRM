@@ -50,14 +50,55 @@ const authenticate = async (req, res, next) => {
       email: decoded.email,
       memberId: decoded.memberId,
       role: decoded.role,
+      groupPermissions: decoded.groupPermissions !== undefined ? decoded.groupPermissions : null, // Preserve null for admin
     };
-
-    // Fetch full permissions (optional, can be cached)
-    if (decoded.memberId) {
-      const permissions = await authService.getStaffPermissions(decoded.memberId);
-      req.user.permissions = permissions;
+    
+    // Check if user is admin first - admins get all permissions automatically
+    if (req.user.role?.toLowerCase() === 'admin') {
+      // Admin gets ALL permissions automatically as flat string array
+      req.user.permissions = [
+        'can_view_members', 'can_add_members', 'can_edit_members', 'can_delete_members',
+        'can_view_families', 'can_add_families', 'can_edit_families', 'can_delete_families',
+        'can_view_groups', 'can_add_groups', 'can_edit_groups', 'can_delete_groups',
+        'can_view_attendance', 'can_add_attendance', 'can_edit_attendance', 'can_delete_attendance', 'can_mark_attendance',
+        'can_view_volunteers', 'can_manage_volunteers',
+        'can_view_communications', 'can_create_communications', 'can_update_communications', 'can_delete_communications',
+        'can_send_sms', 'can_send_email',
+        'can_view_analytics', 'can_generate_reports', 'can_view_reports', 'can_export_data',
+        'can_view_donations', 'can_manage_donations',
+        'can_view_events', 'can_add_events', 'can_edit_events', 'can_delete_events', 'can_manage_events',
+        'can_view_staff', 'can_manage_staff',
+        'can_view_support_requests', 'can_create_support_requests', 'can_manage_support_requests', 'can_delete_support_requests',
+        'can_manage_settings', 'can_view_settings'
+      ];
+      req.user.groupPermissions = null; // Admin has access to all groups (null = no restrictions)
+      logger.info('Admin user authenticated - full permissions and group access granted', { 
+        userId: req.user.userId, 
+        role: req.user.role,
+        permissionsCount: req.user.permissions.length
+      });
+    } else if (decoded.userId) {
+      // Staff: Get permissions from StaffPermissions sheet using userId (which is staffID)
+      const permissionsData = await authService.getStaffPermissions(decoded.userId);
+      req.user.permissions = permissionsData.permissions || [];
+      req.user.groupPermissions = permissionsData.groupPermissions || [];
+      
+      // Handle group permissions for non-admin
+      if (!req.user.groupPermissions || req.user.groupPermissions.length === 0) {
+        // Non-admin with no group restrictions = full access to groups
+        req.user.groupPermissions = null;
+        logger.info('Staff user with no group restrictions - full group access granted', { 
+          userId: req.user.userId 
+        });
+      } else {
+        logger.info('Staff user with group restrictions', { 
+          userId: req.user.userId, 
+          groupPermissions: req.user.groupPermissions 
+        });
+      }
     } else {
       req.user.permissions = [];
+      req.user.groupPermissions = null; // No memberId = full access (dev mode)
     }
 
     next();
@@ -97,6 +138,11 @@ const requirePermission = (permission) => {
     }
 
     const userPermissions = req.user.permissions || [];
+
+    // Admin safety: grant all permissions implicitly
+    if (req.user.role?.toLowerCase() === 'admin') {
+      return next();
+    }
 
     // Check if user has the required permission
     if (!userPermissions.includes(permission)) {

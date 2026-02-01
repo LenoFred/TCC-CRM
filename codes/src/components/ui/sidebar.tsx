@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -204,6 +205,8 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            <DialogTitle className="sr-only">Navigation Menu</DialogTitle>
+            <DialogDescription className="sr-only">Main navigation menu for TCC Church management system</DialogDescription>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>
