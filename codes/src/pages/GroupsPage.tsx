@@ -25,6 +25,7 @@ import { AddEditGroupModal } from "@/components/AddEditGroupModal";
 import { GroupProfileModal } from "@/components/GroupProfileModal";
 import { useToast } from "@/hooks/use-toast";
 import { usePermission } from "@/hooks/usePermission";
+import { useDataRefresh } from "@/hooks/useDataRefresh";
 import { api } from "@/config/api";
 
 // Group interface - id must be string for API compatibility
@@ -110,6 +111,14 @@ const GroupsPage = () => {
   useEffect(() => {
     fetchGroups();
   }, []);
+
+  // Subscribe to cache invalidation events (e.g., after form ingest)
+  // Groups can get new members added via form ingestion
+  useDataRefresh({
+    onRefresh: fetchGroups,
+    types: ['groupMembers', 'members', 'all'],
+    debug: false,
+  });
 
   // Filter groups based on search term
   useEffect(() => {

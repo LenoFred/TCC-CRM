@@ -15,6 +15,7 @@
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
+const idGenerator = require('../utils/idGenerator');
 
 class FormIngestionService {
   constructor() {
@@ -143,6 +144,13 @@ class FormIngestionService {
                          results.volunteers.failed + results.requests.failed;
 
       console.log(`✅ Ingestion cycle complete: ${totalSuccess}/${totalProcessed} successful, ${totalFailed} failed\n`);
+      
+      // Clear backend cache if any data was ingested
+      if (totalSuccess > 0) {
+        const sheetsService = require('./sheetsService');
+        console.log(`🗑️  Clearing backend cache after successful ingestions`);
+        sheetsService.cache.flushAll();
+      }
       
       return results;
     } catch (error) {
@@ -339,7 +347,8 @@ class FormIngestionService {
             LGA: this.getByHeader(row, headerMap, 'LGA') || this.getByHeader(row, headerMap, 'Local Government Area'),
             Address: this.getByHeader(row, headerMap, 'Address') || this.getByHeader(row, headerMap, 'Home Address'),
             EmergencyContact: this.getByHeader(row, headerMap, 'EmergencyContact') || this.getByHeader(row, headerMap, 'Emergency Contact'),
-            Baptism: this.getByHeader(row, headerMap, 'Baptism') || this.getByHeader(row, headerMap, 'Baptismal')
+            Baptism: this.getByHeader(row, headerMap, 'Baptism') || this.getByHeader(row, headerMap, 'Baptismal'),
+            GroupName: this.getByHeader(row, headerMap, 'GroupName') || this.getByHeader(row, headerMap, 'Group Name') || ''
           };
 
           // Semantic validation
@@ -356,6 +365,9 @@ class FormIngestionService {
             },
             Gender: { 
               enum: ['Male', 'Female', 'male', 'female']
+            },
+            GroupName: {
+              required: false  // Optional field
             }
           };
 
@@ -449,6 +461,26 @@ class FormIngestionService {
             resource: { values: [memberData] }
           });
 
+          // Extract the generated MemberID from the row data
+          const newMemberId = memberData[memberHeaderIndex['memberid'] !== undefined ? memberHeaderIndex['memberid'] : 0];
+
+          // Handle GroupName if provided
+          if (formData.GroupName && formData.GroupName.trim()) {
+            try {
+              await this.handleGroupAssignment(formData.GroupName, newMemberId, rowNumber);
+            } catch (groupError) {
+              // Log warning but don't fail the entire ingestion
+              console.warn(`  ⚠️  ${formType} row ${rowNumber}: Group assignment failed - ${groupError.message}`);
+              await this.logIngestion(
+                formType, 
+                responseSheetName, 
+                rowNumber, 
+                'SUCCESS_GROUP_SKIPPED', 
+                `Member created but group assignment failed: ${groupError.message}`
+              );
+            }
+          }
+
           await this.logIngestion(formType, responseSheetName, rowNumber, 'SUCCESS');
           stats.success++;
           console.log(`  ✅ ${formType} row ${rowNumber}: Ingested (${formData.FirstName} ${formData.LastName})`);
@@ -461,11 +493,101 @@ class FormIngestionService {
       }
 
       console.log(`  📊 ${formType}: ${stats.success}/${stats.processed} successful, ${stats.failed} failed`);
+      
+      // Clear backend cache if any members were ingested
+      if (stats.success > 0 && formType === 'MEMBERS') {
+        const sheetsService = require('./sheetsService');
+        console.log(`  🗑️  Clearing backend cache after successful member ingestion`);
+        sheetsService.cache.flushAll();
+      }
+      
       return stats;
 
     } catch (error) {
       console.error(`❌ Error ingesting ${formType}:`, error.message);
       return stats;
+    }
+  }
+
+  /**
+   * Handle group assignment for a newly created member
+   * CASE-SENSITIVE lookup: Finds group by exact GroupName match
+   * 
+   * @param {string} groupName - GroupName from form response
+   * @param {string} memberId - Newly created MemberID
+   * @param {number} responseRowNumber - Row number in form responses (for logging)
+   */
+  async handleGroupAssignment(groupName, memberId, responseRowNumber) {
+    try {
+      // Fetch all groups from Groups sheet
+      const groupsResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.MAIN_SHEET_ID,
+        range: 'Groups!A:L'
+      });
+
+      const groupRows = groupsResponse.data.values || [];
+      if (groupRows.length <= 1) {
+        throw new Error('No groups found in Groups sheet');
+      }
+
+      // Get header mapping for Groups sheet
+      const groupHeaders = groupRows[0];
+      const groupHeaderMap = this.createHeaderMap(groupHeaders);
+      
+      // Find group by GroupName (CASE-SENSITIVE exact match)
+      let selectedGroup = null;
+      for (let i = 1; i < groupRows.length; i++) {
+        const row = groupRows[i];
+        const groupNameFromSheet = this.getByHeader(row, groupHeaderMap, 'GroupName') || '';
+        
+        if (groupNameFromSheet === groupName) {
+          selectedGroup = {
+            groupId: this.getByHeader(row, groupHeaderMap, 'GroupID'),
+            groupName: groupNameFromSheet,
+            rowIndex: i
+          };
+          break;
+        }
+      }
+
+      if (!selectedGroup) {
+        throw new Error(`Group not found (case-sensitive match): "${groupName}"`);
+      }
+
+      if (!selectedGroup.groupId) {
+        throw new Error(`Group "${groupName}" found but has no GroupID`);
+      }
+
+      // Create GroupMembers entry
+      const now = new Date();
+      const groupMemberId = idGenerator.generateId('GROUP_MEMBER');
+      const joinedDate = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const timestamp = now.toISOString();
+
+      const groupMemberRow = [
+        groupMemberId,           // GroupMemberID
+        memberId,                // MemberID
+        selectedGroup.groupId,   // GroupID
+        'Member',                // Role (default)
+        joinedDate,              // JoinedDate
+        'Active',                // Status
+        timestamp,               // CreatedAt
+        timestamp                // UpdatedAt
+      ];
+
+      // Append to GroupMembers sheet
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: this.MAIN_SHEET_ID,
+        range: 'GroupMembers!A1',
+        valueInputOption: 'RAW',
+        resource: { values: [groupMemberRow] }
+      });
+
+      console.log(`  ✅ GroupMembers entry created: ${groupMemberId} (Member: ${memberId}, Group: ${selectedGroup.groupName})`);
+
+    } catch (error) {
+      // Re-throw to be caught by parent and handled gracefully
+      throw error;
     }
   }
 

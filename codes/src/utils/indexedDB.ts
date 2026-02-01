@@ -415,6 +415,28 @@ export async function initializeDatabase(): Promise<boolean> {
   }
 }
 
+/**
+ * Clear cache for specific URLs/keys
+ * Used by cache invalidation service after form ingestion
+ */
+export async function clearCacheForKeys(urls: string[]): Promise<void> {
+  try {
+    const db = await openDatabase();
+
+    for (const url of urls) {
+      try {
+        await deleteByKey('cache', url);
+        console.log(`[IndexedDB] Cleared cache for: ${url}`);
+      } catch (error) {
+        console.warn(`[IndexedDB] Could not clear cache for ${url}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error('[IndexedDB] Error clearing cache for keys:', error);
+    // Don't throw - cache clearing should not break the app
+  }
+}
+
 // Export store names for type safety
 export { STORES };
 export type { StoreName };
