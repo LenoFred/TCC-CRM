@@ -48,15 +48,32 @@ class FormIngestionService {
    */
   async initialize() {
     try {
+      console.log('🔧 FormIngestionService.initialize() called');
+      console.log('📝 GOOGLE_CREDENTIALS_BASE64 present:', !!process.env.GOOGLE_CREDENTIALS_BASE64);
+      console.log('📝 FORM_INGESTION_ENABLED:', this.INGESTION_ENABLED);
+      
       let credentials;
       
       if (process.env.GOOGLE_CREDENTIALS_BASE64) {
-        credentials = JSON.parse(
-          Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8')
-        );
+        console.log('🔐 Loading credentials from GOOGLE_CREDENTIALS_BASE64...');
+        try {
+          credentials = JSON.parse(
+            Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8')
+          );
+          console.log('✅ Credentials decoded successfully');
+        } catch (decodeErr) {
+          console.error('❌ Failed to decode base64 credentials:', decodeErr.message);
+          throw new Error(`Invalid GOOGLE_CREDENTIALS_BASE64: ${decodeErr.message}`);
+        }
       } else {
+        console.log('📄 Loading credentials from file...');
         const credPath = path.join(__dirname, '../../credentials.json');
+        console.log('📄 Credentials path:', credPath);
+        if (!fs.existsSync(credPath)) {
+          throw new Error(`credentials.json not found at ${credPath} and GOOGLE_CREDENTIALS_BASE64 not set`);
+        }
         credentials = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+        console.log('✅ Credentials loaded from file');
       }
 
       const auth = new google.auth.GoogleAuth({
@@ -65,9 +82,12 @@ class FormIngestionService {
       });
 
       this.sheets = google.sheets({ version: 'v4', auth });
-      console.log('✅ Form Ingestion Service initialized');
+      console.log('✅ Form Ingestion Service initialized successfully');
+      console.log('✅ Google Sheets API client created');
     } catch (error) {
       console.error('❌ Failed to initialize Form Ingestion Service:', error.message);
+      console.error('❌ Stack trace:', error.stack);
+      this.sheets = null;
       throw error;
     }
   }
@@ -119,6 +139,14 @@ class FormIngestionService {
    */
   async ingestAllForms() {
     console.log('\n🔄 Starting form ingestion cycle...');
+    
+    // Check if service is initialized
+    if (!this.sheets) {
+      console.error('❌ CRITICAL: FormIngestionService not initialized - this.sheets is null');
+      console.error('❌ This means initialize() was never called or it failed');
+      throw new Error('FormIngestionService not initialized. Please call initialize() first.');
+    }
+    
     const timestamp = new Date().toISOString();
     
     const results = {
