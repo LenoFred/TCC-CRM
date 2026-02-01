@@ -281,12 +281,17 @@ const server = app.listen(PORT, async () => {
 
   // Initialize Form Ingestion Service
   try {
+    logger.info('Initializing Form Ingestion Service...');
+    logger.info(`GOOGLE_CREDENTIALS_BASE64 set: ${!!process.env.GOOGLE_CREDENTIALS_BASE64}`);
+    logger.info(`GOOGLE_CREDENTIALS_PATH: ${process.env.GOOGLE_CREDENTIALS_PATH}`);
+    
     const formIngestionService = require('./services/formIngestionService');
     await formIngestionService.initialize();
     formIngestionService.startPolling();
     logger.info('✅ Form Ingestion Service initialized and polling started');
   } catch (error) {
     logger.error('❌ Failed to initialize Form Ingestion Service:', error.message);
+    logger.error('Error details:', error);
   }
 
   // Initialize Scheduler Service for automated messages
