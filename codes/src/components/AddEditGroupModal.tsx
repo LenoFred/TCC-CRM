@@ -582,7 +582,7 @@ export const AddEditGroupModal = ({
             </div>
 
             {/* Group Leader */}
-            <div className="space-y-2">
+            <div key="group-leader" className="space-y-2">
               <Label>Group Leader</Label>
               {selectedLeader ? (
                 <Card>
@@ -651,7 +651,7 @@ export const AddEditGroupModal = ({
             </div>
 
             {/* Assistant Leader */}
-            <div className="space-y-2">
+            <div key="assistant-leader" className="space-y-2">
               <Label>Assistant Leader</Label>
               {selectedAssistantLeader ? (
                 <Card>
@@ -720,7 +720,7 @@ export const AddEditGroupModal = ({
             </div>
 
             {/* Pastor */}
-            <div className="space-y-2">
+            <div key="pastor" className="space-y-2">
               <Label>Pastor</Label>
               {selectedPastor ? (
                 <Card>
