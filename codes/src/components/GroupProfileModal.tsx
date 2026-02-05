@@ -513,56 +513,54 @@ export const GroupProfileModal = ({
                   </Alert>
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {members
-                      .filter(member => 
-                        `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-                        member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
-                      )
-                      .map((member) => (
-                      <div key={member.memberID} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-primary">
-                              {member.firstName[0]}{member.lastName[0]}
-                            </span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-foreground">
-                              {member.firstName} {member.lastName}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {member.email || member.phoneNumber || 'Member'}
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedMemberID(member.memberID);
-                            setSelectedMemberName(`${member.firstName} ${member.lastName}`);
-                            setIsAttendanceModalOpen(true);
-                          }}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Attendance
-                        </Button>
-                      </div>
-                    ))}
-                    {members.length === 0 && (
+                    {members && members.length > 0 ? (
+                      <>
+                        {members
+                          .filter(member => {
+                            if (!member?.firstName && !member?.lastName) return false;
+                            return `${member.firstName || ''} ${member.lastName || ''}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                              member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase());
+                          })
+                          .map((member) => {
+                            const firstName = member.firstName || 'Unknown';
+                            const lastName = member.lastName || '';
+                            return (
+                              <div key={member.memberID} className="flex items-center justify-between p-3 rounded-lg border">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                                    <span className="text-sm font-medium text-primary">
+                                      {firstName[0]}{lastName ? lastName[0] : ''}
+                                    </span>
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="font-medium text-foreground">
+                                      {firstName} {lastName}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {member.email || member.phoneNumber || 'Member'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedMemberID(member.memberID);
+                                    setSelectedMemberName(`${firstName} ${lastName}`);
+                                    setIsAttendanceModalOpen(true);
+                                  }}
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View Attendance
+                                </Button>
+                              </div>
+                            );
+                          })}
+                      </>
+                    ) : (
                       <div className="text-center py-8 text-muted-foreground">
                         <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p>No members added yet</p>
-                      </div>
-                    )}
-                    {members.length > 0 && members.filter(member =>
-                      `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
-                      member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
-                    ).length === 0 && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p>No members found</p>
-                        <p className="text-sm">Try adjusting your search terms</p>
+                        <p>No members in this group</p>
                       </div>
                     )}
                   </div>

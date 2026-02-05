@@ -153,7 +153,7 @@ export function Dashboard() {
     fetchDashboardData();
     fetchRecentActivities();
     
-    // Auto-refresh every 5 minutes
+    // Auto-refresh every 5 minutes (300 seconds)
     const interval = setInterval(() => {
       fetchDashboardData();
       fetchRecentActivities();
