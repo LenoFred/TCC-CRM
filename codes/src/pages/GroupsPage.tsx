@@ -417,7 +417,7 @@ const GroupsPage = () => {
           
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total Members</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Grouped Members</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingGroups ? (

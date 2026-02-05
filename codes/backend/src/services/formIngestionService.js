@@ -593,20 +593,13 @@ class FormIngestionService {
       }
 
       // Create GroupMembers entry
-      const now = new Date();
       const groupMemberId = idGenerator.generateId('GROUP_MEMBER');
-      const joinedDate = now.toISOString().split('T')[0]; // YYYY-MM-DD format
-      const timestamp = now.toISOString();
 
       const groupMemberRow = [
         groupMemberId,           // GroupMemberID
         memberId,                // MemberID
         selectedGroup.groupId,   // GroupID
-        'Member',                // Role (default)
-        joinedDate,              // JoinedDate
-        'Active',                // Status
-        timestamp,               // CreatedAt
-        timestamp                // UpdatedAt
+        'Active'                 // Status
       ];
 
       // Append to GroupMembers sheet
@@ -618,6 +611,11 @@ class FormIngestionService {
       });
 
       console.log(`  ✅ GroupMembers entry created: ${groupMemberId} (Member: ${memberId}, Group: ${selectedGroup.groupName})`);
+
+      // Clear backend cache so the new GroupMembers entry is immediately visible
+      const sheetsService = require('./sheetsService');
+      sheetsService.cache.flushAll();
+      console.log(`  🗑️  Cleared cache after GroupMembers creation`);
 
     } catch (error) {
       // Re-throw to be caught by parent and handled gracefully

@@ -220,9 +220,6 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
         <DialogDescription id="member-profile-description">
           View and manage the details of the selected member.
         </DialogDescription>
-        <DialogDescription id="member-profile-description">
-          View and manage the details of the selected member.
-        </DialogDescription>
 
         <div className="space-y-6">
           {/* Basic Information Card */}
