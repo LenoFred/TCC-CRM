@@ -224,8 +224,9 @@ class FormIngestionService {
    */
   async checkForDuplicateMemberByCompositeKey(firstName, phoneNumber, selectedGroupId = null) {
     try {
-      const members = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.MEMBERS);
-      const groupMembers = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUP_MEMBERS);
+      const sheetsService = require('./sheetsService');
+      const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+      const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
       
       // Normalize phone and firstName
       const normalizePhone = (phone) => {
@@ -382,6 +383,8 @@ class FormIngestionService {
       // This avoids hitting quota limits during bulk signups
       console.log(`  ⏳ Pre-fetching required sheets for batch processing...`);
 
+      const sheetsService = require('./sheetsService');
+
       const [
         formResponseData,
         memberHeadersResponse,
@@ -399,9 +402,9 @@ class FormIngestionService {
           range: `${this.TARGET_SHEETS.MEMBERS}!1:1`
         }),
         // Get groups data (needed for group assignment)
-        this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUPS),
+        sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS),
         // Get group members data (needed for group assignment)
-        this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUP_MEMBERS)
+        sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS)
       ]);
 
       const rows = formResponseData.data.values || [];
@@ -669,8 +672,9 @@ class FormIngestionService {
 
       if (!groups || !groupMembers) {
         console.log(`  📡 Fetching groups data (pre-fetch not provided)`);
-        groups = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUPS);
-        groupMembers = await this.sheetsService.getSheetObjects(this.sheetsService.SHEETS.GROUP_MEMBERS);
+        const sheetsService = require('./sheetsService');
+        groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+        groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
       }
 
       // Find group by GroupName (CASE-SENSITIVE exact match)

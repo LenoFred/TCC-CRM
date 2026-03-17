@@ -242,14 +242,18 @@ class GroupsController extends BaseController {
     const membersData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.MEMBERS
     );
-    const members = groupMembers.map((gm) => {
-      const member = membersData.find((m) => m.memberID === gm.memberID);
-      return {
-        ...member,
-        role: gm.role,
-        joinedDate: gm.joinedDate,
-      };
-    });
+    const members = groupMembers
+      .map((gm) => {
+        const member = membersData.find((m) => m.memberID === gm.memberID);
+        // Skip members not found in Members sheet
+        if (!member) return null;
+        return {
+          ...member,
+          role: gm.role,
+          joinedDate: gm.joinedDate,
+        };
+      })
+      .filter((member) => member !== null); // Remove null entries
 
     // Get leader details separately (in case leader is not in GroupMembers yet)
     let leaderDetails = null;
