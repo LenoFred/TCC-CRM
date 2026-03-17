@@ -242,27 +242,24 @@ class GroupsController extends BaseController {
     const membersData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.MEMBERS
     );
-    const members = groupMembers
-      .map((gm) => {
-        const member = membersData.find((m) => m.memberID === gm.memberID);
-        // Always return the member, even if not found in Members sheet
-        // Use member details if found, otherwise return minimal info from GroupMembers
-        return {
-          memberID: gm.memberID,
-          firstName: member?.firstName || 'Unknown',
-          lastName: member?.lastName || '',
-          phoneNumber: member?.phoneNumber || '',
-          email: member?.email || '',
-          status: member?.status || 'Active',
-          role: gm.role,
-          joinedDate: gm.joinedDate,
-        };
-      });
+    const members = groupMembers.map((gm) => {
+      // Find member with case-insensitive and type-safe comparison
+      const member = membersData.find((m) =>
+        String(m.memberID).toLowerCase().trim() === String(gm.memberID).toLowerCase().trim()
+      );
+      return {
+        ...member,
+        role: gm.role,
+        joinedDate: gm.joinedDate,
+      };
+    });
 
     // Get leader details separately (in case leader is not in GroupMembers yet)
     let leaderDetails = null;
     if (group.leaderMemberID) {
-      const leader = membersData.find((m) => m.memberID === group.leaderMemberID);
+      const leader = membersData.find((m) =>
+        String(m.memberID).toLowerCase().trim() === String(group.leaderMemberID).toLowerCase().trim()
+      );
       if (leader) {
         leaderDetails = {
           memberID: leader.memberID,
@@ -276,7 +273,9 @@ class GroupsController extends BaseController {
 
     const resolveMemberDetails = (memberID) => {
       if (!memberID) return null;
-      const member = membersData.find((m) => m.memberID === memberID);
+      const member = membersData.find((m) =>
+        String(m.memberID).toLowerCase().trim() === String(memberID).toLowerCase().trim()
+      );
       if (!member) return null;
       return {
         memberID: member.memberID,
