@@ -246,20 +246,46 @@ export const AddEditMemberModal = ({
           description: "Member updated successfully",
         });
       } else {
-        await api.members.create(payload);
-        toast({
-          description: "Member added successfully",
-        });
+        const response: any = await api.members.create(payload);
+        console.log('Member create response:', response);
+        
+        // Check if member was added to group (existing member scenario)
+        if (response.success && response.data?.existing && response.data?.addedToGroup) {
+          toast({
+            description: response.data?.message || "Member added to new group successfully",
+          });
+        } else {
+          toast({
+            description: "Member added successfully",
+          });
+        }
       }
       
       // Refresh the list and close modal
       onSave(formData); 
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving member:", error);
+      
+      // Handle different error scenarios
+      let errorMessage = `Failed to ${isEdit ? 'update' : 'add'} member. Please try again.`;
+      let isWarning = false;
+      
+      if (error.response?.status === 409) {
+        // Conflict - member already exists
+        errorMessage = error.response?.data?.message || "Member already exists in the selected group";
+        isWarning = true;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
+        errorMessage = error.response.data.errors.join(', ');
+      }
+      
       toast({
-        description: `Failed to ${isEdit ? 'update' : 'add'} member. Please try again.`,
-        variant: "destructive",
+        description: errorMessage,
+        variant: isWarning ? "default" : "destructive",
       });
     } finally {
       setIsSubmitting(false);
