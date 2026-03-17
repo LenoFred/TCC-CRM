@@ -477,16 +477,11 @@ export const GroupProfileModal = ({
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle className="text-lg">
-                    Group Members ({members.filter(member => {
-                      if (!member?.memberID) return false;
-                      if (!memberSearchTerm) return true;
-
-                      const searchLower = memberSearchTerm.toLowerCase();
-                      const fullName = `${member.firstName || ''} ${member.lastName || ''}`.toLowerCase();
-                      const email = (member.email || '').toLowerCase();
-
-                      return fullName.includes(searchLower) || email.includes(searchLower);
-                    }).length})
+                    Group Members ({members.filter(member =>
+                      !memberSearchTerm ||
+                      `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                      member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase())
+                    ).length})
                   </CardTitle>
                 </div>
                 <div className="relative">
@@ -523,17 +518,9 @@ export const GroupProfileModal = ({
                       <>
                         {members
                           .filter(member => {
-                            // Skip invalid members
-                            if (!member?.memberID) return false;
-
-                            // Check search term match
                             if (!memberSearchTerm) return true;
-
-                            const searchLower = memberSearchTerm.toLowerCase();
-                            const fullName = `${member.firstName || ''} ${member.lastName || ''}`.toLowerCase();
-                            const email = (member.email || '').toLowerCase();
-
-                            return fullName.includes(searchLower) || email.includes(searchLower);
+                            return `${member.firstName} ${member.lastName}`.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+                              member.email?.toLowerCase().includes(memberSearchTerm.toLowerCase());
                           })
                           .map((member) => {
                             const firstName = member.firstName || 'Unknown';
