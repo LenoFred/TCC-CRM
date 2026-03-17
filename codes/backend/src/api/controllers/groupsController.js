@@ -238,21 +238,48 @@ class GroupsController extends BaseController {
       (gm) => gm.groupID === group.groupID
     );
 
+    console.log(`\n🔍 DEBUG: Group ${group.groupID} has ${groupMembers.length} members in GroupMembers sheet`);
+    console.log(`First few GroupMembers entries:`, JSON.stringify(groupMembers.slice(0, 3), null, 2));
+
     // Get member details
     const membersData = await sheetsService.getSheetObjects(
       sheetsService.SHEETS.MEMBERS
     );
+
+    console.log(`📊 Members sheet has ${membersData.length} total members`);
+    console.log(`First few Members entries:`, JSON.stringify(membersData.slice(0, 3), null, 2));
+
     const members = groupMembers.map((gm) => {
+      console.log(`  Looking for memberID: "${gm.memberID}" (type: ${typeof gm.memberID})`);
+
       // Find member with case-insensitive and type-safe comparison
-      const member = membersData.find((m) =>
-        String(m.memberID).toLowerCase().trim() === String(gm.memberID).toLowerCase().trim()
-      );
+      const member = membersData.find((m) => {
+        const gmId = String(gm.memberID).toLowerCase().trim();
+        const mId = String(m.memberID).toLowerCase().trim();
+        const match = gmId === mId;
+        if (match) console.log(`    ✅ FOUND: ${m.firstName} ${m.lastName}`);
+        return match;
+      });
+
+      if (!member) {
+        console.log(`    ❌ NOT FOUND in Members sheet`);
+      }
+
+      // IMPORTANT: Preserve memberID from GroupMembers even if member not found
       return {
-        ...member,
+        memberID: gm.memberID,  // Always keep the ID from GroupMembers
+        firstName: member?.firstName || '',
+        lastName: member?.lastName || '',
+        phoneNumber: member?.phoneNumber || '',
+        email: member?.email || '',
+        status: member?.status || '',
+        ...member,  // Spread member for any other fields
         role: gm.role,
         joinedDate: gm.joinedDate,
       };
     });
+
+    console.log(`✅ Returning ${members.length} members\n`);
 
     // Get leader details separately (in case leader is not in GroupMembers yet)
     let leaderDetails = null;
