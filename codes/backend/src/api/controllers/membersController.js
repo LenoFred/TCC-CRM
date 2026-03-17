@@ -83,57 +83,50 @@ class MembersController extends BaseController {
   }
 
   /**
-   * Check if member already exists by phone number or email
-   * Returns existing member if found, null otherwise
+   * Check if member already exists using COMPOSITE KEY: FirstName + PhoneNumber
+   * Also returns group information for smart group reassignment
    */
-  async checkForDuplicateMember(phoneNumber, email) {
+  async checkForDuplicateMember(firstName, phoneNumber, selectedGroupId = null) {
     const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
+    const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
     
-    // Normalize phone for comparison (remove spaces, dashes, +)
+    // Normalize phone for comparison (remove spaces, dashes, +, parentheses)
     const normalizePhone = (phone) => {
       if (!phone) return '';
       return phone.toString().replace(/[\s\-+()]/g, '').trim();
     };
     
-    // Normalize email for comparison (lowercase, trim)
-    const normalizeEmail = (email) => {
-      if (!email) return '';
-      return email.toString().toLowerCase().trim();
+    // Normalize firstName for comparison (trim, case-insensitive for matching but preserve original)
+    const normalizeFirstName = (name) => {
+      if (!name) return '';
+      return name.toString().trim().toLowerCase();
     };
     
     const inputPhone = normalizePhone(phoneNumber);
-    const inputEmail = normalizeEmail(email);
+    const inputFirstName = normalizeFirstName(firstName);
     
-    // Check for duplicate by phone (primary check - more reliable)
-    if (inputPhone) {
-      const duplicateByPhone = members.find(member => {
-        const memberPhone = normalizePhone(member.phone || member.phoneNumber);
-        return memberPhone && memberPhone === inputPhone;
+    // Check for duplicate using COMPOSITE KEY: FirstName + PhoneNumber (case-insensitive for firstName)
+    if (inputPhone && inputFirstName) {
+      const duplicateMember = members.find(member => {
+        const memberPhone = normalizePhone(member.phoneNumber || member.phone);
+        const memberFirstName = normalizeFirstName(member.firstName);
+        return memberPhone && memberPhone === inputPhone && memberFirstName === inputFirstName;
       });
       
-      if (duplicateByPhone) {
+      if (duplicateMember) {
+        // Get groups this member belongs to
+        const memberGroups = groupMembers.filter(gm => gm.memberID === duplicateMember.memberID);
+        
+        // Check if member is already in the selected group
+        const alreadyInGroup = selectedGroupId && memberGroups.some(gm => gm.groupID === selectedGroupId);
+        
         return {
           exists: true,
-          reason: 'phone',
-          member: duplicateByPhone,
-          message: `Member with phone number ${phoneNumber} already exists: ${duplicateByPhone.firstName} ${duplicateByPhone.lastName} (${duplicateByPhone.memberID})`
-        };
-      }
-    }
-    
-    // Check for duplicate by email (secondary check)
-    if (inputEmail) {
-      const duplicateByEmail = members.find(member => {
-        const memberEmail = normalizeEmail(member.email);
-        return memberEmail && memberEmail === inputEmail;
-      });
-      
-      if (duplicateByEmail) {
-        return {
-          exists: true,
-          reason: 'email',
-          member: duplicateByEmail,
-          message: `Member with email ${email} already exists: ${duplicateByEmail.firstName} ${duplicateByEmail.lastName} (${duplicateByEmail.memberID})`
+          member: duplicateMember,
+          memberGroups: memberGroups,
+          alreadyInSelectedGroup: alreadyInGroup,
+          message: `Member ${duplicateMember.firstName} ${duplicateMember.lastName} (${duplicateMember.memberID}) already exists`,
+          needsGroupReassignment: selectedGroupId && !alreadyInGroup // Flag to add to new group
         };
       }
     }
@@ -346,14 +339,56 @@ class MembersController extends BaseController {
    * POST /api/members
    */
   async create(req, res) {
-    // Check for duplicates before creating
+    // Check for duplicates using composite key: FirstName + PhoneNumber
+    const firstName = req.body.firstName || '';
     const phoneInput = req.body.phone || req.body.phoneNumber || '';
-    const emailInput = req.body.email || '';
+    const selectedGroupId = req.body.groupID || null; // Optional: group to add member to
     
-    const duplicateCheck = await this.checkForDuplicateMember(phoneInput, emailInput);
+    const duplicateCheck = await this.checkForDuplicateMember(firstName, phoneInput, selectedGroupId);
     
     if (duplicateCheck.exists) {
-      throw new ApiError(duplicateCheck.message, 409); // 409 Conflict
+      // Member exists - check group scenarios
+      if (duplicateCheck.alreadyInSelectedGroup) {
+        // Member already in selected group
+        throw new ApiError(`Member ${duplicateCheck.member.firstName} ${duplicateCheck.member.lastName} already exists in the selected group`, 409);
+      } else if (duplicateCheck.needsGroupReassignment) {
+        // Member exists but not in selected group - add to group
+        console.log(`✅ Member exists, adding to new group: ${duplicateCheck.member.memberID} to group ${selectedGroupId}`);
+        
+        const groupMemberId = generateId('GROUP_MEMBER');
+        const groupMemberRow = [
+          groupMemberId,
+          selectedGroupId,
+          duplicateCheck.member.memberID,
+          'Active'
+        ];
+        
+        // Append to GroupMembers sheet
+        await sheetsService.sheets.spreadsheets.values.append({
+          spreadsheetId: sheetsService.MAIN_SHEET_ID,
+          range: 'GroupMembers!A1',
+          valueInputOption: 'RAW',
+          resource: { values: [groupMemberRow] }
+        });
+        
+        // Clear cache
+        sheetsService.cache.flushAll();
+        
+        return res.json({
+          success: true,
+          message: `Member ${duplicateCheck.member.firstName} ${duplicateCheck.member.lastName} already exists and has been added to the selected group`,
+          data: {
+            memberID: duplicateCheck.member.memberID,
+            groupMemberID: groupMemberId,
+            existing: true,
+            addedToGroup: true
+          },
+          statusCode: 200
+        });
+      } else {
+        // Member exists in different group, but no specific group requested
+        throw new ApiError(`Member ${duplicateCheck.member.firstName} ${duplicateCheck.member.lastName} already exists (in ${duplicateCheck.memberGroups.length} group(s))`, 409);
+      }
     }
     
     // If no duplicate found, proceed with normal creation

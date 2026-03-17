@@ -312,20 +312,38 @@ const MembersPage = () => {
         // Refresh the members list
         await fetchMembers();
         
-        toast({
-          title: "Success",
-          description: "Member added successfully",
-        });
+        // Check if member was added to group (existing member scenario)
+        if (response.success && response.data?.existing && response.data?.addedToGroup) {
+          toast({
+            title: "Member Found",
+            description: response.data?.message || "Existing member added to new group successfully",
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: "Member added successfully",
+          });
+        }
       }
       setIsAddEditModalOpen(false);
       setEditingMember(null);
     } catch (error: any) {
       console.error('Error saving member:', error);
       
-      // Extract semantic validation errors from backend
+      // Extract semantic validation errors from backend and handle three scenarios
       let errorMessage = "Failed to save member";
-      if (error.response?.data?.error) {
+      let errorTitle = "Error";
+      let variant: "default" | "destructive" = "destructive";
+      
+      if (error.response?.status === 409) {
+        // Conflict - member already exists
+        errorTitle = "Member Exists";
+        errorMessage = error.response?.data?.message || "Member already exists in the selected group";
+        variant = "default";
+      } else if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
       } else if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
         errorMessage = error.response.data.errors.join(', ');
       } else if (error.message) {
@@ -333,9 +351,9 @@ const MembersPage = () => {
       }
       
       toast({
-        title: "Error",
+        title: errorTitle,
         description: errorMessage,
-        variant: "destructive",
+        variant: variant,
       });
     }
   };
