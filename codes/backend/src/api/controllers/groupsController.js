@@ -245,15 +245,19 @@ class GroupsController extends BaseController {
     const members = groupMembers
       .map((gm) => {
         const member = membersData.find((m) => m.memberID === gm.memberID);
-        // Skip members not found in Members sheet
-        if (!member) return null;
+        // Always return the member, even if not found in Members sheet
+        // Use member details if found, otherwise return minimal info from GroupMembers
         return {
-          ...member,
+          memberID: gm.memberID,
+          firstName: member?.firstName || 'Unknown',
+          lastName: member?.lastName || '',
+          phoneNumber: member?.phoneNumber || '',
+          email: member?.email || '',
+          status: member?.status || 'Active',
           role: gm.role,
           joinedDate: gm.joinedDate,
         };
-      })
-      .filter((member) => member !== null); // Remove null entries
+      });
 
     // Get leader details separately (in case leader is not in GroupMembers yet)
     let leaderDetails = null;
