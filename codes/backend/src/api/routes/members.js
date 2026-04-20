@@ -71,6 +71,19 @@ router.get(
 );
 
 /**
+ * @route   POST /api/members/check-duplicate
+ * @desc    Check if member already exists (for pre-submission validation)
+ * @access  Private
+ * @body    { firstName, phoneNumber, groupId? }
+ * @returns { exists: boolean, member?: {...}, suggestion?: string }
+ */
+router.post(
+  '/check-duplicate',
+  authenticate,
+  asyncHandler(membersController.checkDuplicate.bind(membersController))
+);
+
+/**
  * @route   POST /api/members
  * @desc    Create new member
  * @access  Private (temporarily disabled for testing)

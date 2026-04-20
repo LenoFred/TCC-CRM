@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { X, AlertCircle } from "lucide-react";
+import { X, AlertCircle, AlertTriangle, CheckCircle } from "lucide-react";
 import { api } from "@/config/api";
+import { useDuplicateCheck } from "@/hooks/useDuplicateCheck";
 import {
   Dialog,
   DialogContent,
@@ -81,6 +82,8 @@ export const AddEditMemberModal = ({
   isEdit = false 
 }: AddEditMemberModalProps) => {
   const { toast } = useToast();
+  const { exists: duplicateExists, member: duplicateMember, checkDuplicate, clear: clearDuplicate } = useDuplicateCheck();
+
   const [formData, setFormData] = useState<Member>({
     firstName: "",
     surname: "",
@@ -102,9 +105,11 @@ export const AddEditMemberModal = ({
     ABIC: "Not Completed",
     membershipLevel: "member"
   });
-  
+
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [ignoreDuplicate, setIgnoreDuplicate] = useState(false);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [availableLGAs, setAvailableLGAs] = useState<string[]>([]);
   const [states] = useState<string[]>(getAllStates());
 
@@ -156,6 +161,9 @@ export const AddEditMemberModal = ({
         membershipLevel: "member"
       });
       setErrors({});
+      clearDuplicate();
+      setIgnoreDuplicate(false);
+      setShowDuplicateWarning(false);
     }
   }, [isEdit, member, isOpen]);
 
@@ -228,6 +236,24 @@ export const AddEditMemberModal = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
+
+    // For new members, check for duplicates first
+    if (!isEdit && !ignoreDuplicate) {
+      setIsSubmitting(true);
+      try {
+        const result = await checkDuplicate(formData.firstName, formData.phone);
+        if (result.exists) {
+          setShowDuplicateWarning(true);
+          setIsSubmitting(false);
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking for duplicate:", error);
+        // Continue with submission if duplicate check fails
+      }
+      setIsSubmitting(false);
+    }
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -248,7 +274,7 @@ export const AddEditMemberModal = ({
       } else {
         const response: any = await api.members.create(payload);
         console.log('Member create response:', response);
-        
+
         // Check if member was added to group (existing member scenario)
         if (response.success && response.data?.existing && response.data?.addedToGroup) {
           toast({
@@ -260,33 +286,27 @@ export const AddEditMemberModal = ({
           });
         }
       }
-      
+
       // Refresh the list and close modal
-      onSave(formData); 
+      onSave(formData);
       onClose();
     } catch (error: any) {
       console.error("Error saving member:", error);
-      
-      // Handle different error scenarios
-      let errorMessage = `Failed to ${isEdit ? 'update' : 'add'} member. Please try again.`;
-      let isWarning = false;
-      
+
+      // Import ErrorDisplay for standardized error handling
+      const { default: ErrorDisplay } = await import('@/utils/errorDisplay');
+
+      // Handle different error scenarios using centralized error display
       if (error.response?.status === 409) {
-        // Conflict - member already exists
-        errorMessage = error.response?.data?.message || "Member already exists in the selected group";
-        isWarning = true;
+        // Conflict - member already exists (warning, not error)
+        ErrorDisplay.showWarning(error.response?.data?.message || "Member already exists in the selected group");
       } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
+        ErrorDisplay.showError(error.response.data.message, isEdit ? 'Update Failed' : 'Add Member Failed');
       } else if (error.response?.data?.errors && Array.isArray(error.response.data.errors)) {
-        errorMessage = error.response.data.errors.join(', ');
+        ErrorDisplay.showValidationError(error.response.data.errors);
+      } else {
+        ErrorDisplay.showNetworkError(error);
       }
-      
-      toast({
-        description: errorMessage,
-        variant: isWarning ? "default" : "destructive",
-      });
     } finally {
       setIsSubmitting(false);
     }
@@ -325,6 +345,40 @@ export const AddEditMemberModal = ({
         <DialogDescription id="add-edit-member-description">
           Fill out the form below to {isEdit ? 'update the member details' : 'add a new member'}.
         </DialogDescription>
+
+        {showDuplicateWarning && duplicateExists && duplicateMember && (
+          <Alert className="border-yellow-500 bg-yellow-50">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-800">Duplicate Member Found</AlertTitle>
+            <AlertDescription className="text-yellow-700 mt-2">
+              <p className="mb-2">A member named <strong>{duplicateMember.firstName}</strong> already exists with a similar phone number.</p>
+              <p className="mb-3">Existing Member Groups: {duplicateMember.groups?.join(', ') || 'None'}</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setIgnoreDuplicate(true);
+                    setShowDuplicateWarning(false);
+                    handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+                  }}
+                  className="bg-yellow-600 hover:bg-yellow-700"
+                >
+                  Create Anyway
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowDuplicateWarning(false);
+                    setIgnoreDuplicate(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}

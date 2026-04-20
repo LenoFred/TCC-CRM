@@ -225,35 +225,40 @@ class FormIngestionService {
   async checkForDuplicateMemberByCompositeKey(firstName, phoneNumber, selectedGroupId = null) {
     try {
       const sheetsService = require('./sheetsService');
+      const { formatPhoneNumber } = require('../utils/dataFormatters');
       const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
       const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
-      
-      // Normalize phone and firstName
-      const normalizePhone = (phone) => {
+
+      // Normalize phone to E.164 format and firstName
+      const normalizePhoneToE164 = (phone) => {
         if (!phone) return '';
-        return phone.toString().replace(/[\s\-+()]/g, '').trim();
+        const phoneResult = formatPhoneNumber(phone);
+        // Use E.164 format (e.g., +2348012345678) for consistent comparison
+        return phoneResult.e164 || '';
       };
-      
+
       const normalizeFirstName = (name) => {
         if (!name) return '';
         return name.toString().trim().toLowerCase();
       };
-      
-      const inputPhone = normalizePhone(phoneNumber);
+
+      const inputPhoneE164 = normalizePhoneToE164(phoneNumber);
       const inputFirstName = normalizeFirstName(firstName);
-      
-      // Find member by composite key
-      if (inputPhone && inputFirstName) {
+
+      // Find member by composite key (FirstName + PhoneNumber in E.164 format)
+      if (inputPhoneE164 && inputFirstName) {
         const duplicateMember = members.find(member => {
-          const memberPhone = normalizePhone(member.phoneNumber || member.phone);
+          const memberPhoneE164 = normalizePhoneToE164(member.phoneNumber || member.phone);
           const memberFirstName = normalizeFirstName(member.firstName);
-          return memberPhone && memberPhone === inputPhone && memberFirstName === inputFirstName;
+
+          // Match both FirstName (case-insensitive) and PhoneNumber (E.164 format)
+          return memberPhoneE164 && memberPhoneE164 === inputPhoneE164 && memberFirstName === inputFirstName;
         });
-        
+
         if (duplicateMember) {
           const memberGroups = groupMembers.filter(gm => gm.memberID === duplicateMember.memberID);
           const alreadyInGroup = selectedGroupId && memberGroups.some(gm => gm.groupID === selectedGroupId);
-          
+
           return {
             exists: true,
             member: duplicateMember,
@@ -264,7 +269,7 @@ class FormIngestionService {
           };
         }
       }
-      
+
       return { exists: false };
     } catch (error) {
       console.error('Error checking for duplicate member:', error.message);
@@ -677,22 +682,26 @@ class FormIngestionService {
         groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
       }
 
-      // Find group by GroupName (CASE-SENSITIVE exact match)
+      // Find group by GroupName (CASE-INSENSITIVE match for better UX)
       let selectedGroup = null;
+      const groupNameLower = groupName.trim().toLowerCase();
+
       for (const group of groups) {
         const groupNameFromSheet = group.groupName || '';
+        const groupNameFromSheetLower = groupNameFromSheet.trim().toLowerCase();
 
-        if (groupNameFromSheet === groupName) {
+        // Case-insensitive comparison but preserve original group name from sheet
+        if (groupNameFromSheetLower === groupNameLower) {
           selectedGroup = {
             groupId: group.groupID,  // Use the processed GroupID
-            groupName: groupNameFromSheet
+            groupName: groupNameFromSheet  // Use original group name from sheet
           };
           break;
         }
       }
 
       if (!selectedGroup) {
-        throw new Error(`Group not found (case-sensitive match): "${groupName}"`);
+        throw new Error(`Group not found: "${groupName}". Available groups: ${groups.map(g => g.groupName).join(', ')}`);
       }
 
       if (!selectedGroup.groupId) {
@@ -719,8 +728,8 @@ class FormIngestionService {
 
       const groupMemberRow = [
         groupMemberId,           // GroupMemberID
-        selectedGroup.groupId,   // GroupID
         memberId,                // MemberID
+        selectedGroup.groupId,   // GroupID
         'Active'                 // Status
       ];
 

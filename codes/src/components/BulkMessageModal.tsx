@@ -97,11 +97,44 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
           formData.message,
           formData.channels.includes('email') ? formData.subject : undefined
         );
-        
+
         setSendResult(result);
+
+        // Check for quota errors in result
+        if (result?.quotaError || result?.quotaErrors?.length > 0) {
+          // Import ErrorDisplay for standardized error handling
+          const { default: ErrorDisplay } = await import('@/utils/errorDisplay');
+
+          // Show quota error with retry guidance
+          ErrorDisplay.showQuotaError({
+            quotaError: true,
+            retryAfterSeconds: result.retryAfterSeconds || 60
+          });
+
+          // Still show partial results if some messages were sent
+          if (result.sent > 0) {
+            toast({
+              title: "Partial Success with Quota Error",
+              description: `Sent: ${result.sent}/${result.total}. Rate limit exceeded. Retry in ${Math.ceil((result.retryAfterSeconds || 60) / 60)} minute(s).`,
+              variant: "default",
+            });
+          }
+          return; // Stop processing other channels
+        }
+
+        // Check for bulk operation failures
+        if (result?.failed > 0) {
+          const { default: ErrorDisplay } = await import('@/utils/errorDisplay');
+          ErrorDisplay.showBulkOperationResults(result);
+
+          // If more than 50% failed, ask user before continuing
+          if (result.failed / result.total > 0.5) {
+            return;
+          }
+        }
       }
 
-      // Call parent callback
+      // Call parent callback (only if successful)
       const messageData = {
         ...formData,
         recipients: recipients.length,
@@ -124,13 +157,20 @@ export const BulkMessageModal = ({ isOpen, onClose, onSend, recipients = [] }: B
       setSendResult(null);
 
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Bulk send error:', err);
-      toast({
-        title: "Send Failed",
-        description: error || "Failed to send bulk messages. Please try again.",
-        variant: "destructive",
-      });
+
+      // Import ErrorDisplay for centralized error handling
+      const { default: ErrorDisplay } = await import('@/utils/errorDisplay');
+
+      // Check if it's a quota error
+      if (err?.response?.data?.quotaError || err?.response?.status === 429) {
+        ErrorDisplay.showQuotaError(err?.response?.data);
+      } else if (err?.response?.data) {
+        ErrorDisplay.handleApiError(err, 'Send Messages');
+      } else {
+        ErrorDisplay.showNetworkError(err);
+      }
     }
   };
 

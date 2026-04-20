@@ -21,7 +21,19 @@ const config = {
 
   // JWT Configuration
   jwt: {
-    secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    secret: (() => {
+      const secret = process.env.JWT_SECRET;
+      // In production, JWT_SECRET MUST be set
+      if (process.env.NODE_ENV === 'production' && !secret) {
+        throw new Error('CRITICAL: JWT_SECRET environment variable is required in production!');
+      }
+      // In development, warn if using default (but allow it)
+      if (!secret) {
+        console.warn('⚠️  WARNING: JWT_SECRET not set. Using development default. This is insecure for production!');
+        return 'dev-default-secret-change-in-production';
+      }
+      return secret;
+    })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
