@@ -12,6 +12,7 @@ const { generateId } = require('../utils/idGenerator');
 const { logger } = require('../utils/logger');
 const { ApiError } = require('../middlewares/errorHandler');
 const config = require('../config');
+const { retryWithBackoff, isQuotaError } = require('../utils/retryUtil');
 
 class CommunicationService {
   constructor() {
@@ -118,7 +119,8 @@ class CommunicationService {
   }
 
   /**
-   * Send SMS via BulkSMS Nigeria
+   * Send SMS via BulkSMS Nigeria with retry logic
+   * Implements exponential backoff for transient failures
    */
   async sendSMS(to, message, options = {}) {
     try {
@@ -139,46 +141,57 @@ class CommunicationService {
 
       if (this.bulksmsEnabled) {
         try {
-          // BulkSMS Nigeria API
-          const requestData = {
-            api_token: this.bulksmsApiToken,
-            from: this.bulksmsSenderName,
-            to: formattedPhone,
-            body: message,
-            dnd: this.bulksmsDndEnabled ? '2' : '1', // 2 = bypass DND, 1 = respect DND
-          };
+          // Use retry logic with exponential backoff for SMS sending
+          const response = await retryWithBackoff(
+            async () => {
+              const requestData = {
+                api_token: this.bulksmsApiToken,
+                from: this.bulksmsSenderName,
+                to: formattedPhone,
+                body: message,
+                dnd: this.bulksmsDndEnabled ? '2' : '1', // 2 = bypass DND, 1 = respect DND
+              };
 
-          logger.info('BulkSMS Request', { 
-            from: this.bulksmsSenderName, 
-            to: formattedPhone, 
-            dnd: this.bulksmsDndEnabled ? '2' : '1',
-            bodyLength: message.length 
-          });
+              logger.info('BulkSMS Request', {
+                from: this.bulksmsSenderName,
+                to: formattedPhone,
+                dnd: this.bulksmsDndEnabled ? '2' : '1',
+                bodyLength: message.length
+              });
 
-          const response = await axios.post('https://www.bulksmsnigeria.com/api/v1/sms/create', requestData);
+              return await axios.post('https://www.bulksmsnigeria.com/api/v1/sms/create', requestData);
+            },
+            {
+              maxRetries: 3,
+              initialDelayMs: 1000,
+              maxDelayMs: 30000,
+              backoffMultiplier: 2
+            },
+            'Send SMS to BulkSMS Nigeria'
+          );
 
-          logger.info('BulkSMS Full Response', { 
+          logger.info('BulkSMS Full Response', {
             status: response.data.status,
             data: response.data.data,
-            message: response.data.message 
+            message: response.data.message
           });
 
           if (response.data && response.data.status === 'success') {
             const cost = parseFloat(response.data.data.cost || 0);
-            
+
             await this.updateCommunicationStatus(communication.communicationID, 'Sent', {
               sentAt: new Date().toISOString(),
               cost: cost,
             });
 
-            logger.info('SMS sent successfully via BulkSMS Nigeria', { 
+            logger.info('SMS sent successfully via BulkSMS Nigeria', {
               messageId: response.data.data.message_id,
               cost: cost
             });
 
-            return { 
-              success: true, 
-              messageId: response.data.data.message_id, 
+            return {
+              success: true,
+              messageId: response.data.data.message_id,
               communication,
               cost: cost
             };
@@ -186,16 +199,30 @@ class CommunicationService {
             throw new Error(response.data.message || 'Failed to send SMS');
           }
         } catch (apiError) {
+          // Check for quota error and provide specific message
+          const quotaError = isQuotaError(apiError);
           const errorMessage = apiError.response?.data?.message || apiError.message;
-          logger.error('BulkSMS Nigeria API error', { error: errorMessage });
-          
+
+          let failureReason = errorMessage;
+          if (quotaError.isQuotaError) {
+            failureReason = `API Quota exceeded (${quotaError.type}): Retry after ${Math.ceil(quotaError.retryAfterMs / 1000)} seconds`;
+            logger.warn('BulkSMS Nigeria quota exceeded', {
+              type: quotaError.type,
+              retryAfterMs: quotaError.retryAfterMs
+            });
+          } else {
+            logger.error('BulkSMS Nigeria API error', { error: errorMessage });
+          }
+
           await this.updateCommunicationStatus(communication.communicationID, 'Failed', {
-            failureReason: errorMessage,
+            failureReason: failureReason,
           });
 
           return {
             success: false,
-            message: errorMessage,
+            message: failureReason,
+            isQuotaError: quotaError.isQuotaError,
+            quotaRetryAfterMs: quotaError.retryAfterMs,
             communication,
           };
         }
@@ -219,7 +246,8 @@ class CommunicationService {
   }
 
   /**
-   * Send WhatsApp message via Meta Cloud API
+   * Send WhatsApp message via Meta Cloud API with retry logic
+   * Implements exponential backoff for transient failures
    */
   async sendWhatsApp(to, message, options = {}) {
     try {
@@ -240,23 +268,34 @@ class CommunicationService {
 
       if (this.whatsappEnabled) {
         try {
-          // Meta WhatsApp Cloud API v21.0
-          const response = await axios.post(
-            `https://graph.facebook.com/v21.0/${this.whatsappPhoneNumberId}/messages`,
-            {
-              messaging_product: 'whatsapp',
-              to: formattedPhone,
-              type: 'text',
-              text: {
-                body: message
-              }
+          // Use retry logic with exponential backoff for WhatsApp sending
+          const response = await retryWithBackoff(
+            async () => {
+              return await axios.post(
+                `https://graph.facebook.com/v21.0/${this.whatsappPhoneNumberId}/messages`,
+                {
+                  messaging_product: 'whatsapp',
+                  to: formattedPhone,
+                  type: 'text',
+                  text: {
+                    body: message
+                  }
+                },
+                {
+                  headers: {
+                    'Authorization': `Bearer ${this.whatsappAccessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                }
+              );
             },
             {
-              headers: {
-                'Authorization': `Bearer ${this.whatsappAccessToken}`,
-                'Content-Type': 'application/json',
-              },
-            }
+              maxRetries: 3,
+              initialDelayMs: 1000,
+              maxDelayMs: 30000,
+              backoffMultiplier: 2
+            },
+            'Send WhatsApp via Meta Cloud API'
           );
 
           if (response.data && response.data.messages && response.data.messages[0].id) {
@@ -264,29 +303,43 @@ class CommunicationService {
               sentAt: new Date().toISOString(),
             });
 
-            logger.info('WhatsApp sent successfully via Meta', { 
-              messageId: response.data.messages[0].id 
+            logger.info('WhatsApp sent successfully via Meta', {
+              messageId: response.data.messages[0].id
             });
 
-            return { 
-              success: true, 
-              messageId: response.data.messages[0].id, 
-              communication 
+            return {
+              success: true,
+              messageId: response.data.messages[0].id,
+              communication
             };
           } else {
             throw new Error('Invalid response from Meta WhatsApp API');
           }
         } catch (apiError) {
+          // Check for quota error and provide specific message
+          const quotaError = isQuotaError(apiError);
           const errorMessage = apiError.response?.data?.error?.message || apiError.message;
-          logger.error('Meta WhatsApp API error', { error: errorMessage });
-          
+
+          let failureReason = errorMessage;
+          if (quotaError.isQuotaError) {
+            failureReason = `API Quota exceeded (${quotaError.type}): Retry after ${Math.ceil(quotaError.retryAfterMs / 1000)} seconds`;
+            logger.warn('Meta WhatsApp quota exceeded', {
+              type: quotaError.type,
+              retryAfterMs: quotaError.retryAfterMs
+            });
+          } else {
+            logger.error('Meta WhatsApp API error', { error: errorMessage });
+          }
+
           await this.updateCommunicationStatus(communication.communicationID, 'Failed', {
-            failureReason: errorMessage,
+            failureReason: failureReason,
           });
 
           return {
             success: false,
-            message: errorMessage,
+            message: failureReason,
+            isQuotaError: quotaError.isQuotaError,
+            quotaRetryAfterMs: quotaError.retryAfterMs,
             communication,
           };
         }

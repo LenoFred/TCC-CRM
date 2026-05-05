@@ -89,7 +89,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_groups'),
+  requirePermission('can_create_groups'),
   validate(schemas.group.create),
   asyncHandler(groupsController.create.bind(groupsController))
 );

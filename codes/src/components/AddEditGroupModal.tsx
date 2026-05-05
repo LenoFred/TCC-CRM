@@ -219,7 +219,11 @@ export const AddEditGroupModal = ({
       // Fetch existing group members with their groupMemberIDs
       if (group.id) {
         console.log('🔄 Calling fetchExistingGroupMembers with ID:', group.id);
-        fetchExistingGroupMembers(group.id);
+        // Add delay to avoid concurrent API calls
+        const delayTimer = setTimeout(() => {
+          fetchExistingGroupMembers(group.id);
+        }, 400);
+        return () => clearTimeout(delayTimer);
       } else {
         console.warn('⚠️ No group.id found for fetching members');
       }

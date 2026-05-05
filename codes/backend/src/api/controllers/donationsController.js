@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { filterByGroupPermissions } = require('../../middlewares/groupPermissions');
 
 class DonationsController extends BaseController {
   constructor() {
@@ -26,6 +27,7 @@ class DonationsController extends BaseController {
       'Fund',
       'PayDate',
       'Status',
+      'GroupID',
     ];
   }
 
@@ -70,6 +72,29 @@ class DonationsController extends BaseController {
       throw new ApiError(400, 'MemberID is required');
     }
 
+    // Validate GroupID if provided
+    if (data.groupID) {
+      const { hasAccessToGroup, getStaffGroupPermissions } = require('../../middlewares/groupPermissions');
+      if (user && user.req && !hasAccessToGroup(user.req, data.groupID)) {
+        // Get user's accessible groups for error context
+        const userGroups = getStaffGroupPermissions(user.req);
+        let groupsList = 'No groups assigned';
+        if (Array.isArray(userGroups) && userGroups.length > 0) {
+          try {
+            const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+            const groupNames = groups
+              .filter(g => userGroups.includes(g.groupID))
+              .map(g => g.groupName)
+              .join(', ');
+            groupsList = groupNames || userGroups.join(', ');
+          } catch (error) {
+            groupsList = userGroups.join(', ');
+          }
+        }
+        throw new ApiError(403, `You don't have access to this group. Your assigned groups: ${groupsList}`);
+      }
+    }
+
     return {
       donationID: generateId('DONATION'),
       memberID: data.memberID,
@@ -78,6 +103,7 @@ class DonationsController extends BaseController {
       fund: data.fund || 'General',
       payDate: data.payDate || '',
       status: data.status || 'Unpaid',
+      groupID: data.groupID || '',
     };
   }
 
@@ -179,10 +205,14 @@ class DonationsController extends BaseController {
   }
 
   /**
-   * Override getAll to include donor details
+   * Override getAll to include donor details and filter by group permissions
    */
   async getAll(req, res) {
-    const data = await sheetsService.getSheetObjects(this.sheetName);
+    let data = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Apply group permissions filtering
+    data = filterByGroupPermissions(data, req, 'groupID');
+    
     const filtered = this.applyFilters(data, req.query);
 
     // Add donor details to each donation
@@ -200,12 +230,16 @@ class DonationsController extends BaseController {
   }
 
   /**
-   * Get donations by member
+   * Get donations by member with group permission filtering
    */
   async getByMember(req, res) {
     const { memberID } = req.params;
 
-    const data = await sheetsService.getSheetObjects(this.sheetName);
+    let data = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Apply group permissions filtering
+    data = filterByGroupPermissions(data, req, 'groupID');
+    
     const donations = data.filter((d) => d.memberID === memberID);
 
     const totalAmount = donations.reduce(
@@ -252,12 +286,15 @@ class DonationsController extends BaseController {
   }
 
   /**
-   * Get donation statistics
+   * Get donation statistics with group permission filtering
    */
   async getStats(req, res) {
     const { startDate, endDate } = req.query;
 
     let data = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Apply group permissions filtering
+    data = filterByGroupPermissions(data, req, 'groupID');
 
     // Apply date filters if provided
     if (startDate) {

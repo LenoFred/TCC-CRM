@@ -219,60 +219,6 @@ class FormIngestionService {
   }
 
   /**
-   * Check for duplicate member using composite key: FirstName + PhoneNumber
-   * Returns { exists, member, memberGroups, needsGroupReassignment, groupId }
-   */
-  async checkForDuplicateMemberByCompositeKey(firstName, phoneNumber, selectedGroupId = null) {
-    try {
-      const sheetsService = require('./sheetsService');
-      const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
-      const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
-      
-      // Normalize phone and firstName
-      const normalizePhone = (phone) => {
-        if (!phone) return '';
-        return phone.toString().replace(/[\s\-+()]/g, '').trim();
-      };
-      
-      const normalizeFirstName = (name) => {
-        if (!name) return '';
-        return name.toString().trim().toLowerCase();
-      };
-      
-      const inputPhone = normalizePhone(phoneNumber);
-      const inputFirstName = normalizeFirstName(firstName);
-      
-      // Find member by composite key
-      if (inputPhone && inputFirstName) {
-        const duplicateMember = members.find(member => {
-          const memberPhone = normalizePhone(member.phoneNumber || member.phone);
-          const memberFirstName = normalizeFirstName(member.firstName);
-          return memberPhone && memberPhone === inputPhone && memberFirstName === inputFirstName;
-        });
-        
-        if (duplicateMember) {
-          const memberGroups = groupMembers.filter(gm => gm.memberID === duplicateMember.memberID);
-          const alreadyInGroup = selectedGroupId && memberGroups.some(gm => gm.groupID === selectedGroupId);
-          
-          return {
-            exists: true,
-            member: duplicateMember,
-            memberGroups: memberGroups,
-            needsGroupReassignment: selectedGroupId && !alreadyInGroup,
-            alreadyInSelectedGroup: alreadyInGroup,
-            selectedGroupId: selectedGroupId
-          };
-        }
-      }
-      
-      return { exists: false };
-    } catch (error) {
-      console.error('Error checking for duplicate member:', error.message);
-      return { exists: false };
-    }
-  }
-
-  /**
    * Log ingestion attempt
    */
   async logIngestion(formType, responseSheetName, responseRow, status, errorMessage = '') {
@@ -379,35 +325,13 @@ class FormIngestionService {
     const stats = { processed: 0, success: 0, failed: 0 };
 
     try {
-      // OPTIMIZATION: Batch-fetch all required data upfront to reduce API calls
-      // This avoids hitting quota limits during bulk signups
-      console.log(`  ⏳ Pre-fetching required sheets for batch processing...`);
+      // Read form responses with headers
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.FORM_RESPONSES_SHEET_ID,
+        range: `${responseSheetName}!A:Z`
+      });
 
-      const sheetsService = require('./sheetsService');
-
-      const [
-        formResponseData,
-        memberHeadersResponse,
-        groupsData,
-        groupMembersData
-      ] = await Promise.all([
-        // Get form responses
-        this.sheets.spreadsheets.values.get({
-          spreadsheetId: this.FORM_RESPONSES_SHEET_ID,
-          range: `${responseSheetName}!A:Z`
-        }),
-        // Get Members sheet headers
-        this.sheets.spreadsheets.values.get({
-          spreadsheetId: this.MAIN_SHEET_ID,
-          range: `${this.TARGET_SHEETS.MEMBERS}!1:1`
-        }),
-        // Get groups data (needed for group assignment)
-        sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS),
-        // Get group members data (needed for group assignment)
-        sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS)
-      ]);
-
-      const rows = formResponseData.data.values || [];
+      const rows = response.data.values || [];
       if (rows.length <= 1) {
         console.log(`  📋 ${formType}: No new responses`);
         return stats;
@@ -419,6 +343,10 @@ class FormIngestionService {
       console.log(`  📋 ${formType} headers found:`, Object.keys(headerMap));
 
       // Get target Members sheet headers to align columns (prevents misalignment like Baptism -> CLDS)
+      const memberHeadersResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.MAIN_SHEET_ID,
+        range: `${this.TARGET_SHEETS.MEMBERS}!1:1`
+      });
       const memberHeaders = memberHeadersResponse.data.values?.[0] || [];
       const memberHeaderIndex = memberHeaders.reduce((acc, header, idx) => {
         if (header) acc[header.toString().trim().toLowerCase()] = idx;
@@ -504,113 +432,84 @@ class FormIngestionService {
             }
           }
           
-          // CHECK FOR DUPLICATE using composite key: FirstName + PhoneNumber
-          const duplicateCheck = await this.checkForDuplicateMemberByCompositeKey(
-            formData.FirstName,
-            formData.PhoneNumber,
-            formData.GroupName ? null : null  // Will check group later
-          );
-          
-          let newMemberId;
-          
-          if (duplicateCheck.exists) {
-            // Member already exists
-            newMemberId = duplicateCheck.member.memberID;
-            console.log(`  ⚠️  ${formType} row ${rowNumber}: Member ${formData.FirstName} ${formData.LastName} already exists (${newMemberId})`);
-            
-            // Member exists - we'll handle group assignment only
-            // Skip adding to Members sheet, but still process group assignment
-          } else {
-            // Member is new - proceed with creation
-            const buildMemberRow = () => {
-              // Fallback length 17 if headers missing
-              const row = Array(memberHeaders.length || 17).fill('');
-              const setField = (headerName, value) => {
-                const idx = memberHeaderIndex[headerName.toLowerCase()];
-                if (idx !== undefined) {
-                  row[idx] = value ?? '';
-                }
-              };
-
-              setField('memberid', this.generateId('MEM', 'member'));
-              setField('firstname', formData.FirstName);
-              setField('lastname', formData.LastName);
-              setField('phonenumber', formData.PhoneNumber);
-              setField('email', formData.Email);
-              setField('dob', dobFormatted);
-              setField('gender', formData.Gender);
-              setField('state', formData.State);
-              setField('lga', formData.LGA);
-              setField('address', formData.Address);
-              setField('emergencycontact', formData.EmergencyContact);
-              setField('baptism', formData.Baptism || '');
-              setField('familyid', '');
-              setField('status', 'Active');
-              setField('joindate', new Date().toISOString().split('T')[0]);
-              setField('membertype', 'Regular Member');
-              setField('familyrole', '');
-
-              // If headers were empty or didn't include our keys, ensure base structure so we don't append blanks
-              if (memberHeaders.length === 0) {
-                return [
-                  this.generateId('MEM', 'member'),
-                  formData.FirstName,
-                  formData.LastName,
-                  formData.PhoneNumber,
-                  formData.Email,
-                  dobFormatted,
-                  formData.Gender,
-                  formData.State,
-                  formData.LGA,
-                  formData.Address,
-                  '',
-                  'Active',
-                  new Date().toISOString().split('T')[0],
-                  'Regular Member',
-                  formData.EmergencyContact,
-                  '',
-                  formData.Baptism || ''
-                ];
+          const buildMemberRow = () => {
+            // Fallback length 17 if headers missing
+            const row = Array(memberHeaders.length || 17).fill('');
+            const setField = (headerName, value) => {
+              const idx = memberHeaderIndex[headerName.toLowerCase()];
+              if (idx !== undefined) {
+                row[idx] = value ?? '';
               }
-
-              return row;
             };
 
-            const memberData = buildMemberRow();
+            setField('memberid', this.generateId('MEM', 'member'));
+            setField('firstname', formData.FirstName);
+            setField('lastname', formData.LastName);
+            setField('phonenumber', formData.PhoneNumber);
+            setField('email', formData.Email);
+            setField('dob', dobFormatted);
+            setField('gender', formData.Gender);
+            setField('state', formData.State);
+            setField('lga', formData.LGA);
+            setField('address', formData.Address);
+            setField('emergencycontact', formData.EmergencyContact);
+            setField('baptism', formData.Baptism || '');
+            setField('familyid', '');
+            setField('status', 'Active');
+            setField('joindate', new Date().toISOString().split('T')[0]);
+            setField('membertype', 'Regular Member');
+            setField('familyrole', '');
 
-            await this.sheets.spreadsheets.values.append({
-              spreadsheetId: this.MAIN_SHEET_ID,
-              range: `${this.TARGET_SHEETS.MEMBERS}!A1`,
-              valueInputOption: 'USER_ENTERED', // preserve date formatting
-              resource: { values: [memberData] }
-            });
+            // If headers were empty or didn't include our keys, ensure base structure so we don't append blanks
+            if (memberHeaders.length === 0) {
+              return [
+                this.generateId('MEM', 'member'),
+                formData.FirstName,
+                formData.LastName,
+                formData.PhoneNumber,
+                formData.Email,
+                dobFormatted,
+                formData.Gender,
+                formData.State,
+                formData.LGA,
+                formData.Address,
+                '',
+                'Active',
+                new Date().toISOString().split('T')[0],
+                'Regular Member',
+                formData.EmergencyContact,
+                '',
+                formData.Baptism || ''
+              ];
+            }
 
-            // Extract the generated MemberID from the row data
-            newMemberId = memberData[memberHeaderIndex['memberid'] !== undefined ? memberHeaderIndex['memberid'] : 0];
-            console.log(`  ✅ New member created: ${newMemberId}`);
-          }
+            return row;
+          };
+
+          const memberData = buildMemberRow();
+
+          await this.sheets.spreadsheets.values.append({
+            spreadsheetId: this.MAIN_SHEET_ID,
+            range: `${this.TARGET_SHEETS.MEMBERS}!A1`,
+            valueInputOption: 'USER_ENTERED', // preserve date formatting
+            resource: { values: [memberData] }
+          });
+
+          // Extract the generated MemberID from the row data
+          const newMemberId = memberData[memberHeaderIndex['memberid'] !== undefined ? memberHeaderIndex['memberid'] : 0];
 
           // Handle GroupName if provided
           if (formData.GroupName && formData.GroupName.trim()) {
             try {
-              // If member exists, we still add to group (different group scenario)
-              // Pass pre-fetched data to avoid additional API calls
-              await this.handleGroupAssignment(
-                formData.GroupName,
-                newMemberId,
-                rowNumber,
-                duplicateCheck.exists,
-                groupsData,
-                groupMembersData
-              );
+              await this.handleGroupAssignment(formData.GroupName, newMemberId, rowNumber);
             } catch (groupError) {
               // Log warning but don't fail the entire ingestion
               console.warn(`  ⚠️  ${formType} row ${rowNumber}: Group assignment failed - ${groupError.message}`);
               await this.logIngestion(
-                formType,
-                responseSheetName,
-                rowNumber,
-                'SUCCESS_GROUP_SKIPPED',
+                formType, 
+                responseSheetName, 
+                rowNumber, 
+                'SUCCESS_GROUP_SKIPPED', 
                 `Member created but group assignment failed: ${groupError.message}`
               );
             }
@@ -628,15 +527,14 @@ class FormIngestionService {
       }
 
       console.log(`  📊 ${formType}: ${stats.success}/${stats.processed} successful, ${stats.failed} failed`);
-
-      // OPTIMIZATION: Flush cache only once after batch processing instead of after each member
-      // This reduces API calls significantly during bulk ingestion
+      
+      // Clear backend cache if any members were ingested
       if (stats.success > 0 && formType === 'MEMBERS') {
         const sheetsService = require('./sheetsService');
-        console.log(`  🗑️  Clearing backend cache after all members processed (1 flush instead of ${stats.success})`);
+        console.log(`  🗑️  Clearing backend cache after successful member ingestion`);
         sheetsService.cache.flushAll();
       }
-
+      
       return stats;
 
     } catch (error) {
@@ -646,46 +544,41 @@ class FormIngestionService {
   }
 
   /**
-   * Handle group assignment for a member (new or existing)
+   * Handle group assignment for a newly created member
    * CASE-SENSITIVE lookup: Finds group by exact GroupName match
-   * OPTIMIZATION: Accepts pre-fetched groups/groupMembers data to reduce API calls
-   *
+   * 
    * @param {string} groupName - GroupName from form response
-   * @param {string} memberId - MemberID (existing or newly created)
+   * @param {string} memberId - Newly created MemberID
    * @param {number} responseRowNumber - Row number in form responses (for logging)
-   * @param {boolean} memberExists - Whether this is an existing member
-   * @param {Array<object>} groupsData - Pre-fetched groups data (optional, for optimization)
-   * @param {Array<object>} groupMembersData - Pre-fetched group members data (optional, for optimization)
    */
-  async handleGroupAssignment(
-    groupName,
-    memberId,
-    responseRowNumber,
-    memberExists = false,
-    groupsData = null,
-    groupMembersData = null
-  ) {
+  async handleGroupAssignment(groupName, memberId, responseRowNumber) {
     try {
-      // Use pre-fetched data if provided, otherwise fetch now (fallback for backward compatibility)
-      let groups = groupsData;
-      let groupMembers = groupMembersData;
+      // Fetch all groups from Groups sheet
+      const groupsResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.MAIN_SHEET_ID,
+        range: 'Groups!A:L'
+      });
 
-      if (!groups || !groupMembers) {
-        console.log(`  📡 Fetching groups data (pre-fetch not provided)`);
-        const sheetsService = require('./sheetsService');
-        groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
-        groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
+      const groupRows = groupsResponse.data.values || [];
+      if (groupRows.length <= 1) {
+        throw new Error('No groups found in Groups sheet');
       }
 
+      // Get header mapping for Groups sheet
+      const groupHeaders = groupRows[0];
+      const groupHeaderMap = this.createHeaderMap(groupHeaders);
+      
       // Find group by GroupName (CASE-SENSITIVE exact match)
       let selectedGroup = null;
-      for (const group of groups) {
-        const groupNameFromSheet = group.groupName || '';
-
+      for (let i = 1; i < groupRows.length; i++) {
+        const row = groupRows[i];
+        const groupNameFromSheet = this.getByHeader(row, groupHeaderMap, 'GroupName') || '';
+        
         if (groupNameFromSheet === groupName) {
           selectedGroup = {
-            groupId: group.groupID,  // Use the processed GroupID
-            groupName: groupNameFromSheet
+            groupId: this.getByHeader(row, groupHeaderMap, 'GroupID'),
+            groupName: groupNameFromSheet,
+            rowIndex: i
           };
           break;
         }
@@ -699,29 +592,21 @@ class FormIngestionService {
         throw new Error(`Group "${groupName}" found but has no GroupID`);
       }
 
-      // Check if member is already in this group
-      const alreadyInGroup = groupMembers.some(
-        gm => gm.memberID === memberId && gm.groupID === selectedGroup.groupId
-      );
-      
-      if (alreadyInGroup) {
-        if (memberExists) {
-          console.log(`  ⚠️  Member ${memberId} already exists in group ${selectedGroup.groupName}`);
-          throw new Error(`Member already exists in group ${selectedGroup.groupName}`);
-        } else {
-          console.log(`  ⚠️  Member ${memberId} already in group ${selectedGroup.groupName}`);
-          return;
-        }
-      }
-
       // Create GroupMembers entry
+      const now = new Date();
       const groupMemberId = idGenerator.generateId('GROUP_MEMBER');
+      const joinedDate = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const timestamp = now.toISOString();
 
       const groupMemberRow = [
         groupMemberId,           // GroupMemberID
-        selectedGroup.groupId,   // GroupID
-        memberId,                // MemberID
-        'Active'                 // Status
+        selectedGroup.groupId,   // GroupID (FIXED: was swapped with MemberID)
+        memberId,                // MemberID (FIXED: was swapped with GroupID)
+        'Member',                // Role (default)
+        joinedDate,              // JoinedDate
+        'Active',                // Status
+        timestamp,               // CreatedAt
+        timestamp                // UpdatedAt
       ];
 
       // Append to GroupMembers sheet
@@ -732,13 +617,12 @@ class FormIngestionService {
         resource: { values: [groupMemberRow] }
       });
 
-      if (memberExists) {
-        console.log(`  ✅ Existing member added to group: ${groupMemberId} (Member: ${memberId}, Group: ${selectedGroup.groupName})`);
-      } else {
-        console.log(`  ✅ GroupMembers entry created: ${groupMemberId} (Member: ${memberId}, Group: ${selectedGroup.groupName})`);
-      }
+      console.log(`  ✅ GroupMembers entry created: ${groupMemberId} (Member: ${memberId}, Group: ${selectedGroup.groupName})`);
 
-      // OPTIMIZATION: Removed cache flush from here - now done once after batch processing to reduce API calls
+      // Clear cache so group members are fetched fresh
+      const sheetsService = require('./sheetsService');
+      sheetsService.cache.flushAll();
+      console.log(`  🗑️  Cleared cache after GroupMembers creation`);
 
     } catch (error) {
       // Re-throw to be caught by parent and handled gracefully

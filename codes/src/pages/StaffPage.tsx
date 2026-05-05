@@ -19,6 +19,7 @@ import { AddEditStaffModal } from "@/components/AddEditStaffModal";
 import { StaffProfileModal } from "@/components/StaffProfileModal";
 import { useToast } from "@/hooks/use-toast";
 import { usePermission } from "@/hooks/usePermission";
+import { STAFF_PERMISSIONS } from "@/constants/staffPermissions";
 
 const StaffPage = () => {
   const { toast } = useToast();
@@ -50,30 +51,18 @@ const StaffPage = () => {
         role: staff.staffRole || staff.role,
         userRole: staff.role, // Access level (Admin/Staff) from Role column
         phone: staff.phoneNumber || staff.phone,
+        permissionCount: 0, // Will be loaded in background
       }));
 
-      // Fetch permission counts for each staff member (including group permissions)
-      const staffWithPermissions = await Promise.all(
-        transformedStaff.map(async (staff: any) => {
-          try {
-            const permResponse = await api.staffPermissions.getByStaffId(staff.id.toString());
-            const regularPermissionsCount = permResponse.total || 0;
-            const groupPermissionsCount = permResponse.groupPermissions?.length || 0;
-            return {
-              ...staff,
-              permissionCount: regularPermissionsCount + groupPermissionsCount,
-            };
-          } catch (error) {
-            console.error(`Error fetching permissions for staff ${staff.id}:`, error);
-            return {
-              ...staff,
-              permissionCount: 0,
-            };
-          }
-        })
-      );
+      setStaffMembers(transformedStaff);
       
-      setStaffMembers(staffWithPermissions);
+      // Load permissions in background with staggered delays to avoid rate limiting
+      // Each request delayed by 300ms to spread out API calls
+      transformedStaff.forEach((staff: any, index: number) => {
+        setTimeout(() => {
+          loadStaffPermissions(staff.id.toString(), index);
+        }, index * 300);
+      });
     } catch (error) {
       console.error('Error fetching staff:', error);
       setStaffError(error.message || 'Failed to load staff members');
@@ -82,24 +71,35 @@ const StaffPage = () => {
     }
   };
 
+  const loadStaffPermissions = async (staffId: string, staffIndex: number) => {
+    try {
+      const permResponse = await api.staffPermissions.getByStaffId(staffId);
+      const regularPermissionsCount = permResponse.total || 0;
+      const groupPermissionsCount = permResponse.groupPermissions?.length || 0;
+      const totalCount = regularPermissionsCount + groupPermissionsCount;
+      
+      // Update the specific staff member's permission count
+      setStaffMembers((prevMembers) =>
+        prevMembers.map((member, index) =>
+          index === staffIndex
+            ? { ...member, permissionCount: totalCount }
+            : member
+        )
+      );
+    } catch (error) {
+      console.debug(`Error loading permissions for staff ${staffId}:`, error);
+      // Don't show error - permissions are optional UI info
+    }
+  };
+
   useEffect(() => {
     fetchStaff();
   }, []);
 
-  const availablePermissions = [
-    { key: "can_view_members", label: "View Members", description: "Can view member profiles and information" },
-    { key: "can_edit_members", label: "Edit Members", description: "Can create and modify member profiles" },
-    { key: "can_view_donations", label: "View Donations", description: "Can view donation records and history" },
-    { key: "can_verify_donations", label: "Verify Donations", description: "Can verify and process pending donations" },
-    { key: "can_take_attendance", label: "Take Attendance", description: "Can mark attendance for events and groups" },
-    { key: "can_manage_volunteers", label: "Manage Volunteers", description: "Can schedule and manage volunteer assignments" },
-    { key: "can_communicate", label: "Send Communications", description: "Can send bulk messages to members" },
-    { key: "can_generate_reports", label: "Generate Reports", description: "Can create and export analytics reports" },
-    { key: "can_manage_staff", label: "Manage Staff", description: "Can manage staff accounts and permissions" },
-    { key: "can_manage_settings", label: "Manage Settings", description: "Can modify system settings and configurations" },
-    { key: "can_export_data", label: "Export Data", description: "Can export member lists and reports" },
-    { key: "can_manage_events", label: "Manage Events", description: "Can create and manage church events" }
-  ];
+  // Use helper to flatten all permission categories for display
+  const getAllPermissionsFlat = () => {
+    return STAFF_PERMISSIONS.flatMap(category => category.permissions);
+  };
 
   const handleAddStaff = async (staffData: any) => {
     setIsSavingStaff(true);
@@ -221,7 +221,7 @@ const StaffPage = () => {
               <CardTitle className="text-sm font-medium text-muted-foreground">Permission Groups</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{availablePermissions.length}</div>
+              <div className="text-2xl font-bold text-foreground">{getAllPermissionsFlat().length}</div>
             </CardContent>
           </Card>
         </div>

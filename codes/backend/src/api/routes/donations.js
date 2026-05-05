@@ -61,12 +61,12 @@ router.get(
 /**
  * @route   POST /api/donations
  * @desc    Create new donation
- * @access  Private (temporarily disabled for testing)
+ * @access  Private
  */
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_donations'),
+  requirePermission('can_create_donations'),
   // validate(schemas.donation.create),
   asyncHandler(donationsController.create.bind(donationsController))
 );

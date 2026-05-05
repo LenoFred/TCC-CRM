@@ -90,7 +90,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_events'),
+  requirePermission('can_create_gatherings'),
   validate(schemas.event.create),
   asyncHandler(eventsController.create.bind(eventsController))
 );

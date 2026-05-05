@@ -89,37 +89,42 @@ class MembersController extends BaseController {
   async checkForDuplicateMember(firstName, phoneNumber, selectedGroupId = null) {
     const members = await sheetsService.getSheetObjects(sheetsService.SHEETS.MEMBERS);
     const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
-    
-    // Normalize phone for comparison (remove spaces, dashes, +, parentheses)
-    const normalizePhone = (phone) => {
+    const { formatPhoneNumber } = require('../utils/dataFormatters');
+
+    // Normalize phone to E.164 format for consistent comparison across all phone formats
+    const normalizePhoneToE164 = (phone) => {
       if (!phone) return '';
-      return phone.toString().replace(/[\s\-+()]/g, '').trim();
+      const phoneResult = formatPhoneNumber(phone);
+      // Use E.164 format (e.g., +2348012345678) for consistent cross-format comparison
+      // This handles: 08012345678, 2348012345678, +2348012345678 all normalize to same E.164
+      return phoneResult.e164 || '';
     };
-    
-    // Normalize firstName for comparison (trim, case-insensitive for matching but preserve original)
+
+    // Normalize firstName for comparison (trim, case-insensitive)
     const normalizeFirstName = (name) => {
       if (!name) return '';
       return name.toString().trim().toLowerCase();
     };
-    
-    const inputPhone = normalizePhone(phoneNumber);
+
+    const inputPhoneE164 = normalizePhoneToE164(phoneNumber);
     const inputFirstName = normalizeFirstName(firstName);
-    
-    // Check for duplicate using COMPOSITE KEY: FirstName + PhoneNumber (case-insensitive for firstName)
-    if (inputPhone && inputFirstName) {
+
+    // Check for duplicate using COMPOSITE KEY: FirstName + PhoneNumber (E.164 format)
+    // This ensures all phone number formats are treated consistently
+    if (inputPhoneE164 && inputFirstName) {
       const duplicateMember = members.find(member => {
-        const memberPhone = normalizePhone(member.phoneNumber || member.phone);
+        const memberPhoneE164 = normalizePhoneToE164(member.phoneNumber || member.phone);
         const memberFirstName = normalizeFirstName(member.firstName);
-        return memberPhone && memberPhone === inputPhone && memberFirstName === inputFirstName;
+        return memberPhoneE164 && memberPhoneE164 === inputPhoneE164 && memberFirstName === inputFirstName;
       });
-      
+
       if (duplicateMember) {
         // Get groups this member belongs to
         const memberGroups = groupMembers.filter(gm => gm.memberID === duplicateMember.memberID);
-        
+
         // Check if member is already in the selected group
         const alreadyInGroup = selectedGroupId && memberGroups.some(gm => gm.groupID === selectedGroupId);
-        
+
         return {
           exists: true,
           member: duplicateMember,
@@ -130,8 +135,73 @@ class MembersController extends BaseController {
         };
       }
     }
-    
+
     return { exists: false };
+  }
+
+  /**
+   * Check for duplicate member (for pre-submission validation)
+   * Returns duplicate status without creating/modifying data
+   * Used by frontend for real-time duplicate checking
+   */
+  async checkDuplicate(req, res) {
+    try {
+      const { firstName, phoneNumber, groupId } = req.body;
+
+      // Validate required fields
+      if (!firstName || !phoneNumber) {
+        throw new ApiError(400, 'FirstName and PhoneNumber are required for duplicate check');
+      }
+
+      // Check for duplicate
+      const duplicateCheck = await this.checkForDuplicateMember(
+        firstName,
+        phoneNumber,
+        groupId
+      );
+
+      // Build response
+      const response = {
+        success: true,
+        exists: duplicateCheck.exists
+      };
+
+      if (duplicateCheck.exists) {
+        response.member = {
+          memberID: duplicateCheck.member.memberID,
+          firstName: duplicateCheck.member.firstName,
+          lastName: duplicateCheck.member.lastName,
+          groups: duplicateCheck.memberGroups.map(g => ({
+            groupID: g.groupID,
+            groupName: g.groupName || 'Unknown Group'
+          }))
+        };
+
+        // Provide helpful suggestion based on duplicate status
+        if (duplicateCheck.alreadyInSelectedGroup && groupId) {
+          response.suggestion = `${duplicateCheck.member.firstName} is already in this group`;
+          response.action = 'ALREADY_IN_GROUP';
+        } else if (duplicateCheck.needsGroupReassignment && groupId) {
+          response.suggestion = `${duplicateCheck.member.firstName} exists. You can add them to the selected group`;
+          response.action = 'CAN_REASSIGN';
+        } else if (groupId) {
+          response.suggestion = `${duplicateCheck.member.firstName} exists with groups: ${duplicateCheck.memberGroups.map(g => g.groupName || 'Unknown').join(', ')}`;
+          response.action = 'EXISTS';
+        } else {
+          response.suggestion = `${duplicateCheck.member.firstName} ${duplicateCheck.member.lastName} already exists`;
+          response.action = 'EXISTS';
+        }
+      }
+
+      res.json(response);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.statusCode).json({ error: error.message, statusCode: error.statusCode });
+      } else {
+        console.error('Error checking duplicate:', error);
+        res.status(500).json({ error: 'Failed to check for duplicates', statusCode: 500 });
+      }
+    }
   }
 
   async prepareCreateData(data, user) {

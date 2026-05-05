@@ -53,7 +53,7 @@ router.get(
 router.get(
   '/',
   authenticate,
-  // requireRole('Admin'),
+  requirePermission('can_view_staff'),
   asyncHandler(staffController.getAll.bind(staffController))
 );
 
@@ -77,7 +77,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  // requireRole('Admin'),
+  requirePermission('can_manage_staff'),
   asyncHandler(staffController.create.bind(staffController))
 );
 
@@ -101,7 +101,7 @@ router.patch(
 router.patch(
   '/:id',
   authenticate,
-  // requireRole('Admin'),
+  requirePermission('can_manage_staff'),
   asyncHandler(staffController.update.bind(staffController))
 );
 

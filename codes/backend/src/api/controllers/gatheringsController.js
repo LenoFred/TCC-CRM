@@ -72,7 +72,23 @@ class GatheringsController extends BaseController {
     
     // Check if staff has access to this group
     if (parentID && !hasAccessToGroup(req, parentID)) {
-      throw new ApiError(403, `You do not have access to create gatherings for this group (${parentID}). You can only create gatherings for your assigned groups.`);
+      // Get user's accessible groups for error context
+      const { getStaffGroupPermissions } = require('../../middlewares/groupPermissions');
+      const userGroups = getStaffGroupPermissions(req);
+      let groupsList = 'No groups assigned';
+      if (Array.isArray(userGroups) && userGroups.length > 0) {
+        try {
+          const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+          const groupNames = groups
+            .filter(g => userGroups.includes(g.groupID))
+            .map(g => g.groupName)
+            .join(', ');
+          groupsList = groupNames || userGroups.join(', ');
+        } catch (error) {
+          groupsList = userGroups.join(', ');
+        }
+      }
+      throw new ApiError(403, `You don't have access to this group. Your assigned groups: ${groupsList}`);
     }
     
     return super.create(req, res);

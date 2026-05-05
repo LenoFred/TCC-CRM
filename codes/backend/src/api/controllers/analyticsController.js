@@ -4,6 +4,7 @@
  */
 
 const sheetsService = require('../../services/sheetsService');
+const { getStaffGroupPermissions } = require('../../middlewares/groupPermissions');
 
 class AnalyticsController {
   constructor() {
@@ -351,14 +352,31 @@ class AnalyticsController {
     try {
       const stats = {};
       let membersData = [];
+      
+      // Get staff group permissions for filtering
+      const staffGroupPermissions = getStaffGroupPermissions(req);
 
       // Get counts for each sheet
       for (const [key, sheetName] of Object.entries(this.sheetMapping)) {
         try {
-          const data = await this.sheetsService.getSheetObjects(sheetName);
+          let data = await this.sheetsService.getSheetObjects(sheetName);
+          
+          // Apply group permissions filtering for members and related data
+          if (sheetName === 'Members' && Array.isArray(staffGroupPermissions) && staffGroupPermissions.length > 0) {
+            // Filter members by group permissions
+            const groupMembers = await this.sheetsService.getSheetObjects('GroupMembers');
+            const permittedMemberIds = new Set(
+              groupMembers
+                .filter(gm => staffGroupPermissions.includes(gm.groupID))
+                .map(gm => gm.memberID)
+            );
+            data = data.filter(m => permittedMemberIds.has(m.memberID));
+          }
+          
           if (sheetName === 'Members') {
             membersData = data;
           }
+          
           stats[key] = {
             total: data.length,
             sheetName: sheetName

@@ -9,15 +9,20 @@ import { Shield, Eye, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ManageStaffPermissionsModal } from "@/components/ManageStaffPermissionsModal";
 import { api } from "@/config/api";
+import { STAFF_PERMISSIONS } from "@/constants/staffPermissions";
 
 interface StaffMember {
   id?: number;
+  staffID?: string | number; // Backend column name
   name: string;
+  fullName?: string; // Backend column name (synonym for name)
   email: string;
-  role: string; // Job title (Pastor, Secretary, etc.)
-  userRole?: string; // Access level (Admin/Staff)
+  role: string; // Backend "Role" column - Access level (Admin/Staff)
+  staffRole?: string; // Backend column - Job title (Pastor, Secretary, etc.)
+  userRole?: string; // Frontend alias for "role" (access level)
   status: string;
   phone?: string;
+  phoneNumber?: string; // Backend column name
   jobTitle?: string;
   appointmentDate?: string;
   lastLogin: string;
@@ -94,12 +99,12 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
   useEffect(() => {
     if (staffMember && mode === 'edit') {
       setFormData({
-        name: staffMember.name || "",
+        name: staffMember.fullName || staffMember.name || "",
         email: staffMember.email || "",
-        role: staffMember.role || "",
-        userRole: staffMember.userRole || "Staff",
+        role: staffMember.staffRole || "", // Staff Role (job title)
+        userRole: staffMember.role || staffMember.userRole || "Staff", // Access Level (Admin/Staff)
         status: staffMember.status || "Active",
-        phone: staffMember.phone || "",
+        phone: staffMember.phoneNumber || staffMember.phone || "",
         jobTitle: staffMember.jobTitle || "",
         appointmentDate: staffMember.appointmentDate || "",
         username: staffMember.username || "",
@@ -168,8 +173,14 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
     }
 
     // Include permissions and groupPermissions in the save data
-    const staffData: StaffMember = {
+    // Map form fields to backend column names
+    const staffData = {
       ...formData,
+      // Ensure backend column names are used
+      fullName: formData.name, // Backend uses fullName, not name
+      phoneNumber: formData.phone, // Backend uses phoneNumber, not phone
+      staffRole: formData.role, // Backend uses staffRole for job title
+      role: formData.userRole, // Backend uses role for access level (Admin/Staff)
       permissions: tempPermissions,
       groupPermissions: selectedGroupIds, // Send as array for create/edit
       id: staffMember?.id || Date.now(),
@@ -251,15 +262,17 @@ export function AddEditStaffModal({ isOpen, onClose, onSave, staffMember, mode }
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Senior Pastor">Senior Pastor</SelectItem>
-                  <SelectItem value="Assistant Pastor">Assistant Pastor</SelectItem>
+                  <SelectItem value="Pastor">Pastor</SelectItem>
                   <SelectItem value="Youth Pastor">Youth Pastor</SelectItem>
-                  <SelectItem value="Worship Leader">Worship Leader</SelectItem>
                   <SelectItem value="Administrative Assistant">Administrative Assistant</SelectItem>
                   <SelectItem value="Secretary">Secretary</SelectItem>
                   <SelectItem value="Treasurer">Treasurer</SelectItem>
                   <SelectItem value="Deacon">Deacon</SelectItem>
                   <SelectItem value="Elder">Elder</SelectItem>
+                  <SelectItem value="Fellowship President">Fellowship President</SelectItem>
+                  <SelectItem value="H.O.D">H.O.D</SelectItem>
+                  <SelectItem value="Cell Leader">Cell Leader</SelectItem>
+                  <SelectItem value="Assistant H.O.D">Assistant H.O.D</SelectItem>
                 </SelectContent>
               </Select>
             </div>

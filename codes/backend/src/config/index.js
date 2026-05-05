@@ -21,7 +21,19 @@ const config = {
 
   // JWT Configuration
   jwt: {
-    secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+    secret: (() => {
+      const secret = process.env.JWT_SECRET;
+      // In production, JWT_SECRET MUST be set
+      if (process.env.NODE_ENV === 'production' && !secret) {
+        throw new Error('CRITICAL: JWT_SECRET environment variable is required in production!');
+      }
+      // In development, warn if using default (but allow it)
+      if (!secret) {
+        console.warn('⚠️  WARNING: JWT_SECRET not set. Using development default. This is insecure for production!');
+        return 'dev-default-secret-change-in-production';
+      }
+      return secret;
+    })(),
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   },
@@ -30,8 +42,12 @@ const config = {
   security: {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS) || 12,
     rateLimit: {
+      // In development: 500 requests per 15 minutes (~ 33 req/min, more forgiving for dev)
+      // In production: 1500 requests per 15 minutes (~ 100 req/min, secure for production)
       windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-      maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1500, // Increased for authenticated users
+      maxRequests: process.env.NODE_ENV === 'production' 
+        ? (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1500)
+        : (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000), // More forgiving in development
     },
   },
 

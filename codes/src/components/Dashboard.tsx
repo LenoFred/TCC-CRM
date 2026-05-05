@@ -39,9 +39,17 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, isLoading: authLoading } = useAuth();
-  const typedUser = (user as unknown as { staffRole?: string; fullName?: string; firstName?: string; role?: string }) || {};
-  const staffRole = typedUser.staffRole || typedUser.role || 'Staff';
-  const displayName = typedUser.fullName || typedUser.firstName || 'User';
+  const [displayName, setDisplayName] = useState<string>('');
+  const [staffRole, setStaffRole] = useState<string>('Staff');
+  
+  // Update display info when user data loads
+  useEffect(() => {
+    if (user && !authLoading) {
+      const typedUser = (user as unknown as { staffRole?: string; fullName?: string; firstName?: string; role?: string }) || {};
+      setStaffRole(typedUser.staffRole || typedUser.role || 'Staff');
+      setDisplayName(typedUser.fullName || typedUser.firstName || '');
+    }
+  }, [user, authLoading]);
   
   // Use business logic hooks
   const { fetchGuests, fetchStats, guests, stats, loading: guestsLoading, error: guestsError } = useGuests();
@@ -234,9 +242,11 @@ export function Dashboard() {
             ) : (
               <>
                 <h1 className="text-3xl font-bold mb-2">
-                  Welcome back, {staffRole} {displayName}
+                  Welcome back, {displayName}
                 </h1>
-                <p className="text-lg opacity-90">Here's what's happening at TCC today</p>
+                <p className="text-lg opacity-90" style={{fontSize: '0.95rem', marginTop: '-4px'}}>
+                  <span className="font-semibold">{staffRole}</span> • Here's what's happening at TCC today
+                </p>
               </>
             )}
           </div>

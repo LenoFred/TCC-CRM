@@ -71,7 +71,22 @@ const requireGroupAccess = async (req, res, next) => {
 
     // Check if staff has access to this specific group
     if (!permittedGroups.includes(groupId)) {
-      throw new ApiError(403, 'You do not have permission to access this group');
+      // Get user's accessible groups for error context
+      let groupsList = 'No groups assigned';
+      if (Array.isArray(permittedGroups) && permittedGroups.length > 0) {
+        try {
+          const sheetsService = require('../services/sheetsService');
+          const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+          const groupNames = groups
+            .filter(g => permittedGroups.includes(g.groupID))
+            .map(g => g.groupName)
+            .join(', ');
+          groupsList = groupNames || permittedGroups.join(', ');
+        } catch (error) {
+          groupsList = permittedGroups.join(', ');
+        }
+      }
+      throw new ApiError(403, `You don't have access to this group. Your assigned groups: ${groupsList}`);
     }
 
     next();
@@ -161,7 +176,7 @@ const hasAccessToGroup = (req, groupID) => {
  * Throws error if staff tries to modify a group they don't have access to
  */
 const validateGroupAccess = (groupIdField = 'groupID') => {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const groupID = req.body[groupIdField] || req.params[groupIdField] || req.query[groupIdField];
     
     if (!groupID) {
@@ -169,7 +184,23 @@ const validateGroupAccess = (groupIdField = 'groupID') => {
     }
     
     if (!hasAccessToGroup(req, groupID)) {
-      throw new ApiError(403, `You do not have access to perform operations on this group (${groupID}). You can only work with your assigned groups.`);
+      // Get user's accessible groups for error context
+      const userGroups = getStaffGroupPermissions(req);
+      let groupsList = 'No groups assigned';
+      if (Array.isArray(userGroups) && userGroups.length > 0) {
+        try {
+          const sheetsService = require('../services/sheetsService');
+          const groups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+          const groupNames = groups
+            .filter(g => userGroups.includes(g.groupID))
+            .map(g => g.groupName)
+            .join(', ');
+          groupsList = groupNames || userGroups.join(', ');
+        } catch (error) {
+          groupsList = userGroups.join(', ');
+        }
+      }
+      throw new ApiError(403, `You don't have access to this group. Your assigned groups: ${groupsList}`);
     }
     
     next();

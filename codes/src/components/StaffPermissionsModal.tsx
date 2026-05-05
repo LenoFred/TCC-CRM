@@ -58,8 +58,19 @@ export const StaffPermissionsModal = ({ isOpen, onClose, onSave, staffMember }: 
 
   useEffect(() => {
     if (staffMember && isOpen) {
-      fetchPermissions();
-      fetchGroups();
+      // Fetch permissions first, then groups (sequential to avoid rate limiting)
+      const loadData = async () => {
+        try {
+          setIsLoading(true);
+          await fetchPermissions();
+          // Add a small delay before fetching groups to spread out requests
+          await new Promise(resolve => setTimeout(resolve, 300));
+          await fetchGroups();
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadData();
     }
   }, [staffMember, isOpen]);
 
@@ -76,7 +87,6 @@ export const StaffPermissionsModal = ({ isOpen, onClose, onSave, staffMember }: 
   const fetchPermissions = async () => {
     if (!staffMember) return;
     
-    setIsLoading(true);
     try {
       const response = await api.staffPermissions.getByStaffId(staffMember.id.toString());
       setPermissions(response.permissions);
@@ -120,8 +130,6 @@ export const StaffPermissionsModal = ({ isOpen, onClose, onSave, staffMember }: 
         description: "Please try again or contact support",
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
   };
 

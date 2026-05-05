@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { getStaffGroupPermissions } = require('../../middlewares/groupPermissions');
 
 class FamiliesController extends BaseController {
   constructor() {
@@ -71,7 +72,7 @@ class FamiliesController extends BaseController {
   }
 
   /**
-   * Override getAll to include family members
+   * Override getAll to include family members and filter by group permissions
    */
   async getAll(req, res) {
     const { page, limit, search, includemembers } = req.query;
@@ -81,6 +82,25 @@ class FamiliesController extends BaseController {
     
     // Always get members to calculate member count
     const members = await sheetsService.getMembers();
+    
+    // Get group members for permission filtering
+    const groupMembers = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUP_MEMBERS);
+    const staffGroupPermissions = getStaffGroupPermissions(req);
+    
+    // Filter families based on group permissions
+    // A family is visible if at least one of its members is in an accessible group
+    if (Array.isArray(staffGroupPermissions) && staffGroupPermissions.length > 0) {
+      const permittedMemberIds = new Set(
+        groupMembers
+          .filter(gm => staffGroupPermissions.includes(gm.groupID))
+          .map(gm => gm.memberID)
+      );
+      
+      families = families.filter(family => {
+        const familyMembers = members.filter(m => m.familyID === family.familyID);
+        return familyMembers.some(m => permittedMemberIds.has(m.memberID));
+      });
+    }
 
     // Apply search if provided
     if (search) {

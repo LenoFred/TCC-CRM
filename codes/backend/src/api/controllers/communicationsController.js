@@ -370,7 +370,9 @@ class CommunicationsController extends BaseController {
       }
 
       // STEP 4: Send messages IN PARALLEL (bulk sending for better performance)
-      const results = { success: [], failed: [], total: recipientsToSend.length, whatsappSuccess: 0, smsFallback: 0 };
+      const results = { success: [], failed: [], total: recipientsToSend.length, whatsappSuccess: 0, smsFallback: 0, quotaErrors: [] };
+      let hasQuotaError = false;
+      let quotaRetryAfterMs = 0;
 
       // Create array of promises for parallel execution
       const sendPromises = recipientsToSend.map(async (recipient) => {
@@ -378,8 +380,8 @@ class CommunicationsController extends BaseController {
           // Get personalized message if available
           let messageToSend = message;
           if (personalizedMessages && Array.isArray(personalizedMessages)) {
-            const personalizedMsg = personalizedMessages.find(pm => 
-              String(pm.id) === String(recipient.memberId) || 
+            const personalizedMsg = personalizedMessages.find(pm =>
+              String(pm.id) === String(recipient.memberId) ||
               pm.phone === recipient.contact
             );
             if (personalizedMsg && personalizedMsg.message) {
@@ -393,15 +395,23 @@ class CommunicationsController extends BaseController {
           });
 
           if (normalizedChannel === 'sms') {
-            await communicationService.sendSMS(recipient.contact, messageToSend, {
+            const smsResult = await communicationService.sendSMS(recipient.contact, messageToSend, {
               recipientID: recipient.memberId,
               sentBy: req.user?.memberID || 'System'
             });
-            logger.info(`✓ Sent SMS to ${recipient.contact}`);
-            return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'sms' };
+
+            if (smsResult.success) {
+              logger.info(`✓ Sent SMS to ${recipient.contact}`);
+              return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'sms' };
+            } else if (smsResult.isQuotaError) {
+              logger.warn(`Quota error for SMS to ${recipient.contact}`, { retryAfterMs: smsResult.quotaRetryAfterMs });
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: smsResult.message, isQuotaError: true, quotaRetryAfterMs: smsResult.quotaRetryAfterMs };
+            } else {
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: smsResult.message };
+            }
 
           } else if (normalizedChannel === 'email') {
-            await communicationService.sendEmail(
+            const emailResult = await communicationService.sendEmail(
               recipient.contact,
               subject || 'Message from TCC-CRM',
               messageToSend,
@@ -411,42 +421,60 @@ class CommunicationsController extends BaseController {
                 emailProvider: emailProvider || 'gmail'
               }
             );
-            logger.info(`✓ Sent Email to ${recipient.contact}`);
-            return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'email' };
+
+            if (emailResult.success) {
+              logger.info(`✓ Sent Email to ${recipient.contact}`);
+              return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'email' };
+            } else if (emailResult.isQuotaError) {
+              logger.warn(`Quota error for Email to ${recipient.contact}`, { retryAfterMs: emailResult.quotaRetryAfterMs });
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: emailResult.message, isQuotaError: true, quotaRetryAfterMs: emailResult.quotaRetryAfterMs };
+            } else {
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: emailResult.message };
+            }
 
           } else if (normalizedChannel === 'whatsapp') {
             // WhatsApp-first with SMS fallback logic
-            try {
-              await communicationService.sendWhatsApp(recipient.contact, messageToSend, {
-                recipientID: recipient.memberId,
-                sentBy: req.user?.memberID || 'System'
-              });
+            const whatsappResult = await communicationService.sendWhatsApp(recipient.contact, messageToSend, {
+              recipientID: recipient.memberId,
+              sentBy: req.user?.memberID || 'System'
+            });
+
+            if (whatsappResult.success) {
               logger.info(`✓ Sent WhatsApp to ${recipient.contact}`);
               results.whatsappSuccess++;
               return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'whatsapp' };
-            } catch (whatsappError) {
-              // If WhatsApp fails and SMS fallback is enabled, try SMS
-              if (smsChannelFallback) {
-                logger.warn(`WhatsApp failed for ${recipient.contact}, trying SMS fallback`, { error: whatsappError.message });
-                try {
-                  await communicationService.sendSMS(recipient.contact, messageToSend, {
-                    recipientID: recipient.memberId,
-                    sentBy: req.user?.memberID || 'System'
-                  });
+            } else if (whatsappResult.isQuotaError && smsChannelFallback) {
+              // Quota error - don't fallback to SMS, report immediately
+              logger.warn(`WhatsApp quota error for ${recipient.contact}`, { retryAfterMs: whatsappResult.quotaRetryAfterMs });
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: whatsappResult.message, isQuotaError: true, quotaRetryAfterMs: whatsappResult.quotaRetryAfterMs };
+            } else if (whatsappResult.isQuotaError) {
+              logger.warn(`WhatsApp quota error for ${recipient.contact}`, { retryAfterMs: whatsappResult.quotaRetryAfterMs });
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: whatsappResult.message, isQuotaError: true, quotaRetryAfterMs: whatsappResult.quotaRetryAfterMs };
+            } else if (!whatsappResult.success && smsChannelFallback) {
+              // WhatsApp failed but SMS fallback is enabled, try SMS
+              logger.warn(`WhatsApp failed for ${recipient.contact}, trying SMS fallback`);
+              try {
+                const smsResult = await communicationService.sendSMS(recipient.contact, messageToSend, {
+                  recipientID: recipient.memberId,
+                  sentBy: req.user?.memberID || 'System'
+                });
+
+                if (smsResult.success) {
                   logger.info(`✓ Sent SMS (fallback) to ${recipient.contact}`);
                   results.smsFallback++;
                   return { success: true, recipient: recipient.contact, name: recipient.name, channel: 'sms-fallback' };
-                } catch (smsError) {
-                  logger.error(`✗ Both WhatsApp and SMS failed for ${recipient.contact}`, { 
-                    whatsappError: whatsappError.message, 
-                    smsError: smsError.message 
-                  });
-                  throw new Error(`WhatsApp: ${whatsappError.message}, SMS: ${smsError.message}`);
+                } else if (smsResult.isQuotaError) {
+                  logger.warn(`SMS fallback quota error for ${recipient.contact}`, { retryAfterMs: smsResult.quotaRetryAfterMs });
+                  return { success: false, recipient: recipient.contact, name: recipient.name, error: smsResult.message, isQuotaError: true, quotaRetryAfterMs: smsResult.quotaRetryAfterMs };
+                } else {
+                  return { success: false, recipient: recipient.contact, name: recipient.name, error: smsResult.message };
                 }
-              } else {
-                // No fallback, throw WhatsApp error
-                throw whatsappError;
+              } catch (smsError) {
+                logger.error(`SMS fallback failed for ${recipient.contact}`, { error: smsError.message });
+                return { success: false, recipient: recipient.contact, name: recipient.name, error: `WhatsApp: ${whatsappResult.message}, SMS: ${smsError.message}` };
               }
+            } else {
+              return { success: false, recipient: recipient.contact, name: recipient.name, error: whatsappResult.message };
             }
           }
 
@@ -459,12 +487,20 @@ class CommunicationsController extends BaseController {
       // Wait for all messages to be sent in parallel
       const sendResults = await Promise.all(sendPromises);
 
-      // Categorize results
+      // Categorize results and check for quota errors
       sendResults.forEach(result => {
         if (result.success) {
           results.success.push({ recipient: result.recipient, name: result.name, channel: result.channel });
         } else {
-          results.failed.push({ recipient: result.recipient, name: result.name, error: result.error });
+          if (result.isQuotaError) {
+            results.quotaErrors.push({ recipient: result.recipient, name: result.name, error: result.error, retryAfterSeconds: Math.ceil(result.quotaRetryAfterMs / 1000) });
+            hasQuotaError = true;
+            if (result.quotaRetryAfterMs > quotaRetryAfterMs) {
+              quotaRetryAfterMs = result.quotaRetryAfterMs;
+            }
+          } else {
+            results.failed.push({ recipient: result.recipient, name: result.name, error: result.error });
+          }
         }
       });
 
@@ -472,21 +508,30 @@ class CommunicationsController extends BaseController {
         total: results.total,
         sent: results.success.length,
         failed: results.failed.length,
+        quotaErrors: results.quotaErrors.length,
         whatsappSuccess: results.whatsappSuccess,
         smsFallback: results.smsFallback
       });
 
-      res.status(201).json({
+      // If quota errors occurred, include in response with appropriate status
+      const statusCode = hasQuotaError ? 202 : 201; // 202 Accepted if quota issues
+      res.status(statusCode).json({
         success: true,
         message: `Messages sent via ${channel}`,
         channel: normalizedChannel,
+        ...(hasQuotaError && { quotaError: true, retryAfterSeconds: Math.ceil(quotaRetryAfterMs / 1000) }),
         results: {
           total: results.total,
           sent: results.success.length,
           failed: results.failed.length,
+          quotaErrors: results.quotaErrors.length || 0,
           whatsappSuccess: results.whatsappSuccess || 0,
           smsFallback: results.smsFallback || 0,
-          details: { success: results.success, failed: results.failed }
+          details: {
+            success: results.success,
+            failed: results.failed,
+            ...(results.quotaErrors.length > 0 && { quotaErrors: results.quotaErrors })
+          }
         }
       });
 
