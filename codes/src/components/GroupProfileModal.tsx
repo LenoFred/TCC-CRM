@@ -137,8 +137,14 @@ export const GroupProfileModal = ({
   // Fetch members when modal opens or group changes
   useEffect(() => {
     if (isOpen && group) {
-      fetchMembers();
-      fetchGatherings();
+      // Load data sequentially with delays to avoid rate limiting
+      const loadData = async () => {
+        await fetchMembers();
+        // Add 500ms delay before fetching gatherings
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await fetchGatherings();
+      };
+      loadData();
     }
   }, [isOpen, group]);
 
@@ -209,8 +215,10 @@ export const GroupProfileModal = ({
       const response = await api.gatherings.getByGroup(group.id.toString());
       const gatheringsData = response.data || [];
       
-      // Transform gatherings and fetch attendance counts
-      const transformedGatheringsPromises = gatheringsData.map(async (gathering: Gathering) => {
+      // Transform gatherings and fetch attendance counts sequentially to avoid rate limiting
+      const transformedGatherings: Activity[] = [];
+      
+      for (const gathering of gatheringsData) {
         let attendanceCount = 0;
         
         // Fetch attendance count for this gathering
@@ -219,11 +227,12 @@ export const GroupProfileModal = ({
           attendanceCount = attendanceResponse.total || attendanceResponse.attendance?.length || 0;
         } catch (error) {
           console.error(`Error fetching attendance for gathering ${gathering.gatheringID}:`, error);
+          // Continue with 0 count on error
         }
 
         const status: 'Planned' | 'Completed' | 'Cancelled' = new Date(gathering.gatheringDate) < new Date() ? 'Completed' : 'Planned';
 
-        return {
+        transformedGatherings.push({
           id: gathering.gatheringID,
           name: gathering.gatheringName,
           description: '',
@@ -233,10 +242,13 @@ export const GroupProfileModal = ({
           type: gathering.gatheringType || group.type,
           status,
           attendanceCount,
-        };
-      });
-      
-      const transformedGatherings: Activity[] = await Promise.all(transformedGatheringsPromises);
+        });
+        
+        // Add small delay between requests (100ms) to avoid hammering the API
+        if (gatheringsData.indexOf(gathering) < gatheringsData.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
       
       // Sort by date (latest first)
       const sortedGatherings = transformedGatherings.sort((a, b) => {

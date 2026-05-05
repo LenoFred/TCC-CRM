@@ -140,17 +140,24 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
             // Fetch groups - backend already joins GroupMembers with Groups data
       try {
         const groupMembersResponse: any = await api.groupMembers.getByMember(String(memberId));
+        console.log('🔍 Group members response:', groupMembersResponse);
+        
         const groupMembershipsData = groupMembersResponse.groups || [];
+        console.log('📋 Group memberships data:', groupMembershipsData);
         
         // Transform the data - no need for extra API calls, backend provides group details
-        const groupsData = groupMembershipsData.map((membership: any) => ({
-          name: membership.group?.groupName || 'Unknown Group',
-          type: membership.group?.groupType || 'N/A',
-          role: membership.role || 'Member',
-          joinDate: membership.joinedDate ? new Date(membership.joinedDate).toLocaleDateString() : 'N/A',
-          status: membership.status || 'Active'
-        }));
+        const groupsData = groupMembershipsData.map((membership: any) => {
+          console.log('📌 Processing membership:', membership);
+          return {
+            name: membership.group?.groupName || 'Unknown Group',
+            type: membership.group?.groupType || 'N/A',
+            role: membership.role || 'Member',
+            joinDate: membership.joinedDate ? new Date(membership.joinedDate).toLocaleDateString() : 'N/A',
+            status: membership.status || 'Active'
+          };
+        });
         
+        console.log('✅ Transformed groups data:', groupsData);
         setGroups(groupsData);
       } catch (error) {
         console.error('Error fetching groups:', error);
@@ -249,15 +256,6 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
                 <p className="text-sm">{member.joinDate}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Date of Birth</label>
-                <p className="text-sm">
-                  {(member.dateOfBirth || member.dOB) ? (() => {
-                    const d = new Date(member.dateOfBirth || member.dOB);
-                    return isNaN(d.getTime()) ? 'Not provided' : d.toISOString().slice(0, 10);
-                  })() : 'Not provided'}
-                </p>
-              </div>
-              <div>
                 <label className="text-sm font-medium text-muted-foreground">Gender</label>
                 <p className="text-sm">{member.gender || 'Not specified'}</p>
               </div>
@@ -272,10 +270,6 @@ export const MemberProfileModal = ({ member, isOpen, onClose, onEdit }: MemberPr
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Membership Type</label>
                 <p className="text-sm">{member.membershipType || member.memberType || 'Regular Member'}</p>
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium text-muted-foreground">Address</label>
-                <p className="text-sm">{member.address || 'Not provided'}</p>
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-medium text-muted-foreground">Emergency Contact</label>

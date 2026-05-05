@@ -46,7 +46,7 @@ class StaffController extends BaseController {
       (s) => s.email?.toLowerCase() === data.email?.toLowerCase()
     );
     if (existingStaff) {
-      throw new ApiError(400, 'Email already in use');
+      throw new ApiError('Email already in use', 400);
     }
 
     // Check if username already exists (if provided)
@@ -56,17 +56,17 @@ class StaffController extends BaseController {
         (d) => d.username?.toLowerCase() === data.username?.toLowerCase()
       );
       if (existingUsername) {
-        throw new ApiError(400, 'Username already in use');
+        throw new ApiError('Username already in use', 400);
       }
     }
 
     // Validate that username, password, and permissions are provided for new staff
     if (!data.username || !data.password) {
-      throw new ApiError(400, 'Username and password are required');
+      throw new ApiError('Username and password are required', 400);
     }
 
     if (!data.permissions || !Array.isArray(data.permissions) || data.permissions.length === 0) {
-      throw new ApiError(400, 'At least one permission is required');
+      throw new ApiError('At least one permission is required', 400);
     }
 
     return {
@@ -293,14 +293,14 @@ class StaffController extends BaseController {
     const { status } = req.body;
 
     if (!status || !['Active', 'Inactive', 'Suspended'].includes(status)) {
-      throw new ApiError(400, 'Valid status is required (Active, Inactive, Suspended)');
+      throw new ApiError('Valid status is required (Active, Inactive, Suspended)', 400);
     }
 
     const data = await sheetsService.getSheetObjects(this.sheetName);
     const staff = data.find((s) => this.matchId(s, id));
 
     if (!staff) {
-      throw new ApiError(404, 'Staff member not found');
+      throw new ApiError('Staff member not found', 404);
     }
 
     const updated = {

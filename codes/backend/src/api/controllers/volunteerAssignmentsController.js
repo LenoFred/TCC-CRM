@@ -117,7 +117,23 @@ class VolunteerAssignmentsController extends BaseController {
 
     // Check if staff has access to this group
     if (data.groupID && user.req && !hasAccessToGroup(user.req, data.groupID)) {
-      throw new ApiError(403, `You do not have access to assign volunteers to this group (${data.groupID}). You can only assign volunteers to your assigned groups.`);
+      // Get user's accessible groups for error context
+      const { getStaffGroupPermissions } = require('../../middlewares/groupPermissions');
+      const userGroups = getStaffGroupPermissions(user.req);
+      let groupsList = 'No groups assigned';
+      if (Array.isArray(userGroups) && userGroups.length > 0) {
+        try {
+          const allGroups = await sheetsService.getSheetObjects(sheetsService.SHEETS.GROUPS);
+          const groupNames = allGroups
+            .filter(g => userGroups.includes(g.groupID))
+            .map(g => g.groupName)
+            .join(', ');
+          groupsList = groupNames || userGroups.join(', ');
+        } catch (error) {
+          groupsList = userGroups.join(', ');
+        }
+      }
+      throw new ApiError(403, `You don't have access to this group. Your assigned groups: ${groupsList}`);
     }
 
     return {

@@ -5,6 +5,7 @@
 
 const authService = require('../services/authService');
 const { logger } = require('../utils/logger');
+const PERMISSIONS = require('../constants/permissions');
 
 /**
  * Extract token from request headers
@@ -55,22 +56,8 @@ const authenticate = async (req, res, next) => {
     
     // Check if user is admin first - admins get all permissions automatically
     if (req.user.role?.toLowerCase() === 'admin') {
-      // Admin gets ALL permissions automatically as flat string array
-      req.user.permissions = [
-        'can_view_members', 'can_add_members', 'can_edit_members', 'can_delete_members',
-        'can_view_families', 'can_add_families', 'can_edit_families', 'can_delete_families',
-        'can_view_groups', 'can_add_groups', 'can_edit_groups', 'can_delete_groups',
-        'can_view_attendance', 'can_add_attendance', 'can_edit_attendance', 'can_delete_attendance', 'can_mark_attendance',
-        'can_view_volunteers', 'can_manage_volunteers',
-        'can_view_communications', 'can_create_communications', 'can_update_communications', 'can_delete_communications',
-        'can_send_sms', 'can_send_email',
-        'can_view_analytics', 'can_generate_reports', 'can_view_reports', 'can_export_data',
-        'can_view_donations', 'can_manage_donations',
-        'can_view_events', 'can_add_events', 'can_edit_events', 'can_delete_events', 'can_manage_events',
-        'can_view_staff', 'can_manage_staff',
-        'can_view_support_requests', 'can_create_support_requests', 'can_manage_support_requests', 'can_delete_support_requests',
-        'can_manage_settings', 'can_view_settings'
-      ];
+      // Admin gets ALL permissions automatically from constants
+      req.user.permissions = PERMISSIONS.ALL();
       req.user.groupPermissions = null; // Admin has access to all groups (null = no restrictions)
       logger.info('Admin user authenticated - full permissions and group access granted', { 
         userId: req.user.userId, 
@@ -240,9 +227,10 @@ const requireAllPermissions = (permissions) => {
 };
 
 /**
- * Middleware to check if user has a specific role
+ * Middleware to check if user has a specific role or one of multiple roles
  * Usage: router.post('/staff', authenticate, requireRole('Admin'), ...)
- * @param {string} role - Required role
+ *        router.post('/guest-register', authenticate, requireRole(['Admin', 'Staff']), ...)
+ * @param {string|array} role - Required role(s)
  */
 const requireRole = (role) => {
   return (req, res, next) => {
@@ -252,17 +240,21 @@ const requireRole = (role) => {
       });
     }
 
-    if (req.user.role !== role) {
+    // Handle both single role string and array of roles
+    const allowedRoles = Array.isArray(role) ? role : [role];
+    const userRole = req.user.role;
+
+    if (!allowedRoles.includes(userRole)) {
       logger.warn('Role check failed', {
         userId: req.user.userId,
-        requiredRole: role,
-        userRole: req.user.role,
+        requiredRoles: allowedRoles,
+        userRole: userRole,
         path: req.path,
       });
 
       return res.status(403).json({
         error: 'Permission denied',
-        message: `This action requires ${role} role`,
+        message: `This action requires ${allowedRoles.join(',')} role`,
       });
     }
 

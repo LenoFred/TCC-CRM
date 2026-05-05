@@ -78,7 +78,7 @@ router.get(
 router.post(
   '/check-in',
   authenticate,
-  requirePermission('can_add_attendance'),
+  requirePermission('can_mark_attendance'),
   validate(schemas.attendance.create),
   asyncHandler(attendanceController.checkIn.bind(attendanceController))
 );
@@ -91,7 +91,7 @@ router.post(
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_attendance'),
+  requirePermission('can_mark_attendance'),
   validate(schemas.attendance.create),
   asyncHandler(attendanceController.create.bind(attendanceController))
 );

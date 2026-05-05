@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { apiCall } from '@/services/api';
+import { apiCall } from '@/config/api';
 
 export const useDuplicateCheck = () => {
   const [duplicateStatus, setDuplicateStatus] = useState({

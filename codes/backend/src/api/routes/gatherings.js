@@ -78,7 +78,7 @@ router.get(
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_attendance'),
+  requirePermission('can_create_gatherings'),
   validate(schemas.gathering.create),
   asyncHandler(gatheringsController.create.bind(gatheringsController))
 );
@@ -91,7 +91,7 @@ router.post(
 router.patch(
   '/:id',
   authenticate,
-  requirePermission('can_edit_attendance'),
+  requirePermission('can_edit_gatherings'),
   validate(schemas.gathering.update),
   asyncHandler(gatheringsController.update.bind(gatheringsController))
 );

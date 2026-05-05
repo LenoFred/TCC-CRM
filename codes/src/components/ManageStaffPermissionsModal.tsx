@@ -8,17 +8,7 @@ import { Shield, Check, X, ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/config/api";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-
-interface Permission {
-  key: string;
-  label: string;
-  description: string;
-}
-
-interface PermissionCategory {
-  name: string;
-  permissions: Permission[];
-}
+import { STAFF_PERMISSIONS } from "@/constants/staffPermissions";
 
 interface ManageStaffPermissionsModalProps {
   isOpen: boolean;
@@ -145,7 +135,7 @@ export function ManageStaffPermissionsModal({
   };
 
   const handleCategoryAll = (categoryName: string) => {
-    const category = permissionCategories.find(c => c.name === categoryName);
+    const category = STAFF_PERMISSIONS.find(c => c.name === categoryName);
     if (category) {
       const categoryKeys = category.permissions.map(p => p.key);
       setTempSelected(prev => {
@@ -156,7 +146,7 @@ export function ManageStaffPermissionsModal({
   };
 
   const handleCategoryNone = (categoryName: string) => {
-    const category = permissionCategories.find(c => c.name === categoryName);
+    const category = STAFF_PERMISSIONS.find(c => c.name === categoryName);
     if (category) {
       const categoryKeys = category.permissions.map(p => p.key);
       setTempSelected(prev => prev.filter(key => !categoryKeys.includes(key)));
@@ -164,7 +154,7 @@ export function ManageStaffPermissionsModal({
   };
 
   const getCategorySelectedCount = (categoryName: string) => {
-    const category = permissionCategories.find(c => c.name === categoryName);
+    const category = STAFF_PERMISSIONS.find(c => c.name === categoryName);
     if (!category) return 0;
     const categoryKeys = category.permissions.map(p => p.key);
     return tempSelected.filter(key => categoryKeys.includes(key)).length;
@@ -183,11 +173,27 @@ export function ManageStaffPermissionsModal({
   };
 
   const getTotalPermissionsCount = () => {
-    return permissionCategories.reduce((sum, cat) => sum + cat.permissions.length, 0);
+    return STAFF_PERMISSIONS.reduce((sum, cat) => sum + cat.permissions.length, 0);
   };
 
   const handleClearAll = () => {
     setTempSelected([]);
+  };
+
+  // Handle group selection - auto-add "can_view_groups" permission
+  const handleGroupSelect = (groupId: string) => {
+    if (groupId && !selectedGroupIds.includes(groupId)) {
+      setSelectedGroupIds([...selectedGroupIds, groupId]);
+      // Auto-select the "can_view_groups" permission if not already selected
+      if (!tempSelected.includes('can_view_groups')) {
+        setTempSelected([...tempSelected, 'can_view_groups']);
+      }
+    }
+  };
+
+  // Handle group removal
+  const handleGroupRemove = (groupId: string) => {
+    setSelectedGroupIds(selectedGroupIds.filter(id => id !== groupId));
   };
 
   const handleSave = () => {
@@ -234,11 +240,7 @@ export function ManageStaffPermissionsModal({
               </p>
               <Select
                 value=""
-                onValueChange={(groupId) => {
-                  if (groupId && !selectedGroupIds.includes(groupId)) {
-                    setSelectedGroupIds([...selectedGroupIds, groupId]);
-                  }
-                }}
+                onValueChange={handleGroupSelect}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select groups to grant access..." />
@@ -264,7 +266,7 @@ export function ManageStaffPermissionsModal({
                           variant="ghost"
                           size="sm"
                           className="h-4 w-4 p-0 ml-1 hover:bg-transparent"
-                          onClick={() => setSelectedGroupIds(selectedGroupIds.filter(id => id !== groupId))}
+                          onClick={() => handleGroupRemove(groupId)}
                         >
                           <X className="h-3 w-3" />
                         </Button>
@@ -278,7 +280,7 @@ export function ManageStaffPermissionsModal({
 
           {/* Permission Categories */}
           <div className="space-y-3">
-            {permissionCategories.map((category) => {
+            {STAFF_PERMISSIONS.map((category) => {
               const isOpen = openSections.includes(category.name);
               const selectedCount = getCategorySelectedCount(category.name);
               const totalCount = category.permissions.length;

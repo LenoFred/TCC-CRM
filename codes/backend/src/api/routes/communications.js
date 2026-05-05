@@ -14,12 +14,15 @@ const { validate, schemas } = require('../../utils/validation');
 
 /**
  * @route   GET /api/communications/drafts
- * @desc    Get all drafts (stub for development)
- * @access  Public (Auth disabled for development)
+ * @desc    Get all draft communications
+ * @access  Private (Requires can_view_communications permission)
  */
-router.get('/drafts', (req, res) => {
-  res.json({ success: true, data: [] });
-});
+router.get(
+  '/drafts',
+  authenticate,
+  requirePermission('can_view_communications'),
+  asyncHandler(communicationsController.getAll.bind(communicationsController))
+);
 
 /**
  * @route   GET /api/communications/scheduled

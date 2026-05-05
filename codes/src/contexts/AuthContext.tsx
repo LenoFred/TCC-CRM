@@ -7,6 +7,8 @@ interface User {
   email: string;
   memberId: string;
   role: string;
+  staffRole?: string; // Job title/position (Pastor, Secretary, etc.)
+  fullName?: string; // Full name for display
   firstName?: string;
   lastName?: string;
   groupPermissions?: string[]; // Array of permitted group IDs, null = full access
@@ -15,6 +17,11 @@ interface User {
 interface Permission {
   permissionKey: string;
   hasAccess: boolean;
+}
+
+export interface GroupInfo {
+  id: string;
+  name: string;
 }
 
 interface AuthContextType {
@@ -27,6 +34,9 @@ interface AuthContextType {
   refreshAccessToken: () => Promise<void>;
   checkPermission: (permissionKey: string) => boolean;
   hasGroupAccess: (groupId: string) => boolean; // Check if user has access to specific group
+  getGroupNames: () => Promise<GroupInfo[]>; // Get all group names (with caching)
+  getAccessibleGroupsWithNames: () => Promise<GroupInfo[]>; // Get user's accessible groups with names
+  isGroupAccessRestricted: () => boolean; // Check if user has group restrictions
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [groupNamesCache, setGroupNamesCache] = useState<GroupInfo[] | null>(null);
 
   // Auto-refresh token before expiry
   useEffect(() => {
@@ -390,6 +401,93 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return user.groupPermissions.includes(groupId);
   };
 
+  /**
+   * Get all group names with caching
+   * Fetches groups once and memoizes the result
+   */
+  const getGroupNames = async (): Promise<GroupInfo[]> => {
+    // Return cached groups if available
+    if (groupNamesCache) {
+      return groupNamesCache;
+    }
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem(TOKEN_KEY);
+
+      if (!token) {
+        console.warn('[Auth] No token available for fetching group names');
+        return [];
+      }
+
+      const response = await fetch(`${apiUrl}/api/groups`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.error('[Auth] Failed to fetch group names');
+        return [];
+      }
+
+      const data = await response.json();
+      const groups = Array.isArray(data.data) ? data.data : [];
+      
+      // Map to GroupInfo format
+      const groupInfos = groups.map((g: any) => ({
+        id: g.groupID,
+        name: g.groupName,
+      }));
+
+      // Cache the result
+      setGroupNamesCache(groupInfos);
+      
+      return groupInfos;
+    } catch (error) {
+      console.error('[Auth] Error fetching group names:', error);
+      return [];
+    }
+  };
+
+  /**
+   * Get user's accessible groups with names
+   * Returns only the groups the user has access to (or all if admin)
+   */
+  const getAccessibleGroupsWithNames = async (): Promise<GroupInfo[]> => {
+    // Get all group names
+    const allGroups = await getGroupNames();
+
+    // Check if user has group restrictions
+    if (isGroupAccessRestricted()) {
+      // Filter to only accessible groups
+      const accessibleIds = user?.groupPermissions || [];
+      return allGroups.filter(g => accessibleIds.includes(g.id));
+    }
+
+    // Admin sees all groups
+    return allGroups;
+  };
+
+  /**
+   * Check if user has group access restrictions
+   * Returns true if user has limited group access
+   * Returns false if user is admin (full access)
+   */
+  const isGroupAccessRestricted = (): boolean => {
+    // Check if user is admin
+    if (user?.role?.toLowerCase() === 'admin') {
+      return false; // Admin has no restrictions
+    }
+
+    // Check if groupPermissions exists and is an array with items
+    if (Array.isArray(user?.groupPermissions) && user.groupPermissions.length > 0) {
+      return true; // User has restricted groups
+    }
+
+    return false; // User has full access (null/undefined groupPermissions)
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -402,6 +500,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         refreshAccessToken,
         checkPermission,
         hasGroupAccess,
+        getGroupNames,
+        getAccessibleGroupsWithNames,
+        isGroupAccessRestricted,
       }}
     >
       {children}

@@ -34,10 +34,12 @@ import { CreateGatheringModal } from "@/components/CreateGatheringModal";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/use-toast";
 import { usePermission } from "@/hooks/usePermission";
+import { useGroupAccess } from "@/hooks/useGroupAccess";
 
 const AttendancePage = () => {
   const { toast } = useToast();
   const { canEdit } = usePermission();
+  const { getAccessDisplayText, userIsRestricted } = useGroupAccess();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300); // Debounce search
@@ -350,6 +352,17 @@ const AttendancePage = () => {
             Attendance Directory
           </Button>
         </div>
+
+        {/* Group Access Notice */}
+        {userIsRestricted && (
+          <Alert className="bg-blue-50 border-blue-200 text-blue-900">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertTitle className="text-blue-900">Attendance Filtered by Group Access</AlertTitle>
+            <AlertDescription className="text-blue-800">
+              You can only view attendance for gatherings in your assigned groups: <strong>{getAccessDisplayText()}</strong>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Event Selection */}
         <Card>

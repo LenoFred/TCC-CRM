@@ -29,10 +29,14 @@ import { usePermission } from "@/hooks/usePermission";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useToast } from "@/hooks/use-toast";
 import { useDataRefresh } from "@/hooks/useDataRefresh";
+import { useGroupAccess } from "@/hooks/useGroupAccess";
 import { api } from "@/config/api";
 
 const MembersPage = () => {
-  const { toast } = useToast();  const { canEdit } = usePermission();  const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();  
+  const { canEdit } = usePermission();
+  const { getAccessDisplayText, userIsRestricted } = useGroupAccess();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300); // Debounce search by 300ms
   const [selectedMember, setSelectedMember] = useState(null);
@@ -57,7 +61,7 @@ const MembersPage = () => {
   const handleExportMembers = () => {
     try {
       // Prepare CSV headers
-      const headers = ['Member ID', 'Name', 'Email', 'Phone', 'Status', 'Join Date', 'Family ID', 'Date of Birth', 'Gender', 'Membership Type', 'Address'];
+      const headers = ['Member ID', 'Name', 'Email', 'Phone', 'Status', 'Join Date', 'Family ID', 'Gender', 'Membership Type'];
       
       // Prepare CSV rows
       const rows = filteredMembers.map((member: any) => [
@@ -68,10 +72,8 @@ const MembersPage = () => {
         member.status || '',
         member.joinDate || '',
         member.family || '',
-        member.dateOfBirth || '',
         member.gender || '',
-        member.membershipType || '',
-        member.address || ''
+        member.membershipType || ''
       ]);
       
       // Create CSV content
@@ -374,6 +376,8 @@ const MembersPage = () => {
             </Button>
           )}
         </div>
+
+        {/* Group Access Notice - HIDDEN */}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

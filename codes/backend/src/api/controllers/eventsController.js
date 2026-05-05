@@ -7,6 +7,7 @@ const BaseController = require('./baseController');
 const sheetsService = require('../../services/sheetsService');
 const { generateId } = require('../../utils/idGenerator');
 const { ApiError } = require('../../middlewares/errorHandler');
+const { filterByGroupPermissions } = require('../../middlewares/groupPermissions');
 
 class EventsController extends BaseController {
   constructor() {
@@ -111,13 +112,17 @@ class EventsController extends BaseController {
   }
 
   /**
-   * Get upcoming events
+   * Get upcoming events with group permission filtering
    */
   async getUpcoming(req, res) {
     const { limit = 10 } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
-    const data = await sheetsService.getSheetObjects(this.sheetName);
+    let data = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Apply group permissions filtering if GroupID is present
+    data = filterByGroupPermissions(data, req, 'groupID');
+    
     const upcomingEvents = data
       .filter(
         (event) =>
@@ -134,13 +139,17 @@ class EventsController extends BaseController {
   }
 
   /**
-   * Get past events
+   * Get past events with group permission filtering
    */
   async getPast(req, res) {
     const { limit = 10 } = req.query;
     const today = new Date().toISOString().split('T')[0];
 
-    const data = await sheetsService.getSheetObjects(this.sheetName);
+    let data = await sheetsService.getSheetObjects(this.sheetName);
+    
+    // Apply group permissions filtering if GroupID is present
+    data = filterByGroupPermissions(data, req, 'groupID');
+    
     const pastEvents = data
       .filter((event) => event.endDate < today)
       .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))

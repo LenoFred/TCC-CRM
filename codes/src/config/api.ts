@@ -26,6 +26,16 @@ export const apiConfig = {
   timeout: 30000, // 30 second timeout
 };
 
+// Request deduplication cache - prevents duplicate concurrent requests
+const requestCache = new Map<string, Promise<any>>();
+
+const getCacheKey = (endpoint: string, options: RequestInit): string => {
+  // Only deduplicate GET requests
+  const method = options.method?.toUpperCase() || 'GET';
+  if (method !== 'GET') return '';
+  return `${method}:${endpoint}`;
+};
+
 // JWT token management
 export const getAuthToken = (): string | null => {
   return localStorage.getItem('tcc_access_token');
@@ -43,7 +53,42 @@ export const removeAuthToken = (): void => {
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {},
-  retries = 2,
+  retries = 3,
+  cacheMaxAge: number = 5 * 60 * 1000 // 5 minutes default
+): Promise<T> => {
+  // Check request cache for duplicate GET requests
+  const cacheKey = getCacheKey(endpoint, options);
+  if (cacheKey && requestCache.has(cacheKey)) {
+    console.log(`[API Cache Hit] Returning cached promise for: ${endpoint}`);
+    return requestCache.get(cacheKey)!;
+  }
+
+  // Create the actual request promise
+  const requestPromise = performRequest<T>(endpoint, options, retries, cacheMaxAge);
+  
+  // Cache it for GET requests
+  if (cacheKey) {
+    requestCache.set(cacheKey, requestPromise);
+    
+    // Remove from cache when done (success or failure)
+    requestPromise
+      .then(() => {
+        requestCache.delete(cacheKey);
+        return requestPromise;
+      })
+      .catch(() => {
+        requestCache.delete(cacheKey);
+      });
+  }
+  
+  return requestPromise;
+};
+
+// Actual request implementation
+const performRequest = async <T>(
+  endpoint: string,
+  options: RequestInit = {},
+  retries = 3,
   cacheMaxAge: number = 5 * 60 * 1000 // 5 minutes default
 ): Promise<T> => {
   const token = getAuthToken();
@@ -121,10 +166,11 @@ export const apiRequest = async <T>(
     
     // Handle 429 Rate Limit - Retry with exponential backoff
     if (response.status === 429 && retries > 0) {
-      const retryAfter = parseInt(response.headers.get('Retry-After') || '2', 10);
-      const delay = retryAfter * 1000 || (3 - retries) * 1000; // Exponential backoff
-      console.log(`Rate limited (429). Retrying after ${delay}ms... (${retries} retries left)`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const baseDelay = 1000; // Start with 1 second
+      const attemptNumber = 4 - retries; // 1, 2, 3
+      const exponentialDelay = baseDelay * Math.pow(2, attemptNumber - 1); // 1s, 2s, 4s, 8s...
+      console.log(`Rate limited (429). Retrying after ${exponentialDelay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, exponentialDelay));
       return apiRequest<T>(endpoint, options, retries - 1, cacheMaxAge);
     }
     
@@ -444,10 +490,12 @@ export const api = {
   // Staff Management
   staff: {
     getAll: () =>
-      apiRequest<any[]>('/staff'),
+      // Cache staff list for 10 minutes to reduce rate limit issues during development
+      apiRequest<any[]>('/staff', {}, 3, 10 * 60 * 1000),
     
     getById: (id: string) =>
-      apiRequest<any>(`/staff/${id}`),
+      // Cache individual staff for 5 minutes
+      apiRequest<any>(`/staff/${id}`, {}, 3, 5 * 60 * 1000),
     
     create: (data: any) =>
       apiRequest<any>('/staff', {
@@ -462,7 +510,8 @@ export const api = {
       }),
     
     getPermissions: (id: string) =>
-      apiRequest<string[]>(`/staff/${id}/permissions`),
+      // Cache staff permissions for 5 minutes
+      apiRequest<string[]>(`/staff/${id}/permissions`, {}, 3, 5 * 60 * 1000),
     
     updatePermissions: (id: string, permissions: Record<string, boolean>) =>
       apiRequest<any>(`/staff/${id}/permissions`, {
@@ -475,11 +524,13 @@ export const api = {
   staffPermissions: {
     // Get all available permissions in the system
     getAvailable: () =>
-      apiRequest<{ success: boolean; total: number; permissions: any[]; grouped: Record<string, any[]> }>('/staff-permissions/available'),
+      // Cache available permissions for 30 minutes (unlikely to change often)
+      apiRequest<{ success: boolean; total: number; permissions: any[]; grouped: Record<string, any[]> }>('/staff-permissions/available', {}, 3, 30 * 60 * 1000),
     
     // Get permissions for a specific staff member
     getByStaffId: (staffId: string) =>
-      apiRequest<{ success: boolean; staffId: string; total: number; permissions: any[]; groupPermissions?: string[] }>(`/staff-permissions/${staffId}`),
+      // Cache staff permissions for 5 minutes
+      apiRequest<{ success: boolean; staffId: string; total: number; permissions: any[]; groupPermissions?: string[] }>(`/staff-permissions/${staffId}`, {}, 3, 5 * 60 * 1000),
     
     // Update permissions for a staff member
     update: (staffId: string, payload: { permissions: string[]; groupPermissions?: string[] }) =>
@@ -868,6 +919,33 @@ export const api = {
       apiRequest<{ success: boolean; data: any[]; count: number }>('/business/guests'),
   },
 
+};
+
+// Axios-like API wrapper for backwards compatibility
+export const apiCall = {
+  post: <T = any>(url: string, data?: any) =>
+    apiRequest<T>(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  
+  get: <T = any>(url: string) =>
+    apiRequest<T>(url, { method: 'GET' }),
+  
+  patch: <T = any>(url: string, data?: any) =>
+    apiRequest<T>(url, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  
+  put: <T = any>(url: string, data?: any) =>
+    apiRequest<T>(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  
+  delete: <T = any>(url: string) =>
+    apiRequest<T>(url, { method: 'DELETE' }),
 };
 
 export default api;

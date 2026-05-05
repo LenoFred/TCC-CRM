@@ -33,6 +33,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { usePermission } from "@/hooks/usePermission";
+import { useGroupAccess } from "@/hooks/useGroupAccess";
 
 // Define interface for the column metadata
 interface ColumnMetadata {
@@ -51,6 +52,7 @@ interface Filter {
 const AnalyticsPage = () => {
   const { toast } = useToast();
   const { hasPermission } = usePermission();
+  const { getAccessDisplayText, userIsRestricted } = useGroupAccess();
   const [selectedDataSource, setSelectedDataSource] = useState<string>("");
   const [filters, setFilters] = useState<Filter[]>([]);
   const [reportResults, setReportResults] = useState<any[]>([]);
@@ -307,6 +309,17 @@ const AnalyticsPage = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6" style={{ width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+
+        {/* Group Access Notice */}
+        {userIsRestricted && (
+          <Alert className="bg-blue-50 border-blue-200 text-blue-900">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertTitle className="text-blue-900">Analytics Filtered by Group Access</AlertTitle>
+            <AlertDescription className="text-blue-800">
+              Your analytics are filtered to show data only from your assigned groups: <strong>{getAccessDisplayText()}</strong>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Onboarding overview */}
         <Card>

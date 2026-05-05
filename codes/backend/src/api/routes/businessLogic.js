@@ -23,8 +23,8 @@ const communicationService = require('../../services/communicationService');
  */
 router.post(
   '/guest-register',
-  // authenticateToken,
-  // requireRole(['Admin', 'Staff']),
+  authenticateToken,
+  requireRole(['Admin', 'Staff']),
   async (req, res, next) => {
     try {
       const result = await guestTrackingService.registerGuest(req.body);
@@ -70,8 +70,8 @@ router.post(
  */
 router.get(
   '/guests',
-  // authenticateToken, // Temporarily disabled for testing
-  // requireRole(['Admin', 'Staff']), // Temporarily disabled for testing
+  authenticateToken,
+  requireRole(['Admin', 'Staff']),
   async (req, res, next) => {
     try {
       const { includeMembers } = req.query;
@@ -94,8 +94,8 @@ router.get(
  */
 router.get(
   '/guest-stats',
-  // authenticateToken, // Temporarily disabled for testing
-  // requireRole(['Admin', 'Staff']), // Temporarily disabled for testing
+  authenticateToken,
+  requireRole(['Admin', 'Staff']),
   async (req, res, next) => {
     try {
       const { days } = req.query;
@@ -117,8 +117,8 @@ router.get(
  */
 router.get(
   '/dashboard-stats',
-  // authenticateToken, // Temporarily disabled for testing
-  // requireRole(['Admin', 'Staff']), // Temporarily disabled for testing
+  authenticateToken,
+  requireRole(['Admin', 'Staff']),
   async (req, res, next) => {
     try {
       const sheetsService = require('../../services/sheetsService');

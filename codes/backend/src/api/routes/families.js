@@ -49,12 +49,12 @@ router.get(
 /**
  * @route   POST /api/families
  * @desc    Create new family
- * @access  Public (Authentication temporarily disabled)
+ * @access  Private
  */
 router.post(
   '/',
   authenticate,
-  requirePermission('can_add_families'),
+  requirePermission('can_create_families'),
   validate(schemas.family.create),
   asyncHandler(familiesController.create.bind(familiesController))
 );

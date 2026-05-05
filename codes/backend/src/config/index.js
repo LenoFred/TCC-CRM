@@ -42,8 +42,12 @@ const config = {
   security: {
     bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS) || 12,
     rateLimit: {
+      // In development: 500 requests per 15 minutes (~ 33 req/min, more forgiving for dev)
+      // In production: 1500 requests per 15 minutes (~ 100 req/min, secure for production)
       windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-      maxRequests: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1500, // Increased for authenticated users
+      maxRequests: process.env.NODE_ENV === 'production' 
+        ? (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1500)
+        : (parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000), // More forgiving in development
     },
   },
 
